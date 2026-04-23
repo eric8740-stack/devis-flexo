@@ -1,0 +1,21 @@
+id,raison_sociale,siret,adresse_fact,cp_fact,ville_fact,contact,email,tel,segment,date_creation
+1,Château des Vignes du Haut-Limousin,38152147800019,Le Mas,87700,Aixe-sur-Vienne,Mme Lafont,contact@chateau-vignes-hl.fr,05 55 71 45 12,vin,2024-03-15
+2,Brasserie Artisanale du Limousin,41578896300024,ZA des Brasseurs,19100,Brive-la-Gaillarde,M. Perrier,commandes@brasserie-limousin.fr,05 55 88 23 47,biere,2023-11-08
+3,Confiturerie Maison Gourmande,52364125700011,8 rue des Artisans,87500,Saint-Yrieix-la-Perche,Mme Dubois,production@maison-gourmande.fr,05 55 75 18 29,alimentaire,2024-01-20
+4,Cosmétiques Nature & Soins,79834512600038,Parc d'activités,87100,Limoges,M. Vallois,achats@nature-soins.com,05 55 42 19 73,cosmetique,2023-09-12
+5,Domaine des Collines Limousines,49215876300015,Les Quatre Routes,87350,Panazol,Mme Girard,contact@collines-limousines.fr,05 55 30 12 45,vin,2024-02-10
+6,Boulangerie du Centre,81245796300028,12 rue du Marché,87000,Limoges,M. Laurent,contact@boulangerie-centre.fr,05 55 33 21 09,alimentaire,2023-10-05
+7,Élevage du Plateau,53987412600019,La Croix Verte,87120,Eymoutiers,M. Roche,elevage@plateau87.fr,05 55 69 44 22,alimentaire,2024-01-18
+8,Atelier Bois Création,67412358900022,ZA du Moulin,87260,Saint-Paul,Mme Meunier,contact@bois-creation.fr,05 55 00 45 67,artisanat,2023-12-02
+9,Fromagerie du Limousin,74589632100017,5 route des Prés,87130,Châteauneuf-la-Forêt,M. Petit,commande@fromagerie-limousin.fr,05 55 10 98 76,alimentaire,2024-03-01
+10,Brasserie des Monts Verts,63214598700031,18 rue des Artisans,87300,Bellac,Mme Renaud,contact@monts-verts.fr,05 55 68 21 54,biere,2023-09-20
+11,Jardins Bio Limousins,59874123600014,Les Jardins Hauts,87400,Saint-Léonard-de-Noblat,M. Faure,bio@jardins-limousins.fr,05 55 56 78 12,alimentaire,2024-02-25
+12,Cosmétiques Végétaux France,78965412300027,Parc Innovation,87000,Limoges,Mme Bernard,info@cosmetiques-veg.fr,05 55 14 25 36,cosmetique,2023-11-15
+13,Apiculture du Haut Limousin,45612378900016,Le Rucher,87290,Châteauponsac,M. Lemoine,contact@apiculture87.fr,05 55 76 45 33,alimentaire,2024-01-05
+14,Distillerie Artisanale Limousine,36925814700021,3 chemin des Vignes,87500,Saint-Yrieix-la-Perche,Mme Noël,distillerie@limousine.fr,05 55 75 33 88,alcool,2023-08-30
+15,Conserverie du Terroir,95135748600018,9 rue des Saveurs,87380,Magnac-Bourg,M. Dubreuil,contact@conserverie-terroir.fr,05 55 09 87 65,alimentaire,2024-03-12
+16,Pépinières Vertes 87,75315984200029,Route de Nexon,87800,Nexon,Mme Colin,pepinieres@vertes87.fr,05 55 58 66 21,jardin,2023-10-22
+17,Boucherie Tradition Limousine,85214796300013,22 rue Carnot,87000,Limoges,M. Marchand,contact@boucherie-limousine.fr,05 55 32 44 55,alimentaire,2024-02-07
+18,Savonnerie Nature Limousin,14725836900025,6 rue des Fleurs,87170,Isle,Mme Perrin,savon@nature-limousin.fr,05 55 50 61 72,cosmetique,2023-12-18
+19,Vins & Terroirs du Sud-Ouest,25836914700034,ZA des Vignes,19100,Brive-la-Gaillarde,M. Chevalier,contact@vins-terroirs.fr,05 55 87 45 90,vin,2024-01-28
+20,Épicerie Fine du Limousin,36914725800011,14 place de la République,87000,Limoges,Mme Garnier,epicerie@fine87.fr,05 55 34 22 19,alimentaire,2023-11-03

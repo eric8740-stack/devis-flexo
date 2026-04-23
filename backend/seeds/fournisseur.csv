@@ -1,0 +1,6 @@
+id,raison_sociale,categorie,contact,email,tel,conditions_paiement,delai_livraison_j
+1,Antalis France,complexe_adhesif,M. Morel,labels@antalis.fr,01 40 67 80 00,30 jours fin de mois,5
+2,Inapa Packaging France,complexe_adhesif,Mme Guilbert,pro@inapa-packaging.fr,01 55 07 23 00,45 jours nets,7
+3,UPM Raflatac,complexe_adhesif,M. Lindqvist,france@upmraflatac.com,01 44 78 95 00,30 jours fin de mois,4
+4,Avery Dennison LPM,complexe_adhesif,Mme Moreau,lpm.fr@averydennison.com,01 53 30 70 00,30 jours nets,6
+5,Chesapeake Ink Solutions,encre_consommable,M. Lambert,sales.fr@chesapeake-ink.com,01 60 12 34 56,30 jours fin de mois,3
