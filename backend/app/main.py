@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import entreprise
+from app.routers import client, entreprise, fournisseur
 
 app = FastAPI(title="devis-flexo")
 
@@ -16,6 +16,8 @@ app.add_middleware(
 )
 
 app.include_router(entreprise.router)
+app.include_router(client.router)
+app.include_router(fournisseur.router)
 
 
 @app.get("/")
