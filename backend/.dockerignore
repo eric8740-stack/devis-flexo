@@ -1,0 +1,16 @@
+# Dépendances et caches Python (réinstallés via requirements.txt)
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# DB SQLite locale : ne JAMAIS embarquer dans l'image (la prod utilise Postgres)
+*.db
+*.db-journal
+
+# Variables d'env locales : Railway les injecte via son interface
+.env
+.env.local

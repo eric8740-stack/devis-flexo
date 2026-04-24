@@ -1,4 +1,11 @@
-const API_URL = "http://localhost:8000";
+// URL du backend FastAPI.
+// - En dev local : http://localhost:8000 (défaut)
+// - En prod (Vercel) : NEXT_PUBLIC_API_URL définie dans les env vars Vercel,
+//   pointant sur l'URL Railway du backend (ex: https://devis-flexo-backend.up.railway.app)
+//
+// NEXT_PUBLIC_* est inliné au build par Next.js → accessible côté client.
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

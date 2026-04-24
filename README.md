@@ -1,14 +1,25 @@
 # devis-flexo
 
+[![backend](https://github.com/eric8740-stack/devis-flexo/actions/workflows/backend.yml/badge.svg)](https://github.com/eric8740-stack/devis-flexo/actions/workflows/backend.yml)
+[![frontend](https://github.com/eric8740-stack/devis-flexo/actions/workflows/frontend.yml/badge.svg)](https://github.com/eric8740-stack/devis-flexo/actions/workflows/frontend.yml)
+
 Application de devis pour TPE flexographie d'étiquettes.
 
 Projet vitrine d'Eric Paysant (ERP Conseil) — modèle de coût industriel à 7 postes appliqué au métier de la flexo, exposé dans une stack data moderne.
+
+## Production
+
+- **Frontend** : `https://<a renseigner>.vercel.app`
+- **Backend** : `https://<a renseigner>.up.railway.app`
+- **API docs** : `https://<a renseigner>.up.railway.app/docs`
 
 ## Stack
 
 - **Backend** : Python 3.13 + FastAPI + Uvicorn + SQLAlchemy + Alembic + Pydantic + pytest
 - **Frontend** : Next.js 14 + TypeScript + Tailwind CSS + shadcn/ui (App Router)
-- **Base de données** : SQLite (dev local) → PostgreSQL (prod)
+- **Base de données** : SQLite (dev local) → PostgreSQL (prod Railway)
+- **Déploiement** : Vercel (front) + Railway (back + Postgres)
+- **CI** : GitHub Actions (pytest + npm build/lint)
 
 ## Démarrage local
 
@@ -22,6 +33,8 @@ venv\Scripts\activate
 # Linux / Mac
 source venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
+python -m scripts.seed
 uvicorn app.main:app --reload
 ```
 
@@ -46,23 +59,45 @@ cd backend
 pytest
 ```
 
+## Variables d'environnement
+
+### Backend (`.env` ou env Railway)
+
+| Variable | Dev | Prod (Railway) |
+|---|---|---|
+| `DATABASE_URL` | non défini → SQLite local `devis_flexo.db` | `postgresql://...` (auto via add-on Postgres) |
+| `CORS_ORIGINS` | non défini → `http://localhost:3000` | URL Vercel + localhost (séparés par `,`) |
+| `PORT` | non défini → 8000 | injecté par Railway |
+
+### Frontend (`.env.local` ou env Vercel)
+
+| Variable | Dev | Prod (Vercel) |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | non défini → `http://localhost:8000` | URL backend Railway |
+
 ## Structure
 
 ```
 devis-flexo/
 ├── backend/             # FastAPI
 │   ├── app/
-│   │   ├── __init__.py
-│   │   └── main.py      # endpoint GET /
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   └── test_main.py
-│   ├── requirements.txt
-│   ├── pyproject.toml   # config pytest
-│   └── .env.example
+│   │   ├── main.py            # CORS + include routers
+│   │   ├── db.py              # engine SQLAlchemy + Base + get_db
+│   │   ├── models/            # 3 modèles (entreprise, client, fournisseur)
+│   │   ├── schemas/           # Pydantic Read/Create/Update
+│   │   ├── crud/              # logique métier DB
+│   │   └── routers/           # endpoints REST
+│   ├── alembic/               # migrations versionnées
+│   ├── seeds/                 # CSV sources (entreprise, client, fournisseur)
+│   ├── scripts/               # seed.py + export Excel→CSV
+│   ├── tests/                 # pytest (25 tests)
+│   ├── Dockerfile             # image Railway
+│   └── requirements.txt
 ├── frontend/            # Next.js 14
-│   └── src/app/
-│       └── page.tsx
-├── .gitignore
+│   └── src/
+│       ├── app/               # routes (parametres, clients, fournisseurs)
+│       ├── components/        # DataTable, forms, Header, ui shadcn
+│       └── lib/api.ts         # helpers fetch typés
+├── .github/workflows/   # CI backend + frontend
 └── README.md
 ```

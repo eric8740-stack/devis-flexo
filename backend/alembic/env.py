@@ -16,15 +16,15 @@ if config.config_file_name is not None:
 
 # Import Base et tous les modèles pour qu'Alembic puisse détecter
 # les changements de schéma via --autogenerate.
-from app.db import Base  # noqa: E402
+from app.db import Base, DATABASE_URL  # noqa: E402
 from app import models  # noqa: E402, F401  (enregistre les modèles auprès de Base)
 
 target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# Override l'URL de alembic.ini avec celle résolue par db.py.
+# En local : sqlite:///./devis_flexo.db (du .ini)
+# En prod (Railway) : DATABASE_URL env var pointe sur PostgreSQL
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 
 def run_migrations_offline() -> None:
