@@ -1,9 +1,7 @@
 // URL du backend FastAPI.
 // - En dev local : http://localhost:8000 (défaut)
 // - En prod (Vercel) : NEXT_PUBLIC_API_URL définie dans les env vars Vercel,
-//   pointant sur l'URL Railway du backend (ex: https://devis-flexo-backend.up.railway.app)
-//
-// NEXT_PUBLIC_* est inliné au build par Next.js → accessible côté client.
+//   pointant sur l'URL Railway du backend (ex: https://devis-flexo.up.railway.app)
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -36,7 +34,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Entreprise (singleton)
+// Sprint 0-1 : Entreprise (singleton)
 // ---------------------------------------------------------------------------
 
 export interface Entreprise {
@@ -65,7 +63,7 @@ export const updateEntreprise = (data: EntrepriseUpdate) =>
   });
 
 // ---------------------------------------------------------------------------
-// Clients
+// Sprint 0-1 : Clients
 // ---------------------------------------------------------------------------
 
 export const SEGMENTS = [
@@ -90,35 +88,23 @@ export interface Client {
   email: string | null;
   tel: string | null;
   segment: string | null;
-  date_creation: string | null; // ISO YYYY-MM-DD
+  date_creation: string | null;
 }
 
 export type ClientCreate = Omit<Client, "id">;
 export type ClientUpdate = Partial<ClientCreate>;
 
-export const listClients = () =>
-  apiFetch<Client[]>("/api/clients?limit=200");
-
-export const getClient = (id: number) =>
-  apiFetch<Client>(`/api/clients/${id}`);
-
+export const listClients = () => apiFetch<Client[]>("/api/clients?limit=200");
+export const getClient = (id: number) => apiFetch<Client>(`/api/clients/${id}`);
 export const createClient = (data: ClientCreate) =>
-  apiFetch<Client>("/api/clients", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
+  apiFetch<Client>("/api/clients", { method: "POST", body: JSON.stringify(data) });
 export const updateClient = (id: number, data: ClientUpdate) =>
-  apiFetch<Client>(`/api/clients/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-
+  apiFetch<Client>(`/api/clients/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteClient = (id: number) =>
   apiFetch<void>(`/api/clients/${id}`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
-// Fournisseurs
+// Sprint 0-1 : Fournisseurs
 // ---------------------------------------------------------------------------
 
 export const CATEGORIES_FOURNISSEUR = [
@@ -143,21 +129,304 @@ export type FournisseurUpdate = Partial<FournisseurCreate>;
 
 export const listFournisseurs = () =>
   apiFetch<Fournisseur[]>("/api/fournisseurs?limit=200");
-
 export const getFournisseur = (id: number) =>
   apiFetch<Fournisseur>(`/api/fournisseurs/${id}`);
-
 export const createFournisseur = (data: FournisseurCreate) =>
   apiFetch<Fournisseur>("/api/fournisseurs", {
     method: "POST",
     body: JSON.stringify(data),
   });
-
 export const updateFournisseur = (id: number, data: FournisseurUpdate) =>
   apiFetch<Fournisseur>(`/api/fournisseurs/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
-
 export const deleteFournisseur = (id: number) =>
   apiFetch<void>(`/api/fournisseurs/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 2 : Machine (presses flexo)
+// ---------------------------------------------------------------------------
+
+export const STATUTS_MACHINE = ["actif", "inactif", "maintenance"] as const;
+export type StatutMachine = (typeof STATUTS_MACHINE)[number];
+
+export interface Machine {
+  id: number;
+  nom: string;
+  largeur_max_mm: number | null;
+  vitesse_max_m_min: number | null;
+  nb_couleurs: number | null;
+  cout_horaire_eur: number | null;
+  statut: StatutMachine;
+  commentaire: string | null;
+  date_creation: string;
+  date_maj: string;
+}
+
+export type MachineCreate = Omit<Machine, "id" | "date_creation" | "date_maj">;
+export type MachineUpdate = Partial<MachineCreate>;
+
+export const listMachines = () => apiFetch<Machine[]>("/api/machines?limit=200");
+export const getMachine = (id: number) => apiFetch<Machine>(`/api/machines/${id}`);
+export const createMachine = (data: MachineCreate) =>
+  apiFetch<Machine>("/api/machines", { method: "POST", body: JSON.stringify(data) });
+export const updateMachine = (id: number, data: MachineUpdate) =>
+  apiFetch<Machine>(`/api/machines/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteMachine = (id: number) =>
+  apiFetch<void>(`/api/machines/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 2 : OperationFinition
+// ---------------------------------------------------------------------------
+
+export const UNITES_FACTURATION = ["m2", "ml", "unite", "millier"] as const;
+export type UniteFacturation = (typeof UNITES_FACTURATION)[number];
+export const STATUTS_OPERATION = ["actif", "inactif"] as const;
+export type StatutOperation = (typeof STATUTS_OPERATION)[number];
+
+export interface OperationFinition {
+  id: number;
+  nom: string;
+  unite_facturation: UniteFacturation;
+  cout_unitaire_eur: number | null;
+  temps_minutes_unite: number | null;
+  statut: StatutOperation;
+  commentaire: string | null;
+  date_creation: string;
+  date_maj: string;
+}
+
+export type OperationFinitionCreate = Omit<
+  OperationFinition,
+  "id" | "date_creation" | "date_maj"
+>;
+export type OperationFinitionUpdate = Partial<OperationFinitionCreate>;
+
+export const listOperationsFinition = () =>
+  apiFetch<OperationFinition[]>("/api/operations-finition?limit=200");
+export const getOperationFinition = (id: number) =>
+  apiFetch<OperationFinition>(`/api/operations-finition/${id}`);
+export const createOperationFinition = (data: OperationFinitionCreate) =>
+  apiFetch<OperationFinition>("/api/operations-finition", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateOperationFinition = (id: number, data: OperationFinitionUpdate) =>
+  apiFetch<OperationFinition>(`/api/operations-finition/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteOperationFinition = (id: number) =>
+  apiFetch<void>(`/api/operations-finition/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 2 : PartenaireST (sous-traitants finition)
+// ---------------------------------------------------------------------------
+
+export const PRESTATION_TYPES = ["finition", "decoupe", "dorure", "autre"] as const;
+export type PrestationType = (typeof PRESTATION_TYPES)[number];
+export const STATUTS_PARTENAIRE = ["actif", "inactif"] as const;
+export type StatutPartenaire = (typeof STATUTS_PARTENAIRE)[number];
+
+export interface PartenaireST {
+  id: number;
+  raison_sociale: string;
+  siret: string | null;
+  contact_nom: string | null;
+  contact_email: string | null;
+  contact_tel: string | null;
+  prestation_type: PrestationType | null;
+  delai_jours_moyen: number | null;
+  qualite_score: number | null;
+  commentaire: string | null;
+  statut: StatutPartenaire;
+  date_creation: string;
+  date_maj: string;
+}
+
+export type PartenaireSTCreate = Omit<
+  PartenaireST,
+  "id" | "date_creation" | "date_maj"
+>;
+export type PartenaireSTUpdate = Partial<PartenaireSTCreate>;
+
+export const listPartenairesST = () =>
+  apiFetch<PartenaireST[]>("/api/partenaires-st?limit=200");
+export const getPartenaireST = (id: number) =>
+  apiFetch<PartenaireST>(`/api/partenaires-st/${id}`);
+export const createPartenaireST = (data: PartenaireSTCreate) =>
+  apiFetch<PartenaireST>("/api/partenaires-st", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updatePartenaireST = (id: number, data: PartenaireSTUpdate) =>
+  apiFetch<PartenaireST>(`/api/partenaires-st/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deletePartenaireST = (id: number) =>
+  apiFetch<void>(`/api/partenaires-st/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 2 : ChargeMensuelle (frais fixes)
+// ---------------------------------------------------------------------------
+
+export const CATEGORIES_CHARGE = [
+  "loyer",
+  "salaires",
+  "energie",
+  "assurance",
+  "fournitures",
+  "autre",
+] as const;
+export type CategorieCharge = (typeof CATEGORIES_CHARGE)[number];
+
+export interface ChargeMensuelle {
+  id: number;
+  libelle: string;
+  categorie: CategorieCharge;
+  montant_eur: number;
+  date_debut: string;
+  date_fin: string | null;
+  commentaire: string | null;
+  date_creation: string;
+  date_maj: string;
+}
+
+export type ChargeMensuelleCreate = Omit<
+  ChargeMensuelle,
+  "id" | "date_creation" | "date_maj"
+>;
+export type ChargeMensuelleUpdate = Partial<ChargeMensuelleCreate>;
+
+export const listChargesMensuelles = () =>
+  apiFetch<ChargeMensuelle[]>("/api/charges-mensuelles?limit=200");
+export const getChargeMensuelle = (id: number) =>
+  apiFetch<ChargeMensuelle>(`/api/charges-mensuelles/${id}`);
+export const createChargeMensuelle = (data: ChargeMensuelleCreate) =>
+  apiFetch<ChargeMensuelle>("/api/charges-mensuelles", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateChargeMensuelle = (id: number, data: ChargeMensuelleUpdate) =>
+  apiFetch<ChargeMensuelle>(`/api/charges-mensuelles/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteChargeMensuelle = (id: number) =>
+  apiFetch<void>(`/api/charges-mensuelles/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 2 : Complexe (matières adhésives — prix_m2_eur CRITIQUE pour S3)
+// ---------------------------------------------------------------------------
+
+export const FAMILLES_COMPLEXE = [
+  "bopp",
+  "pp",
+  "pe",
+  "pvc_vinyle",
+  "thermique",
+  "papier_couche",
+  "papier_standard",
+  "papier_epais",
+  "papier_kraft",
+  "papier_verge",
+] as const;
+export type FamilleComplexe = (typeof FAMILLES_COMPLEXE)[number];
+export const STATUTS_COMPLEXE = ["actif", "archive"] as const;
+export type StatutComplexe = (typeof STATUTS_COMPLEXE)[number];
+
+export interface Complexe {
+  id: number;
+  reference: string;
+  famille: FamilleComplexe;
+  face_matiere: string | null;
+  grammage_g_m2: number | null;
+  adhesif_type: string | null;
+  prix_m2_eur: number;
+  fournisseur_id: number | null;
+  statut: StatutComplexe;
+  commentaire: string | null;
+  date_creation: string;
+  date_maj: string;
+}
+
+export type ComplexeCreate = Omit<Complexe, "id" | "date_creation" | "date_maj">;
+export type ComplexeUpdate = Partial<ComplexeCreate>;
+
+export const listComplexes = () =>
+  apiFetch<Complexe[]>("/api/complexes?limit=200");
+export const getComplexe = (id: number) =>
+  apiFetch<Complexe>(`/api/complexes/${id}`);
+export const createComplexe = (data: ComplexeCreate) =>
+  apiFetch<Complexe>("/api/complexes", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateComplexe = (id: number, data: ComplexeUpdate) =>
+  apiFetch<Complexe>(`/api/complexes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteComplexe = (id: number) =>
+  apiFetch<void>(`/api/complexes/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 2 : Catalogue (produits récurrents par client)
+// ---------------------------------------------------------------------------
+
+export const FREQUENCES_ESTIMEES = [
+  "ponctuelle",
+  "mensuelle",
+  "trimestrielle",
+  "annuelle",
+] as const;
+export type FrequenceEstimee = (typeof FREQUENCES_ESTIMEES)[number];
+export const STATUTS_CATALOGUE = ["actif", "archive"] as const;
+export type StatutCatalogue = (typeof STATUTS_CATALOGUE)[number];
+
+export interface CatalogueItem {
+  id: number;
+  code_produit: string;
+  designation: string;
+  client_id: number;
+  machine_id: number | null;
+  matiere: string | null;
+  format_mm: string | null;
+  nb_couleurs: number | null;
+  prix_unitaire_eur: number | null;
+  frequence_estimee: FrequenceEstimee | null;
+  commentaire: string | null;
+  statut: StatutCatalogue;
+  date_creation: string;
+  date_maj: string;
+}
+
+export type CatalogueCreate = Omit<
+  CatalogueItem,
+  "id" | "date_creation" | "date_maj"
+>;
+export type CatalogueUpdate = Partial<CatalogueCreate>;
+
+export const listCatalogue = (clientId?: number) => {
+  const qs = clientId ? `?limit=200&client_id=${clientId}` : "?limit=200";
+  return apiFetch<CatalogueItem[]>(`/api/catalogue${qs}`);
+};
+export const getCatalogueItem = (id: number) =>
+  apiFetch<CatalogueItem>(`/api/catalogue/${id}`);
+export const createCatalogueItem = (data: CatalogueCreate) =>
+  apiFetch<CatalogueItem>("/api/catalogue", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateCatalogueItem = (id: number, data: CatalogueUpdate) =>
+  apiFetch<CatalogueItem>(`/api/catalogue/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteCatalogueItem = (id: number) =>
+  apiFetch<void>(`/api/catalogue/${id}`, { method: "DELETE" });
