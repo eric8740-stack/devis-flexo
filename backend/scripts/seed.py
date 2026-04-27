@@ -275,9 +275,12 @@ def run_seed() -> dict[str, int]:
        (client, fournisseur, machine) pour éviter les violations FK
        (catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL,
        catalogue.machine_id SET NULL).
-    2. INSERT ascendant via les fonctions seed_xxx, qui appellent leur
-       propre DELETE pour les tables S0-S1 (entreprise/client/fournisseur).
-       Les tables S2 sont déjà vidées en phase 1 → on peut INSERT direct.
+    2. INSERT ascendant via les fonctions seed_xxx + `session.flush()`
+       après chaque table pour rendre les parents visibles aux enfants.
+       Sans flush, SQLAlchemy n'ordonne pas correctement les INSERTs
+       quand les FK sont déclarées sans `relationship()` → PostgreSQL
+       refuse l'INSERT enfant car le parent n'est pas encore en base
+       (ForeignKeyViolation). SQLite est plus laxiste et accepte.
     """
     counts: dict[str, int] = {}
     with SessionLocal() as session:
@@ -288,19 +291,22 @@ def run_seed() -> dict[str, int]:
         session.query(OperationFinition).delete()
         session.query(PartenaireST).delete()
         session.query(ChargeMensuelle).delete()
+        session.flush()  # commit logique des DELETE en transaction
 
-        # Phase 2 — INSERT ascendant
-        # Sprint 0-1 (les fonctions S0-S1 font DELETE+INSERT en interne)
-        counts["entreprise"] = seed_entreprise(session)
-        counts["client"] = seed_client(session)
-        counts["fournisseur"] = seed_fournisseur(session)
-        # Sprint 2 (DELETE déjà fait phase 1, donc INSERT direct)
-        counts["machine"] = seed_machine(session)
-        counts["operation_finition"] = seed_operation_finition(session)
-        counts["partenaire_st"] = seed_partenaire_st(session)
-        counts["charge_mensuelle"] = seed_charge_mensuelle(session)
-        counts["complexe"] = seed_complexe(session)
-        counts["catalogue"] = seed_catalogue(session)
+        # Phase 2 — INSERT ascendant + flush entre chaque pour respecter FK
+        for name, fn in (
+            ("entreprise", seed_entreprise),
+            ("client", seed_client),
+            ("fournisseur", seed_fournisseur),
+            ("machine", seed_machine),
+            ("operation_finition", seed_operation_finition),
+            ("partenaire_st", seed_partenaire_st),
+            ("charge_mensuelle", seed_charge_mensuelle),
+            ("complexe", seed_complexe),  # FK fournisseur
+            ("catalogue", seed_catalogue),  # FK client + machine
+        ):
+            counts[name] = fn(session)
+            session.flush()
 
         session.commit()
     return counts
