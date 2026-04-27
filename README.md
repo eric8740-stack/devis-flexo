@@ -3,6 +3,12 @@
 [![backend](https://github.com/eric8740-stack/devis-flexo/actions/workflows/backend.yml/badge.svg)](https://github.com/eric8740-stack/devis-flexo/actions/workflows/backend.yml)
 [![frontend](https://github.com/eric8740-stack/devis-flexo/actions/workflows/frontend.yml/badge.svg)](https://github.com/eric8740-stack/devis-flexo/actions/workflows/frontend.yml)
 
+## 🚀 Démo en ligne
+
+- **Application** : https://devis-flexo.vercel.app
+- **API (Swagger)** : https://devis-flexo-production.up.railway.app/docs
+- **Healthcheck backend** : https://devis-flexo-production.up.railway.app
+
 Application de devis pour TPE flexographie d'étiquettes.
 
 Projet vitrine d'Eric Paysant (ERP Conseil) — modèle de coût industriel à 7 postes appliqué au métier de la flexo, exposé dans une stack data moderne.
