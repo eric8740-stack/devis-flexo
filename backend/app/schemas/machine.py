@@ -12,6 +12,9 @@ class MachineBase(BaseModel):
     vitesse_max_m_min: int | None = Field(default=None, gt=0)
     nb_couleurs: int | None = Field(default=None, ge=1, le=12)
     cout_horaire_eur: float | None = Field(default=None, ge=0)
+    # Paramètres calcul S3
+    vitesse_moyenne_m_h: int | None = Field(default=None, gt=0)
+    duree_calage_h: float | None = Field(default=None, ge=0)
     statut: StatutMachine = "actif"
     commentaire: str | None = None
 
@@ -35,5 +38,7 @@ class MachineUpdate(BaseModel):
     vitesse_max_m_min: int | None = Field(default=None, gt=0)
     nb_couleurs: int | None = Field(default=None, ge=1, le=12)
     cout_horaire_eur: float | None = Field(default=None, ge=0)
+    vitesse_moyenne_m_h: int | None = Field(default=None, gt=0)
+    duree_calage_h: float | None = Field(default=None, ge=0)
     statut: StatutMachine | None = None
     commentaire: str | None = None

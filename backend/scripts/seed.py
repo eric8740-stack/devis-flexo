@@ -96,6 +96,11 @@ def seed_entreprise(session: Session) -> int:
                 pct_marge_defaut=_to_float(row.get("pct_marge_defaut")),
                 heures_prod_presse_mois=_to_int(row.get("heures_prod_presse_mois")),
                 heures_prod_finition_mois=_to_int(row.get("heures_prod_finition_mois")),
+                taux_chutes_defaut=_to_float(row.get("taux_chutes_defaut")),
+                ratio_encre_m2_couleur=_to_float(row.get("ratio_encre_m2_couleur")),
+                heures_productives_mensuelles=_to_int(
+                    row.get("heures_productives_mensuelles")
+                ),
             )
         )
     return len(rows)
@@ -158,6 +163,8 @@ def seed_machine(session: Session) -> int:
                 vitesse_max_m_min=_to_int(row.get("vitesse_max_m_min")),
                 nb_couleurs=_to_int(row.get("nb_couleurs")),
                 cout_horaire_eur=_to_float(row.get("cout_horaire_eur")),
+                vitesse_moyenne_m_h=_to_int(row.get("vitesse_moyenne_m_h")),
+                duree_calage_h=_to_float(row.get("duree_calage_h")),
                 statut=row.get("statut") or "actif",
                 commentaire=row.get("commentaire"),
             )

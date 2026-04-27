@@ -16,6 +16,10 @@ def test_get_entreprise_returns_seeded_data():
     assert data["pct_marge_defaut"] == 0.18
     assert data["heures_prod_presse_mois"] == 130
     assert data["heures_prod_finition_mois"] == 140
+    # Paramètres calcul S3
+    assert float(data["taux_chutes_defaut"]) == 0.05
+    assert float(data["ratio_encre_m2_couleur"]) == 0.003
+    assert data["heures_productives_mensuelles"] == 600
 
 
 def test_put_entreprise_modifies_field_and_persists():

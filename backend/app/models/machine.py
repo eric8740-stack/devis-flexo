@@ -20,6 +20,11 @@ class Machine(Base):
     nb_couleurs: Mapped[int | None] = mapped_column(Integer)
     cout_horaire_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
+    # Paramètres calcul S3 — vitesse réaliste de production (vs vitesse_max
+    # qui reste un argument catalogue) et durée de mise au point machine.
+    vitesse_moyenne_m_h: Mapped[int | None] = mapped_column(Integer)
+    duree_calage_h: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+
     # actif / inactif / maintenance — validé côté Pydantic, colonne SQL souple
     statut: Mapped[str] = mapped_column(String(20), nullable=False, default="actif")
 

@@ -80,3 +80,26 @@ def test_create_machine_invalid_statut_returns_422():
         json={"nom": "X", "statut": "n_importe_quoi"},
     )
     assert response.status_code == 422
+
+
+def test_seeded_machine_exposes_calc_params():
+    """Mark Andy P5 doit exposer les paramètres calcul S3 (vitesse moyenne
+    réaliste de prod et durée de calage), distincts de la vitesse_max_m_min
+    catalogue."""
+    response = client.get("/api/machines/1")
+    data = response.json()
+    assert data["vitesse_moyenne_m_h"] == 6000
+    assert float(data["duree_calage_h"]) == 0.50
+    # vitesse_max_m_min reste exposée et différente (200 m/min = 12000 m/h pic)
+    assert data["vitesse_max_m_min"] == 200
+
+
+def test_update_machine_calc_params():
+    response = client.put(
+        "/api/machines/1",
+        json={"vitesse_moyenne_m_h": 5500, "duree_calage_h": 0.60},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["vitesse_moyenne_m_h"] == 5500
+    assert float(data["duree_calage_h"]) == 0.60
