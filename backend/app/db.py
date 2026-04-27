@@ -36,5 +36,11 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        # Rollback en cas d'exception non rattrapée par le code applicatif
+        # (ex: IntegrityError sur une contrainte UNIQUE) pour ne pas laisser
+        # la session dans un état corrompu.
+        db.rollback()
+        raise
     finally:
         db.close()

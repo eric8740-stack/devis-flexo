@@ -18,7 +18,17 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Client, Entreprise, Fournisseur
+from app.models import (
+    Catalogue,
+    ChargeMensuelle,
+    Client,
+    Complexe,
+    Entreprise,
+    Fournisseur,
+    Machine,
+    OperationFinition,
+    PartenaireST,
+)
 
 SEEDS_DIR = Path(__file__).resolve().parent.parent / "seeds"
 
@@ -135,6 +145,18 @@ def run_seed() -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     with SessionLocal() as session:
+        # Vider d'abord les tables S2 qui ont des FK vers client/fournisseur
+        # (catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL)
+        # sinon `DELETE FROM client` plante avec FOREIGN KEY constraint failed.
+        # Les autres tables S2 sont vidées par symétrie (tests reproductibles).
+        # Les INSERT pour ces tables viendront au Lot 4 (seed S2).
+        session.query(Catalogue).delete()
+        session.query(Complexe).delete()
+        session.query(Machine).delete()
+        session.query(OperationFinition).delete()
+        session.query(PartenaireST).delete()
+        session.query(ChargeMensuelle).delete()
+
         counts["entreprise"] = seed_entreprise(session)
         counts["client"] = seed_client(session)
         counts["fournisseur"] = seed_fournisseur(session)

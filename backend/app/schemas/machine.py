@@ -1,0 +1,39 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+StatutMachine = Literal["actif", "inactif", "maintenance"]
+
+
+class MachineBase(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    largeur_max_mm: int | None = Field(default=None, gt=0)
+    vitesse_max_m_min: int | None = Field(default=None, gt=0)
+    nb_couleurs: int | None = Field(default=None, ge=1, le=12)
+    cout_horaire_eur: float | None = Field(default=None, ge=0)
+    statut: StatutMachine = "actif"
+    commentaire: str | None = None
+
+
+class MachineRead(MachineBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    date_creation: datetime
+    date_maj: datetime
+
+
+class MachineCreate(MachineBase):
+    """Body POST."""
+
+
+class MachineUpdate(BaseModel):
+    """Body PUT : tous les champs optionnels (partial update via exclude_unset)."""
+
+    nom: str | None = Field(default=None, min_length=1, max_length=100)
+    largeur_max_mm: int | None = Field(default=None, gt=0)
+    vitesse_max_m_min: int | None = Field(default=None, gt=0)
+    nb_couleurs: int | None = Field(default=None, ge=1, le=12)
+    cout_horaire_eur: float | None = Field(default=None, ge=0)
+    statut: StatutMachine | None = None
+    commentaire: str | None = None
