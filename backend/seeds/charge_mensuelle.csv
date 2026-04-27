@@ -1,6 +1,6 @@
 id,libelle,categorie,montant_eur,date_debut,date_fin,commentaire
 1,Loyer atelier 350 m2,loyer,1800.00,2024-01-01,,Loyer mensuel HT
-2,Salaires 4 ETP + charges,salaires,8000.00,2024-01-01,,4 employés équivalent temps plein
+2,Salaires 4 ETP + charges,salaires,9250.00,2024-01-01,,4 employés équivalent temps plein (charges patronales 2026 incluses)
 3,Énergie (électricité + gaz),energie,650.00,2024-01-01,,EDF + GDF moyenne lissée 12 mois
 4,Assurance multi-risques,assurance,280.00,2024-01-01,,RC pro + machines + locaux
 5,Fournitures bureau et atelier,fournitures,420.00,2024-01-01,,Consommables + fournitures atelier

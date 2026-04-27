@@ -10,9 +10,9 @@ def test_list_charges_returns_seeded_6():
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 6
-    # Total mensuel attendu : 1800+8000+650+280+420+250 = 11400 €
+    # Total mensuel attendu : 1800+9250+650+280+420+250 = 12650 € (cible PRD persona)
     total = sum(float(c["montant_eur"]) for c in data)
-    assert abs(total - 11400.0) < 0.01
+    assert abs(total - 12650.0) < 0.01
 
 
 def test_create_charge_returns_201():

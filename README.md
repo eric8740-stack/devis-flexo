@@ -35,7 +35,7 @@ Projet vitrine d'Eric Paysant (ERP Conseil) — modèle de coût industriel à 7
 |---|---|---|
 | Référentiels | `entreprise` (singleton), `client` (20 seedés, 7 segments), `fournisseur` (5 seedés) | S0-S1 |
 | Ressources prod | `machine` (3 seedées), `operation_finition` (5), `partenaire_st` (4) | S2 |
-| Coûts | `charge_mensuelle` (6 seedées, total 11 400 €/mois) | S2 |
+| Coûts | `charge_mensuelle` (6 seedées, total 12 650 €/mois) | S2 |
 | Catalogue | `complexe` (30 matières adhésives, prix €/m²), `catalogue` (5 produits récurrents) | S2 |
 
 ## Démarrage local
