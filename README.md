@@ -9,9 +9,9 @@ Projet vitrine d'Eric Paysant (ERP Conseil) — modèle de coût industriel à 7
 
 ## Production
 
-- **Frontend** : `https://<a renseigner>.vercel.app`
-- **Backend** : `https://<a renseigner>.up.railway.app`
-- **API docs** : `https://<a renseigner>.up.railway.app/docs`
+- **Frontend** : https://devis-flexo.vercel.app
+- **Backend** : https://devis-flexo-production.up.railway.app
+- **API docs** : https://devis-flexo-production.up.railway.app/docs
 
 ## Stack
 
