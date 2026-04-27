@@ -13,7 +13,7 @@ def test_get_entreprise_returns_seeded_data():
     assert data["raison_sociale"] == "Paysant & Fils Étiquettes"
     assert data["siret"] == "12345678901234"
     assert data["pct_fg"] == 0.08
-    assert data["pct_marge_defaut"] == 0.22
+    assert data["pct_marge_defaut"] == 0.18
     assert data["heures_prod_presse_mois"] == 130
     assert data["heures_prod_finition_mois"] == 140
 
