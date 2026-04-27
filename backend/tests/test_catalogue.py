@@ -5,10 +5,13 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_catalogue_empty_initially():
+def test_list_catalogue_returns_seeded_5():
     response = client.get("/api/catalogue")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert len(data) == 5
+    assert data[0]["client_id"] == 1
+    assert data[0]["code_produit"] == "VIN_75CL_2025"
 
 
 def test_create_catalogue_returns_201_with_client_seede():

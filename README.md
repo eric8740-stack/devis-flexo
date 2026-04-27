@@ -27,6 +27,17 @@ Projet vitrine d'Eric Paysant (ERP Conseil) — modèle de coût industriel à 7
 - **Déploiement** : Vercel (front) + Railway (back + Postgres)
 - **CI** : GitHub Actions (pytest + npm build/lint)
 
+## Périmètre actuel
+
+**9 tables** · **44 endpoints REST** · **69 tests pytest verts**
+
+| Domaine | Tables | Sprint |
+|---|---|---|
+| Référentiels | `entreprise` (singleton), `client` (20 seedés, 7 segments), `fournisseur` (5 seedés) | S0-S1 |
+| Ressources prod | `machine` (3 seedées), `operation_finition` (5), `partenaire_st` (4) | S2 |
+| Coûts | `charge_mensuelle` (6 seedées, total 11 400 €/mois) | S2 |
+| Catalogue | `complexe` (30 matières adhésives, prix €/m²), `catalogue` (5 produits récurrents) | S2 |
+
 ## Démarrage local
 
 ### Backend (port 8000)
@@ -87,23 +98,23 @@ pytest
 devis-flexo/
 ├── backend/             # FastAPI
 │   ├── app/
-│   │   ├── main.py            # CORS + include routers
-│   │   ├── db.py              # engine SQLAlchemy + Base + get_db
-│   │   ├── models/            # 3 modèles (entreprise, client, fournisseur)
-│   │   ├── schemas/           # Pydantic Read/Create/Update
+│   │   ├── main.py            # CORS + include routers + handler IntegrityError → 409
+│   │   ├── db.py              # engine SQLAlchemy + Base + get_db (rollback on error)
+│   │   ├── models/            # 9 modèles (S0-S1: entreprise/client/fournisseur · S2: machine/operation_finition/partenaire_st/charge_mensuelle/complexe/catalogue)
+│   │   ├── schemas/           # Pydantic v2 Read/Create/Update + enums Literal
 │   │   ├── crud/              # logique métier DB
-│   │   └── routers/           # endpoints REST
-│   ├── alembic/               # migrations versionnées
-│   ├── seeds/                 # CSV sources (entreprise, client, fournisseur)
-│   ├── scripts/               # seed.py + export Excel→CSV
-│   ├── tests/                 # pytest (25 tests)
+│   │   └── routers/           # 44 endpoints REST
+│   ├── alembic/               # migrations versionnées (2 migrations : S0-S1 + S2)
+│   ├── seeds/                 # CSV sources (9 fichiers, 79 lignes au total)
+│   ├── scripts/               # seed.py (idempotent) + export Excel→CSV
+│   ├── tests/                 # pytest (69 tests, autouse fixture seed_db_before_each_test)
 │   ├── Dockerfile             # image Railway
 │   └── requirements.txt
 ├── frontend/            # Next.js 14
 │   └── src/
-│       ├── app/               # routes (parametres, clients, fournisseurs)
-│       ├── components/        # DataTable, forms, Header, ui shadcn
-│       └── lib/api.ts         # helpers fetch typés
-├── .github/workflows/   # CI backend + frontend
+│       ├── app/               # 22 routes (parametres + 8 entités × 3 pages list/[id]/nouveau)
+│       ├── components/        # DataTable + 7 forms + Header + ui shadcn
+│       └── lib/api.ts         # helpers fetch typés end-to-end
+├── .github/workflows/   # CI backend (pytest + alembic upgrade) + frontend (build + lint)
 └── README.md
 ```

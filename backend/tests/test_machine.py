@@ -5,15 +5,17 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_machines_empty_initially():
+def test_list_machines_returns_seeded_3():
     response = client.get("/api/machines")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert len(data) == 3
+    assert data[0]["nom"] == "Mark Andy P5"
 
 
 def test_create_machine_returns_201():
     payload = {
-        "nom": "Mark Andy P5",
+        "nom": "TEST Press Unique",
         "largeur_max_mm": 330,
         "vitesse_max_m_min": 200,
         "nb_couleurs": 8,
@@ -23,22 +25,25 @@ def test_create_machine_returns_201():
     response = client.post("/api/machines", json=payload)
     assert response.status_code == 201
     data = response.json()
-    assert data["id"] >= 1
-    assert data["nom"] == "Mark Andy P5"
+    assert data["id"] > 3
+    assert data["nom"] == "TEST Press Unique"
     assert data["nb_couleurs"] == 8
     assert data["statut"] == "actif"
     assert "date_creation" in data
     assert "date_maj" in data
 
 
+def test_create_machine_duplicate_nom_returns_409():
+    """UNIQUE sur nom → IntegrityError convertie en 409 par le handler global."""
+    response = client.post("/api/machines", json={"nom": "Mark Andy P5"})
+    assert response.status_code == 409
+
+
 def test_get_machine_existing_returns_200():
-    created = client.post(
-        "/api/machines",
-        json={"nom": "Daco D250", "vitesse_max_m_min": 80},
-    ).json()
-    response = client.get(f"/api/machines/{created['id']}")
+    """Récupère machine seedée #2 (Daco D250 ligne finition)."""
+    response = client.get("/api/machines/2")
     assert response.status_code == 200
-    assert response.json()["nom"] == "Daco D250"
+    assert "Daco" in response.json()["nom"]
 
 
 def test_get_machine_missing_returns_404():

@@ -5,15 +5,16 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_operations_empty_initially():
+def test_list_operations_returns_seeded_5():
     response = client.get("/api/operations-finition")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert len(data) == 5
 
 
 def test_create_operation_returns_201():
     payload = {
-        "nom": "Vernis UV",
+        "nom": "TEST Op Unique",
         "unite_facturation": "m2",
         "cout_unitaire_eur": 0.45,
         "temps_minutes_unite": 0.10,
@@ -21,19 +22,16 @@ def test_create_operation_returns_201():
     response = client.post("/api/operations-finition", json=payload)
     assert response.status_code == 201
     data = response.json()
-    assert data["nom"] == "Vernis UV"
+    assert data["nom"] == "TEST Op Unique"
     assert data["unite_facturation"] == "m2"
     assert data["statut"] == "actif"
 
 
 def test_get_operation_existing_returns_200():
-    created = client.post(
-        "/api/operations-finition",
-        json={"nom": "Laminage mat", "unite_facturation": "m2"},
-    ).json()
-    response = client.get(f"/api/operations-finition/{created['id']}")
+    """Récupère op seedée #1 (Vernis UV brillant)."""
+    response = client.get("/api/operations-finition/1")
     assert response.status_code == 200
-    assert response.json()["nom"] == "Laminage mat"
+    assert "Vernis" in response.json()["nom"]
 
 
 def test_get_operation_missing_returns_404():

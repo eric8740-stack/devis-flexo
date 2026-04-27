@@ -1,0 +1,6 @@
+id,code_produit,designation,client_id,machine_id,matiere,format_mm,nb_couleurs,prix_unitaire_eur,frequence_estimee,commentaire,statut
+1,VIN_75CL_2025,Étiquette bouteille 75cl millésime 2025,1,1,Couché mat 90g,75x100,4,0.0850,annuelle,Tirage 5000 - réédition possible,actif
+2,VIN_50CL_2025,Étiquette bouteille 50cl millésime 2025,1,1,Couché mat 90g,55x80,4,0.0750,annuelle,Tirage 1500,actif
+3,CONF_FRAISE_TX,Étiquette pot 250g confiture fraise,3,1,Couché mat 90g,60x80,2,0.0420,trimestrielle,Tirage 2000 par cycle,actif
+4,CONF_ABRICOT_TX,Étiquette pot 250g confiture abricot,3,1,Couché mat 90g,60x80,2,0.0420,trimestrielle,Tirage 1500 par cycle,actif
+5,COSM_FLACON_NATURE,Étiquette flacon cosmétique 100ml,4,1,BOPP blanc 50µ,80x120,6,0.1850,mensuelle,Tirage 3000/mois,actif

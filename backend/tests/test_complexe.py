@@ -5,10 +5,15 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_complexes_empty_initially():
+def test_list_complexes_returns_seeded_30():
     response = client.get("/api/complexes")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert len(data) == 30
+    # Le complexe COUCHE_MAT_90 (benchmark A du PRD) doit être présent à 1.20 €/m²
+    couche_mat = [c for c in data if c["reference"] == "COUCHE_MAT_90"]
+    assert len(couche_mat) == 1
+    assert float(couche_mat[0]["prix_m2_eur"]) == 1.20
 
 
 def test_create_complexe_returns_201_with_fournisseur_seede():

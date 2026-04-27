@@ -1,0 +1,31 @@
+id,reference,famille,face_matiere,grammage_g_m2,adhesif_type,prix_m2_eur,fournisseur_id,statut,commentaire
+1,BOPP_BLANC_50,bopp,BOPP blanc 50 microns,,permanent,1.4500,1,actif,Standard cosmétique
+2,BOPP_TRANSPARENT_50,bopp,BOPP transparent 50 microns,,permanent,1.3500,1,actif,Effet no-label
+3,BOPP_BLANC_70,bopp,BOPP blanc 70 microns,,permanent,1.6000,1,actif,
+4,BOPP_RENFORCE_60,bopp,BOPP renforcé 60 microns,,permanent,1.7000,1,actif,Pour conditions humides
+5,PP_BLANC_60,pp,Polypropylène blanc 60µ,,permanent,1.3000,2,actif,
+6,PP_TRANSPARENT_60,pp,Polypropylène transparent 60µ,,permanent,1.2000,2,actif,
+7,PP_BLANC_80,pp,Polypropylène blanc 80µ,,permanent,1.5000,2,actif,
+8,PE_BLANC_70,pe,Polyéthylène blanc 70µ,,permanent,1.2500,3,actif,Souple - bouteilles plastique
+9,PE_TRANSPARENT_70,pe,Polyéthylène transparent 70µ,,permanent,1.2000,3,actif,
+10,PE_BLANC_100,pe,Polyéthylène blanc 100µ,,permanent,1.5500,3,actif,
+11,PVC_BLANC_80,pvc_vinyle,Vinyle PVC blanc 80µ,,permanent,1.9500,3,actif,Application extérieure
+12,PVC_BLANC_100,pvc_vinyle,Vinyle PVC blanc 100µ,,permanent,2.1500,3,actif,
+13,PVC_TRANSPARENT_120,pvc_vinyle,Vinyle PVC transparent 120µ,,amovible,2.4000,3,actif,Decoupe complexe
+14,THERMIQUE_60,thermique,Thermique top-coat 60g,60,permanent,0.6500,4,actif,Bas de gamme imprimante directe
+15,THERMIQUE_80,thermique,Thermique top-coat 80g,80,permanent,0.7000,4,actif,
+16,THERMIQUE_TOPCOAT_90,thermique,Thermique premium top-coat 90g,90,permanent,0.8000,4,actif,
+17,COUCHE_BRILLANT_80,papier_couche,Papier couché brillant 80g,80,permanent,1.0500,1,actif,Standard alimentaire
+18,COUCHE_MAT_90,papier_couche,Papier couché mat 90g,90,permanent,1.2000,1,actif,Confiturier - benchmark A du PRD
+19,COUCHE_BRILLANT_100,papier_couche,Papier couché brillant 100g,100,permanent,1.3000,1,actif,
+20,COUCHE_MAT_120,papier_couche,Papier couché mat 120g,120,permanent,1.4500,1,actif,Premium vin
+21,STD_80,papier_standard,Papier standard 80g,80,permanent,0.8500,2,actif,Étiquettes basiques
+22,STD_90,papier_standard,Papier standard 90g,90,permanent,0.8800,2,actif,
+23,STD_100,papier_standard,Papier standard 100g,100,permanent,0.9000,2,actif,
+24,EPAIS_120,papier_epais,Papier épais 120g,120,permanent,1.1000,2,actif,
+25,EPAIS_140,papier_epais,Papier épais 140g,140,permanent,1.3000,2,actif,
+26,EPAIS_160,papier_epais,Papier épais 160g,160,permanent,1.5000,2,actif,
+27,KRAFT_90,papier_kraft,Papier kraft naturel 90g,90,permanent,1.0000,4,actif,Look bio / artisanat
+28,KRAFT_120,papier_kraft,Papier kraft naturel 120g,120,permanent,1.2500,4,actif,
+29,VERGE_100,papier_verge,Papier vergé 100g,100,permanent,1.3500,4,actif,Premium vin / spiritueux
+30,VERGE_120,papier_verge,Papier vergé 120g,120,permanent,1.5000,4,actif,

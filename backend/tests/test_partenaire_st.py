@@ -5,10 +5,11 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_partenaires_empty_initially():
+def test_list_partenaires_returns_seeded_4():
     response = client.get("/api/partenaires-st")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert len(data) == 4
 
 
 def test_create_partenaire_returns_201():

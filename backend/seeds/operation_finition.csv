@@ -1,0 +1,6 @@
+id,nom,unite_facturation,cout_unitaire_eur,temps_minutes_unite,statut,commentaire
+1,Vernis UV brillant,m2,0.4500,0.10,actif,Vernis UV haute brillance sur ligne Mark Andy
+2,Laminage transparent BOPP,m2,0.6500,0.15,actif,Pellicule BOPP transparente 25 microns
+3,Laminage mat,m2,0.6200,0.15,actif,Pellicule polypropylène mat
+4,Dorure à chaud,ml,1.2000,0.30,actif,Or 24 carats - sous-traitée si > 50 ml
+5,Découpe forme,unite,0.0050,0.002,actif,Découpe complexe sur ligne Daco

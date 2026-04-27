@@ -5,10 +5,14 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_charges_empty_initially():
+def test_list_charges_returns_seeded_6():
     response = client.get("/api/charges-mensuelles")
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert len(data) == 6
+    # Total mensuel attendu : 1800+8000+650+280+420+250 = 11400 €
+    total = sum(float(c["montant_eur"]) for c in data)
+    assert abs(total - 11400.0) < 0.01
 
 
 def test_create_charge_returns_201():

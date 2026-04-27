@@ -13,7 +13,6 @@ from __future__ import annotations
 import csv
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -72,6 +71,11 @@ def _to_int(value: str | None) -> int | None:
 
 def _to_float(value: str | None) -> float | None:
     return float(value) if value else None
+
+
+# ---------------------------------------------------------------------------
+# Sprint 0-1 : entreprise / client / fournisseur
+# ---------------------------------------------------------------------------
 
 
 def seed_entreprise(session: Session) -> int:
@@ -138,18 +142,146 @@ def seed_fournisseur(session: Session) -> int:
     return len(rows)
 
 
+# ---------------------------------------------------------------------------
+# Sprint 2 : 6 nouvelles tables
+# ---------------------------------------------------------------------------
+
+
+def seed_machine(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "machine.csv")
+    for row in rows:
+        session.add(
+            Machine(
+                id=_to_int(row["id"]),
+                nom=row["nom"],
+                largeur_max_mm=_to_int(row.get("largeur_max_mm")),
+                vitesse_max_m_min=_to_int(row.get("vitesse_max_m_min")),
+                nb_couleurs=_to_int(row.get("nb_couleurs")),
+                cout_horaire_eur=_to_float(row.get("cout_horaire_eur")),
+                statut=row.get("statut") or "actif",
+                commentaire=row.get("commentaire"),
+            )
+        )
+    return len(rows)
+
+
+def seed_operation_finition(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "operation_finition.csv")
+    for row in rows:
+        session.add(
+            OperationFinition(
+                id=_to_int(row["id"]),
+                nom=row["nom"],
+                unite_facturation=row["unite_facturation"],
+                cout_unitaire_eur=_to_float(row.get("cout_unitaire_eur")),
+                temps_minutes_unite=_to_float(row.get("temps_minutes_unite")),
+                statut=row.get("statut") or "actif",
+                commentaire=row.get("commentaire"),
+            )
+        )
+    return len(rows)
+
+
+def seed_partenaire_st(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "partenaire_st.csv")
+    for row in rows:
+        session.add(
+            PartenaireST(
+                id=_to_int(row["id"]),
+                raison_sociale=row["raison_sociale"],
+                siret=row.get("siret"),
+                contact_nom=row.get("contact_nom"),
+                contact_email=row.get("contact_email"),
+                contact_tel=row.get("contact_tel"),
+                prestation_type=row.get("prestation_type"),
+                delai_jours_moyen=_to_int(row.get("delai_jours_moyen")),
+                qualite_score=_to_int(row.get("qualite_score")),
+                commentaire=row.get("commentaire"),
+                statut=row.get("statut") or "actif",
+            )
+        )
+    return len(rows)
+
+
+def seed_charge_mensuelle(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "charge_mensuelle.csv")
+    for row in rows:
+        session.add(
+            ChargeMensuelle(
+                id=_to_int(row["id"]),
+                libelle=row["libelle"],
+                categorie=row["categorie"],
+                montant_eur=_to_float(row["montant_eur"]),
+                date_debut=parse_date(row["date_debut"]),
+                date_fin=parse_date(row.get("date_fin")),
+                commentaire=row.get("commentaire"),
+            )
+        )
+    return len(rows)
+
+
+def seed_complexe(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "complexe.csv")
+    for row in rows:
+        session.add(
+            Complexe(
+                id=_to_int(row["id"]),
+                reference=row["reference"],
+                famille=row["famille"],
+                face_matiere=row.get("face_matiere"),
+                grammage_g_m2=_to_int(row.get("grammage_g_m2")),
+                adhesif_type=row.get("adhesif_type"),
+                prix_m2_eur=_to_float(row["prix_m2_eur"]),
+                fournisseur_id=_to_int(row.get("fournisseur_id")),
+                statut=row.get("statut") or "actif",
+                commentaire=row.get("commentaire"),
+            )
+        )
+    return len(rows)
+
+
+def seed_catalogue(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "catalogue.csv")
+    for row in rows:
+        session.add(
+            Catalogue(
+                id=_to_int(row["id"]),
+                code_produit=row["code_produit"],
+                designation=row["designation"],
+                client_id=_to_int(row["client_id"]),
+                machine_id=_to_int(row.get("machine_id")),
+                matiere=row.get("matiere"),
+                format_mm=row.get("format_mm"),
+                nb_couleurs=_to_int(row.get("nb_couleurs")),
+                prix_unitaire_eur=_to_float(row.get("prix_unitaire_eur")),
+                frequence_estimee=row.get("frequence_estimee"),
+                commentaire=row.get("commentaire"),
+                statut=row.get("statut") or "actif",
+            )
+        )
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+
 def run_seed() -> dict[str, int]:
     """Exécute tous les seeders dans une seule transaction.
 
-    Returns: dict {"entreprise": N, "client": N, "fournisseur": N}
+    Ordre :
+    1. DELETE descendant : enfants (catalogue, complexe) AVANT parents
+       (client, fournisseur, machine) pour éviter les violations FK
+       (catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL,
+       catalogue.machine_id SET NULL).
+    2. INSERT ascendant via les fonctions seed_xxx, qui appellent leur
+       propre DELETE pour les tables S0-S1 (entreprise/client/fournisseur).
+       Les tables S2 sont déjà vidées en phase 1 → on peut INSERT direct.
     """
     counts: dict[str, int] = {}
     with SessionLocal() as session:
-        # Vider d'abord les tables S2 qui ont des FK vers client/fournisseur
-        # (catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL)
-        # sinon `DELETE FROM client` plante avec FOREIGN KEY constraint failed.
-        # Les autres tables S2 sont vidées par symétrie (tests reproductibles).
-        # Les INSERT pour ces tables viendront au Lot 4 (seed S2).
+        # Phase 1 — DELETE descendant des tables enfants (S2)
         session.query(Catalogue).delete()
         session.query(Complexe).delete()
         session.query(Machine).delete()
@@ -157,18 +289,37 @@ def run_seed() -> dict[str, int]:
         session.query(PartenaireST).delete()
         session.query(ChargeMensuelle).delete()
 
+        # Phase 2 — INSERT ascendant
+        # Sprint 0-1 (les fonctions S0-S1 font DELETE+INSERT en interne)
         counts["entreprise"] = seed_entreprise(session)
         counts["client"] = seed_client(session)
         counts["fournisseur"] = seed_fournisseur(session)
+        # Sprint 2 (DELETE déjà fait phase 1, donc INSERT direct)
+        counts["machine"] = seed_machine(session)
+        counts["operation_finition"] = seed_operation_finition(session)
+        counts["partenaire_st"] = seed_partenaire_st(session)
+        counts["charge_mensuelle"] = seed_charge_mensuelle(session)
+        counts["complexe"] = seed_complexe(session)
+        counts["catalogue"] = seed_catalogue(session)
+
         session.commit()
     return counts
 
 
 def main() -> None:
     counts = run_seed()
-    print(f"Entreprise  : {counts['entreprise']} ligne insérée.")
-    print(f"Client      : {counts['client']} lignes insérées.")
-    print(f"Fournisseur : {counts['fournisseur']} lignes insérées.")
+    print("=== Sprint 0-1 ===")
+    print(f"Entreprise          : {counts['entreprise']}")
+    print(f"Client              : {counts['client']}")
+    print(f"Fournisseur         : {counts['fournisseur']}")
+    print("=== Sprint 2 ===")
+    print(f"Machine             : {counts['machine']}")
+    print(f"OperationFinition   : {counts['operation_finition']}")
+    print(f"PartenaireST        : {counts['partenaire_st']}")
+    print(f"ChargeMensuelle     : {counts['charge_mensuelle']}")
+    print(f"Complexe            : {counts['complexe']}")
+    print(f"Catalogue           : {counts['catalogue']}")
+    print(f"\nTotal : {sum(counts.values())} lignes insérées.")
 
 
 if __name__ == "__main__":
