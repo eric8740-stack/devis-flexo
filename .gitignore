@@ -22,6 +22,7 @@ backend/*.db-journal
 
 # Rapports moteur de coût (générés par pytest, régénérables à la demande)
 backend/cost_breakdown.md
+backend/cost_breakdown_5cas.md
 
 # Next.js / Node
 node_modules/
