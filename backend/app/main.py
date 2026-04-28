@@ -10,12 +10,14 @@ from app.routers import (
     charge_mensuelle,
     client,
     complexe,
+    cost,
     entreprise,
     fournisseur,
     machine,
     operation_finition,
     partenaire_st,
 )
+from app.services.cost_engine import CostEngineError
 
 app = FastAPI(title="devis-flexo")
 
@@ -48,6 +50,8 @@ app.include_router(partenaire_st.router)
 app.include_router(charge_mensuelle.router)
 app.include_router(complexe.router)
 app.include_router(catalogue.router)
+# Sprint 3 Lot 3f
+app.include_router(cost.router)
 
 
 @app.exception_handler(IntegrityError)
@@ -63,6 +67,17 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
             )
         },
     )
+
+
+@app.exception_handler(CostEngineError)
+async def cost_engine_error_handler(request: Request, exc: CostEngineError):
+    """Convertit les erreurs métier du moteur de coût en HTTP 422.
+
+    Levée par les calculateurs ou l'orchestrateur quand une donnée requise
+    est manquante/incohérente (tarif inconnu, complexe sans grammage,
+    type d'encre inexistant, machine sans vitesse_moyenne_m_h, ...).
+    """
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 @app.get("/")
