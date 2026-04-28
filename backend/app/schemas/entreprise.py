@@ -18,10 +18,6 @@ class EntrepriseRead(BaseModel):
     pct_marge_defaut: float | None = None
     heures_prod_presse_mois: int | None = None
     heures_prod_finition_mois: int | None = None
-    # Paramètres calcul S3
-    taux_chutes_defaut: float | None = None
-    ratio_encre_m2_couleur: float | None = None
-    heures_productives_mensuelles: int | None = None
 
 
 class EntrepriseUpdate(BaseModel):
@@ -42,6 +38,3 @@ class EntrepriseUpdate(BaseModel):
     pct_marge_defaut: float | None = None
     heures_prod_presse_mois: int | None = None
     heures_prod_finition_mois: int | None = None
-    taux_chutes_defaut: float | None = None
-    ratio_encre_m2_couleur: float | None = None
-    heures_productives_mensuelles: int | None = None

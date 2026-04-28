@@ -108,11 +108,6 @@ def seed_entreprise(session: Session) -> int:
                 pct_marge_defaut=_to_float(row.get("pct_marge_defaut")),
                 heures_prod_presse_mois=_to_int(row.get("heures_prod_presse_mois")),
                 heures_prod_finition_mois=_to_int(row.get("heures_prod_finition_mois")),
-                taux_chutes_defaut=_to_float(row.get("taux_chutes_defaut")),
-                ratio_encre_m2_couleur=_to_float(row.get("ratio_encre_m2_couleur")),
-                heures_productives_mensuelles=_to_int(
-                    row.get("heures_productives_mensuelles")
-                ),
             )
         )
     return len(rows)
