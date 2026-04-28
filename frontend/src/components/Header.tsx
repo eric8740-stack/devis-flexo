@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
+  // Sprint 3 — fonctionnalité phare en tête
+  { href: "/devis/nouveau", label: "Calculer un devis" },
   { href: "/parametres", label: "Paramètres" },
   { href: "/clients", label: "Clients" },
   { href: "/fournisseurs", label: "Fournisseurs" },

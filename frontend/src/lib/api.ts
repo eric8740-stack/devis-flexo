@@ -430,3 +430,64 @@ export const updateCatalogueItem = (id: number, data: CatalogueUpdate) =>
   });
 export const deleteCatalogueItem = (id: number) =>
   apiFetch<void>(`/api/catalogue/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 3 Lot 3g : Cost engine v2 — POST /api/cost/calculer
+// ---------------------------------------------------------------------------
+
+export const ENCRES_TYPES = [
+  "process_cmj",
+  "process_black_hc",
+  "pantone",
+  "blanc_high_opaque",
+  "metallise",
+] as const;
+export type EncreType = (typeof ENCRES_TYPES)[number];
+
+// Libellés humains pour l'UI (clés tarif_encre.type_encre côté backend).
+export const ENCRES_LIBELLES: Record<EncreType, string> = {
+  process_cmj: "Process CMJN",
+  process_black_hc: "Black High Coverage",
+  pantone: "Pantone",
+  blanc_high_opaque: "Blanc High Opacity",
+  metallise: "Métallisée",
+};
+
+export interface PartenaireSTForfait {
+  partenaire_st_id: number;
+  // Decimal côté backend → string en JSON pour préserver la précision.
+  montant_eur: string;
+}
+
+export interface DevisInput {
+  complexe_id: number;
+  laize_utile_mm: number;
+  ml_total: number;
+  nb_couleurs_par_type: Record<string, number>;
+  machine_id: number;
+  forfaits_st: PartenaireSTForfait[];
+  heures_dossier_override?: string | null;
+  pct_marge_override?: string | null;
+}
+
+export interface PosteResult {
+  poste_numero: number;
+  libelle: string;
+  // Decimal côté backend → string en JSON.
+  montant_eur: string;
+  // dict[str, float | int | str] côté backend.
+  details: Record<string, string | number>;
+}
+
+export interface DevisOutput {
+  postes: PosteResult[];
+  cout_revient_eur: string;
+  pct_marge_appliquee: string;
+  prix_vente_ht_eur: string;
+}
+
+export const calculerDevis = (input: DevisInput) =>
+  apiFetch<DevisOutput>("/api/cost/calculer", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
