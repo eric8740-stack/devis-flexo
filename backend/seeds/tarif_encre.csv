@@ -1,0 +1,6 @@
+id,type_encre,libelle,prix_kg_defaut,prix_kg_min,prix_kg_max,ratio_g_m2_couleur,actif
+1,process_cmj,Process CMJ (cyan/magenta/jaune),15.75,14.00,17.50,2.000,true
+2,process_black_hc,Process Black High Coverage,16.25,14.50,18.00,2.000,true
+3,pantone,Pantone (couleur d'accompagnement),21.50,18.00,25.00,2.000,true
+4,blanc_high_opaque,Blanc High Opacity,14.00,12.00,16.00,2.000,true
+5,metallise,Encre métallisée,47.50,40.00,55.00,2.000,true

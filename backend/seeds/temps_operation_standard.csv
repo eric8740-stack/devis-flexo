@@ -1,0 +1,16 @@
+id,libelle_operation,minutes_standard,categorie,ordre_affichage,actif
+1,Retournement de laize,5.00,preparation,1,true
+2,Préparation et installation matière,5.00,preparation,2,true
+3,Montage clichés,5.00,calage,3,true
+4,Montage encrier + anilox + porte-clichés,5.00,calage,4,true
+5,Installation poste Pantone,5.00,calage,5,true
+6,Montage outil,5.00,calage,6,true
+7,Calage impression + outil + couteaux,5.00,calage,7,true
+8,Recherche couleur,5.00,calage,8,true
+9,Changement références couleurs,5.00,calage,9,true
+10,Changement références clichés,5.00,calage,10,true
+11,Recalage impression,5.00,production,11,true
+12,Changement bobine en cours tirage,5.00,production,12,true
+13,Démontage outil,5.00,demontage,13,true
+14,Démontage cliché,5.00,demontage,14,true
+15,Démontage bobines,5.00,demontage,15,true

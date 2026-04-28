@@ -19,14 +19,19 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import (
     Catalogue,
+    ChargeMachineMensuelle,
     ChargeMensuelle,
     Client,
     Complexe,
+    CorrespondanceLaizeMetrage,
     Entreprise,
     Fournisseur,
     Machine,
     OperationFinition,
     PartenaireST,
+    TarifEncre,
+    TarifPoste,
+    TempsOperationStandard,
 )
 
 SEEDS_DIR = Path(__file__).resolve().parent.parent / "seeds"
@@ -71,6 +76,13 @@ def _to_int(value: str | None) -> int | None:
 
 def _to_float(value: str | None) -> float | None:
     return float(value) if value else None
+
+
+def _to_bool(value: str | None) -> bool:
+    # CSV n'a pas de type natif boolean — on accepte true/1/yes (insensible casse).
+    if value is None:
+        return False
+    return value.strip().lower() in ("true", "1", "yes")
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +282,95 @@ def seed_catalogue(session: Session) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Sprint 3 Lot 3b : 5 tables paramétriques du moteur de coût v2
+# ---------------------------------------------------------------------------
+
+
+def seed_tarif_poste(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "tarif_poste.csv")
+    for row in rows:
+        session.add(
+            TarifPoste(
+                id=_to_int(row["id"]),
+                cle=row["cle"],
+                poste_numero=_to_int(row["poste_numero"]),
+                libelle=row["libelle"],
+                valeur_defaut=_to_float(row["valeur_defaut"]),
+                valeur_min=_to_float(row.get("valeur_min")),
+                valeur_max=_to_float(row.get("valeur_max")),
+                unite=row["unite"],
+                actif=_to_bool(row.get("actif")),
+            )
+        )
+    return len(rows)
+
+
+def seed_tarif_encre(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "tarif_encre.csv")
+    for row in rows:
+        session.add(
+            TarifEncre(
+                id=_to_int(row["id"]),
+                type_encre=row["type_encre"],
+                libelle=row["libelle"],
+                prix_kg_defaut=_to_float(row["prix_kg_defaut"]),
+                prix_kg_min=_to_float(row.get("prix_kg_min")),
+                prix_kg_max=_to_float(row.get("prix_kg_max")),
+                ratio_g_m2_couleur=_to_float(row["ratio_g_m2_couleur"]),
+                actif=_to_bool(row.get("actif")),
+            )
+        )
+    return len(rows)
+
+
+def seed_temps_operation_standard(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "temps_operation_standard.csv")
+    for row in rows:
+        session.add(
+            TempsOperationStandard(
+                id=_to_int(row["id"]),
+                libelle_operation=row["libelle_operation"],
+                minutes_standard=_to_float(row["minutes_standard"]),
+                categorie=row.get("categorie"),
+                ordre_affichage=_to_int(row["ordre_affichage"]),
+                actif=_to_bool(row.get("actif")),
+            )
+        )
+    return len(rows)
+
+
+def seed_correspondance_laize_metrage(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "correspondance_laize_metrage.csv")
+    for row in rows:
+        session.add(
+            CorrespondanceLaizeMetrage(
+                id=_to_int(row["id"]),
+                laize_mm=_to_int(row["laize_mm"]),
+                metrage_metres=_to_int(row["metrage_metres"]),
+            )
+        )
+    return len(rows)
+
+
+def seed_charge_machine_mensuelle(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "charge_machine_mensuelle.csv")
+    for row in rows:
+        # cout_horaire_calcule absent volontairement : le hook before_insert
+        # le calcule à partir de montant_total / heures_disponibles.
+        session.add(
+            ChargeMachineMensuelle(
+                id=_to_int(row["id"]),
+                mois=_to_int(row["mois"]),
+                annee=_to_int(row["annee"]),
+                montant_total=_to_float(row["montant_total"]),
+                heures_disponibles=_to_float(row["heures_disponibles"]),
+                source=row.get("source"),
+            )
+        )
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -291,13 +392,20 @@ def run_seed() -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     with SessionLocal() as session:
-        # Phase 1 — DELETE descendant des tables enfants (S2)
+        # Phase 1 — DELETE descendant des tables enfants (S2 + S3 Lot 3b)
         session.query(Catalogue).delete()
         session.query(Complexe).delete()
         session.query(Machine).delete()
         session.query(OperationFinition).delete()
         session.query(PartenaireST).delete()
         session.query(ChargeMensuelle).delete()
+        # Tables S3 Lot 3b — pas de FK entre elles ni vers les autres,
+        # ordre libre. Groupées ici pour visibilité.
+        session.query(TarifPoste).delete()
+        session.query(TarifEncre).delete()
+        session.query(TempsOperationStandard).delete()
+        session.query(CorrespondanceLaizeMetrage).delete()
+        session.query(ChargeMachineMensuelle).delete()
         session.flush()  # commit logique des DELETE en transaction
 
         # Phase 2 — INSERT ascendant + flush entre chaque pour respecter FK
@@ -311,6 +419,12 @@ def run_seed() -> dict[str, int]:
             ("charge_mensuelle", seed_charge_mensuelle),
             ("complexe", seed_complexe),  # FK fournisseur
             ("catalogue", seed_catalogue),  # FK client + machine
+            # S3 Lot 3b — référentiels paramétriques moteur v2
+            ("tarif_poste", seed_tarif_poste),
+            ("tarif_encre", seed_tarif_encre),
+            ("temps_operation_standard", seed_temps_operation_standard),
+            ("correspondance_laize_metrage", seed_correspondance_laize_metrage),
+            ("charge_machine_mensuelle", seed_charge_machine_mensuelle),
         ):
             counts[name] = fn(session)
             session.flush()
@@ -332,6 +446,12 @@ def main() -> None:
     print(f"ChargeMensuelle     : {counts['charge_mensuelle']}")
     print(f"Complexe            : {counts['complexe']}")
     print(f"Catalogue           : {counts['catalogue']}")
+    print("=== Sprint 3 Lot 3b ===")
+    print(f"TarifPoste          : {counts['tarif_poste']}")
+    print(f"TarifEncre          : {counts['tarif_encre']}")
+    print(f"TempsOpStandard     : {counts['temps_operation_standard']}")
+    print(f"LaizeMetrage        : {counts['correspondance_laize_metrage']}")
+    print(f"ChargeMachineMois   : {counts['charge_machine_mensuelle']}")
     print(f"\nTotal : {sum(counts.values())} lignes insérées.")
 
 

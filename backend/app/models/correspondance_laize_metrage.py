@@ -7,13 +7,17 @@ from app.db import Base
 
 
 class CorrespondanceLaizeMetrage(Base):
-    """Mapping laize (cm) → métrage standard (m) — paramétrable par l'imprimerie."""
+    """Mapping laize (mm) → métrage standard (m) — paramétrable par l'imprimerie.
+
+    Convention projet : toutes les dimensions linéaires sont en mm
+    (laize, développement, intervalles, marges).
+    """
 
     __tablename__ = "correspondance_laize_metrage"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    laize_cm: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    laize_mm: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
     metrage_metres: Mapped[int] = mapped_column(Integer, nullable=False)
 
     date_creation: Mapped[datetime] = mapped_column(

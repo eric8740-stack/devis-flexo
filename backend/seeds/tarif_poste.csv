@@ -1,0 +1,8 @@
+id,cle,poste_numero,libelle,valeur_defaut,valeur_min,valeur_max,unite,actif
+1,matiere_prix_kg_defaut,1,Prix matière par kilo (défaut),1.7500,1.0000,2.5000,€/kg,true
+2,cliche_prix_couleur,3,Prix d'un cliché par couleur,45.0000,30.0000,60.0000,€/couleur,true
+3,calage_forfait,4,Calage forfaitaire par devis,225.0000,150.0000,300.0000,€/devis,true
+4,roulage_prix_horaire,4,Prix horaire de roulage presse,375.0000,250.0000,500.0000,€/h,true
+5,marge_confort_roulage_mm,5,Marge de confort en roulage,10.0000,5.0000,20.0000,mm,true
+6,finitions_prix_m2,6,Prix finitions par m²,0.1250,0.0500,0.2000,€/m²,true
+7,mo_prix_horaire,7,Prix horaire main d'œuvre,70.0000,50.0000,90.0000,€/h,true

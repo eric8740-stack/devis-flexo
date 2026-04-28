@@ -13,6 +13,12 @@ EXPECTED_COUNTS = {
     "charge_mensuelle": 6,
     "complexe": 30,
     "catalogue": 5,
+    # Sprint 3 Lot 3b — 5 tables paramétriques moteur v2
+    "tarif_poste": 7,
+    "tarif_encre": 5,
+    "temps_operation_standard": 15,
+    "correspondance_laize_metrage": 33,
+    "charge_machine_mensuelle": 1,
 }
 
 
