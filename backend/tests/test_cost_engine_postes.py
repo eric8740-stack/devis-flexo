@@ -13,7 +13,9 @@ from app.schemas.devis import DevisInput, PartenaireSTForfait
 from app.services.cost_engine import CostEngineError
 from app.services.cost_engine.poste_1_matiere import CalculateurPoste1Matiere
 from app.services.cost_engine.poste_2_encres import CalculateurPoste2Encres
-from app.services.cost_engine.poste_3_cliches import CalculateurPoste3Cliches
+from app.services.cost_engine.poste_3_cliches import (
+    CalculateurPoste3ClichesOutillage,
+)
 from app.services.cost_engine.poste_4_calage import CalculateurPoste4Calage
 from app.services.cost_engine.poste_5_roulage import CalculateurPoste5Roulage
 from app.services.cost_engine.poste_6_finitions import CalculateurPoste6Finitions
@@ -97,19 +99,52 @@ def test_p2_encres_raises_on_unknown_type_encre():
 # ---------------------------------------------------------------------------
 
 
-def test_p3_cliches_5_couleurs():
-    """5 couleurs (4 CMJ + 1 Pantone) × 45 €/couleur = 225 €."""
+def test_p3_v1a_existing_tool_5_couleurs():
+    """V1a : 5 couleurs × 45 = 225 € (3a) + outil existant 0 € (3b) = 225 €."""
     with SessionLocal() as db:
-        result = CalculateurPoste3Cliches(db).calculer(_devis_median())
+        result = CalculateurPoste3ClichesOutillage(db).calculer(_devis_median())
     assert result.montant_eur == Decimal("225.00")
     assert result.details["nb_couleurs_total"] == 5
+    assert result.details["mode_outil"] == "existant"
+    assert result.details["cout_3a_cliches_eur"] == 225.0
+    assert result.details["cout_3b_outil_eur"] == 0.0
 
 
-def test_p3_cliches_zero_couleurs_returns_zero():
+def test_p3_zero_couleurs_outil_existant_returns_zero():
     devis = _devis_median().model_copy(update={"nb_couleurs_par_type": {}})
     with SessionLocal() as db:
-        result = CalculateurPoste3Cliches(db).calculer(devis)
+        result = CalculateurPoste3ClichesOutillage(db).calculer(devis)
     assert result.montant_eur == Decimal("0.00")
+
+
+def test_p3_outil_nouveau_4_traces_simple():
+    """Nouvel outil, 4 tracés simples : 200 + 4×50 = 400 €. Total P3 = 225 + 400 = 625."""
+    devis = _devis_median().model_copy(
+        update={"outil_decoupe_existant": False, "nb_traces_complexite": 4}
+    )
+    with SessionLocal() as db:
+        result = CalculateurPoste3ClichesOutillage(db).calculer(devis)
+    assert result.montant_eur == Decimal("625.00")
+    assert result.details["mode_outil"] == "nouveau"
+    assert result.details["cout_3b_outil_eur"] == 400.0
+    assert result.details["surcout_forme_speciale_pct"] == 0
+
+
+def test_p3_outil_nouveau_4_traces_forme_speciale():
+    """Nouvel outil, 4 tracés + forme spé : (200 + 4×50) × 1.40 = 560 €. Total P3 = 785."""
+    devis = _devis_median().model_copy(
+        update={
+            "outil_decoupe_existant": False,
+            "nb_traces_complexite": 4,
+            "forme_speciale": True,
+        }
+    )
+    with SessionLocal() as db:
+        result = CalculateurPoste3ClichesOutillage(db).calculer(devis)
+    assert result.montant_eur == Decimal("785.00")
+    assert result.details["cout_3b_outil_eur"] == 560.0
+    assert result.details["surcout_forme_speciale_pct"] == 40
+    assert result.details["forme_speciale"] == "true"
 
 
 # ---------------------------------------------------------------------------

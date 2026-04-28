@@ -121,8 +121,10 @@ def test_devis_output_with_7_postes_is_valid():
         cout_revient_eur=Decimal("70"),
         pct_marge_appliquee=Decimal("0.18"),
         prix_vente_ht_eur=Decimal("82.6"),
+        prix_au_mille_eur=Decimal("6.92"),
     )
     assert len(output.postes) == 7
+    assert output.prix_au_mille_eur == Decimal("6.92")
 
 
 def test_devis_output_rejects_less_than_7_postes():
@@ -132,4 +134,5 @@ def test_devis_output_rejects_less_than_7_postes():
             cout_revient_eur=Decimal("60"),
             pct_marge_appliquee=Decimal("0.18"),
             prix_vente_ht_eur=Decimal("70.8"),
+            prix_au_mille_eur=Decimal("5.00"),
         )

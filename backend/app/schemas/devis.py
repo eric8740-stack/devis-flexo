@@ -132,9 +132,14 @@ class DevisInput(BaseModel):
 
 
 class DevisOutput(BaseModel):
-    """Sortie moteur — 7 postes + totaux HT."""
+    """Sortie moteur — 7 postes + totaux HT + prix au mille (Sprint 5)."""
 
     postes: list[PosteResult] = Field(min_length=7, max_length=7)
     cout_revient_eur: Decimal = Field(ge=0)
     pct_marge_appliquee: Decimal = Field(ge=0)
     prix_vente_ht_eur: Decimal = Field(ge=0)
+    # Sprint 5 Lot 5c : prix au mille étiquettes (livrable commercial clé).
+    # Calculé par l'orchestrateur à partir de format_h, intervalle 3 mm en dur,
+    # nb_poses_l × nb_poses_d et ml_total. Voir Note 9 mémoire (intervalle
+    # paramétrable reporté Sprint 6).
+    prix_au_mille_eur: Decimal = Field(ge=0)

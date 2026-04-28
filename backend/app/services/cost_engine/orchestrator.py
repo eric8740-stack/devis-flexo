@@ -18,7 +18,9 @@ from app.schemas.devis import DevisInput, DevisOutput
 from app.services.cost_engine.errors import CostEngineError
 from app.services.cost_engine.poste_1_matiere import CalculateurPoste1Matiere
 from app.services.cost_engine.poste_2_encres import CalculateurPoste2Encres
-from app.services.cost_engine.poste_3_cliches import CalculateurPoste3Cliches
+from app.services.cost_engine.poste_3_cliches import (
+    CalculateurPoste3ClichesOutillage,
+)
 from app.services.cost_engine.poste_4_calage import CalculateurPoste4Calage
 from app.services.cost_engine.poste_5_roulage import CalculateurPoste5Roulage
 from app.services.cost_engine.poste_6_finitions import CalculateurPoste6Finitions
@@ -28,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 PCT_MARGE_FALLBACK = Decimal("0.18")  # preset Compétitif persona PRD
 
+# Sprint 5 Lot 5c : intervalle entre étiquettes en dur à 3 mm pour le calcul
+# de prix_au_mille_eur. Sera paramétrable Sprint 6 (cf. notes_futures Note 9).
+INTERVALLE_ETIQUETTES_MM = 3
+
 
 class MoteurDevis:
     def __init__(self, db: Session) -> None:
@@ -35,7 +41,7 @@ class MoteurDevis:
         self._calculateurs = [
             CalculateurPoste1Matiere(db),
             CalculateurPoste2Encres(db),
-            CalculateurPoste3Cliches(db),
+            CalculateurPoste3ClichesOutillage(db),
             CalculateurPoste4Calage(db),
             CalculateurPoste5Roulage(db),
             CalculateurPoste6Finitions(db),
@@ -54,15 +60,45 @@ class MoteurDevis:
             Decimal("0.01")
         )
 
+        prix_au_mille = self._compute_prix_au_mille(devis, prix_vente_ht)
+
         logger.info(
-            "Devis calculé: cout_revient=%s €, marge=%s, prix_vente_HT=%s €",
-            cout_revient, pct_marge, prix_vente_ht,
+            "Devis calculé: cout_revient=%s €, marge=%s, prix_vente_HT=%s €, prix_au_mille=%s €/1000",
+            cout_revient, pct_marge, prix_vente_ht, prix_au_mille,
         )
         return DevisOutput(
             postes=postes,
             cout_revient_eur=cout_revient,
             pct_marge_appliquee=pct_marge,
             prix_vente_ht_eur=prix_vente_ht,
+            prix_au_mille_eur=prix_au_mille,
+        )
+
+    def _compute_prix_au_mille(
+        self, devis: DevisInput, prix_vente_ht: Decimal
+    ) -> Decimal:
+        """Calcule prix au mille étiquettes (livrable commercial clé S5).
+
+        Méthode métier : on compte les étiquettes COMPLÈTES (floor) dans le
+        développement du tirage, intervalle 3 mm en dur entre étiquettes.
+
+            etiq_par_pose_h = (ml_total × 1000) // (format_h_mm + 3)
+            nb_etiq_total = nb_poses_l × nb_poses_d × etiq_par_pose_h
+            prix_au_mille = prix_vente_ht × 1000 / nb_etiq_total
+        """
+        pas_mm = devis.format_etiquette_hauteur_mm + INTERVALLE_ETIQUETTES_MM
+        etiq_par_pose_h = (devis.ml_total * 1000) // pas_mm
+        nb_etiq_total = (
+            devis.nb_poses_largeur * devis.nb_poses_developpement * etiq_par_pose_h
+        )
+        if nb_etiq_total <= 0:
+            raise CostEngineError(
+                f"nb_etiq_total = {nb_etiq_total} : tirage trop court pour la "
+                f"hauteur étiquette {devis.format_etiquette_hauteur_mm} mm + "
+                f"intervalle {INTERVALLE_ETIQUETTES_MM} mm"
+            )
+        return (prix_vente_ht * Decimal(1000) / Decimal(nb_etiq_total)).quantize(
+            Decimal("0.01")
         )
 
     def _resolve_pct_marge(self, devis: DevisInput) -> Decimal:

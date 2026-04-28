@@ -1,4 +1,4 @@
-"""5 cas-tests de non-régression du moteur de coût v2 (S3 Lot 3e).
+"""5 cas-tests de non-régression du moteur de coût v2 (S3 Lot 3e + S5 Lot 5c).
 
 Décision Eric (28 avril 2026) : on n'utilise PAS 5 dossiers réels d'archives
 ICE Étiquettes (planning.xlsx 2014). La réindexation 2014→2026 introduirait
@@ -6,19 +6,21 @@ des écarts artificiels (+50 % papier, +35 % encres, +30 % MO sur 12 ans)
 sans rapport avec la qualité du moteur.
 
 À la place : 5 variantes du cas médian qui testent la robustesse
-mathématique du moteur sur des cas typés métier :
+mathématique du moteur sur des cas typés métier.
 
-  V1 — Cas médian de référence (figé Lot 3d)
-  V2 — Petite série (forfaits P3+P4 dominants)
-  V3 — Grande série (matière P1 + roulage P5 dominants — effet d'échelle)
-  V4 — Multi-couleurs (8 couleurs, stress P2 + P3)
-  V5 — Pantone seul + multi-ST (cas exotique : peu d'encres + finitions ST)
+Recalibrage Sprint 5 Lot 5c (refonte P3 en sous-postes + outil découpe) :
+
+  V1a — Cas médian + outil EXISTANT (figé Lot 3d, refonte P3 transparente)
+  V1b — Cas médian + nouvel outil 4 tracés simple (NEW Lot 5c)
+  V2  — Petite série (outil existant default — forfaits P3+P4 dominants)
+  V3  — Grande série (outil existant default — effet d'échelle)
+  V4  — Multi-couleurs (outil existant default — stress P2 + P3a)
+
+V5 (pantone seul + multi-ST) supprimée Lot 5c — remplacée par V1b qui
+teste le nouveau sous-poste P3b outil de découpe.
 
 Chaque variante vérifie une **propriété métier** spécifique en plus du
 total HT figé après validation Eric.
-
-Tests paramétrés via @pytest.mark.parametrize (vote Eric validé) :
-si une variante régresse, on voit laquelle précisément dans le rapport.
 """
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -34,7 +36,9 @@ from app.services.cost_engine import MoteurDevis
 REPORT_PATH = Path(__file__).resolve().parent.parent / "cost_breakdown_5cas.md"
 
 
-def _devis_v1_median() -> DevisInput:
+def _devis_v1a_median() -> DevisInput:
+    """V1a = V1 médian + outil existant (defaults Pydantic Lot 5b alignés
+    sur format 60×40, 3p1d, outil_decoupe_existant=True). Cible 1449.09 €."""
     return DevisInput(
         complexe_id=31,
         laize_utile_mm=220,
@@ -47,18 +51,29 @@ def _devis_v1_median() -> DevisInput:
     )
 
 
+def _devis_v1b_nouvel_outil() -> DevisInput:
+    """V1b = V1a + nouvel outil 4 tracés simple. Cible 1921.09 €.
+    P3b = 200 + 4×50 = 400 € → P3 = 225 + 400 = 625."""
+    return _devis_v1a_median().model_copy(
+        update={
+            "outil_decoupe_existant": False,
+            "nb_traces_complexite": 4,
+        }
+    )
+
+
 def _devis_v2_petite_serie() -> DevisInput:
-    return _devis_v1_median().model_copy(
+    return _devis_v1a_median().model_copy(
         update={"ml_total": 500, "forfaits_st": []}
     )
 
 
 def _devis_v3_grande_serie() -> DevisInput:
-    return _devis_v1_median().model_copy(update={"ml_total": 30000})
+    return _devis_v1a_median().model_copy(update={"ml_total": 30000})
 
 
 def _devis_v4_multi_couleurs() -> DevisInput:
-    return _devis_v1_median().model_copy(
+    return _devis_v1a_median().model_copy(
         update={
             "nb_couleurs_par_type": {
                 "process_cmj": 4,
@@ -69,28 +84,28 @@ def _devis_v4_multi_couleurs() -> DevisInput:
     )
 
 
-def _devis_v5_pantone_multi_st() -> DevisInput:
-    return _devis_v1_median().model_copy(
-        update={
-            "nb_couleurs_par_type": {"pantone": 2},
-            "forfaits_st": [
-                PartenaireSTForfait(partenaire_st_id=1, montant_eur=Decimal("30.00")),
-                PartenaireSTForfait(partenaire_st_id=2, montant_eur=Decimal("50.00")),
-                PartenaireSTForfait(partenaire_st_id=3, montant_eur=Decimal("80.00")),
-            ],
-        }
-    )
-
-
 # ---------------------------------------------------------------------------
 # Business checks par variante (assertions métier sur le résultat)
 # ---------------------------------------------------------------------------
 
 
-def _check_v1_reference(out: DevisOutput) -> None:
-    """V1 = cas médian déjà figé Lot 3d, total HT 1449.09 €."""
+def _check_v1a_reference(out: DevisOutput) -> None:
+    """V1a = cas médian + outil existant. P3b=0 → P3=225 (inchangé) → HT=1449.09."""
     assert out.prix_vente_ht_eur == Decimal("1449.09")
     assert out.cout_revient_eur == Decimal("1228.04")
+    p3 = next(p for p in out.postes if p.poste_numero == 3)
+    assert p3.montant_eur == Decimal("225.00")
+    assert p3.details["mode_outil"] == "existant"
+
+
+def _check_v1b_nouvel_outil_4_traces(out: DevisOutput) -> None:
+    """V1b : nouvel outil 4 tracés simple. P3b=400 → P3=625 → cout_revient=1628.04 → HT=1921.09."""
+    assert out.cout_revient_eur == Decimal("1628.04")
+    assert out.prix_vente_ht_eur == Decimal("1921.09")
+    p3 = next(p for p in out.postes if p.poste_numero == 3)
+    assert p3.montant_eur == Decimal("625.00")
+    assert p3.details["mode_outil"] == "nouveau"
+    assert p3.details["cout_3b_outil_eur"] == 400.0
 
 
 def _check_v2_forfaits_dominants(out: DevisOutput) -> None:
@@ -127,16 +142,7 @@ def _check_v4_p3_360(out: DevisOutput) -> None:
     assert p3 == Decimal("360.00")
 
 
-def _check_v5_p3_90_and_st_dominate_p6(out: DevisOutput) -> None:
-    """2 Pantone × 45 = 90 € pour P3, et ST > 50 % du poste P6."""
-    p3 = next(p for p in out.postes if p.poste_numero == 3)
-    p6 = next(p for p in out.postes if p.poste_numero == 6)
-    assert p3.montant_eur == Decimal("90.00")
-    cout_st = Decimal(str(p6.details["cout_st_total_eur"]))
-    ratio_st = cout_st / p6.montant_eur
-    assert ratio_st > Decimal("0.5"), (
-        f"ST = {cout_st} € sur P6 = {p6.montant_eur} € = {ratio_st:.1%}, attendu > 50 %"
-    )
+# V5 supprimée Lot 5c — remplacée par V1b (test du nouveau sous-poste P3b).
 
 
 # ---------------------------------------------------------------------------
@@ -157,39 +163,39 @@ class BenchmarkVariante:
 
 VARIANTES = [
     BenchmarkVariante(
-        name="V1_median",
-        description="Cas médian de référence (figé Lot 3d)",
-        devis_factory=_devis_v1_median,
-        business_check=_check_v1_reference,
+        name="V1a_median_outil_existant",
+        description="Cas médian + outil EXISTANT (figé Lot 3d, P3b=0 €)",
+        devis_factory=_devis_v1a_median,
+        business_check=_check_v1a_reference,
         expected_total_ht=Decimal("1449.09"),
     ),
     BenchmarkVariante(
+        name="V1b_nouvel_outil_4_traces",
+        description="Cas médian + nouvel outil 4 tracés simple (P3b=400 €) — NEW Lot 5c",
+        devis_factory=_devis_v1b_nouvel_outil,
+        business_check=_check_v1b_nouvel_outil_4_traces,
+        expected_total_ht=Decimal("1921.09"),
+    ),
+    BenchmarkVariante(
         name="V2_petite_serie",
-        description="Petite série 500 ml — forfaits dominants",
+        description="Petite série 500 ml — forfaits dominants (outil existant)",
         devis_factory=_devis_v2_petite_serie,
         business_check=_check_v2_forfaits_dominants,
         expected_total_ht=Decimal("743.01"),
     ),
     BenchmarkVariante(
         name="V3_grande_serie",
-        description="Grande série 30 000 ml — effet d'échelle matière + roulage",
+        description="Grande série 30 000 ml — effet d'échelle (outil existant)",
         devis_factory=_devis_v3_grande_serie,
         business_check=_check_v3_matiere_et_roulage_dominants,
         expected_total_ht=Decimal("8437.47"),
     ),
     BenchmarkVariante(
         name="V4_multi_couleurs",
-        description="8 couleurs (4 CMJ + 3 Pantone + 1 Blanc HO) — stress P2 + P3",
+        description="8 couleurs (4 CMJ + 3 Pantone + 1 Blanc HO) — outil existant",
         devis_factory=_devis_v4_multi_couleurs,
         business_check=_check_v4_p3_360,
         expected_total_ht=Decimal("1697.17"),
-    ),
-    BenchmarkVariante(
-        name="V5_pantone_multi_st",
-        description="2 Pantone seuls + 3 forfaits ST (30+50+80=160) — cas exotique",
-        devis_factory=_devis_v5_pantone_multi_st,
-        business_check=_check_v5_p3_90_and_st_dominate_p6,
-        expected_total_ht=Decimal("1354.95"),
     ),
 ]
 

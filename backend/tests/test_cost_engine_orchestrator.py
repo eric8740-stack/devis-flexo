@@ -49,3 +49,14 @@ def test_orchestrateur_uses_override_when_provided():
     assert out.pct_marge_appliquee == Decimal("0.30")
     expected_ht = (out.cout_revient_eur * Decimal("1.30")).quantize(Decimal("0.01"))
     assert out.prix_vente_ht_eur == expected_ht
+
+
+def test_orchestrateur_computes_prix_au_mille_v1a():
+    """V1a (defaults format 60×40, 3p1d, ml=3000) :
+    etiq_par_pose = 3000 × 1000 // (40 + 3) = 69767
+    nb_etiq_total = 3 × 1 × 69767 = 209301
+    prix_au_mille = 1449.09 × 1000 / 209301 = 6.92 €/1000
+    """
+    with SessionLocal() as db:
+        out = MoteurDevis(db).calculer(_devis_median())
+    assert out.prix_au_mille_eur == Decimal("6.92")
