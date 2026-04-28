@@ -1,0 +1,5 @@
+id,libelle,format_l_mm,format_h_mm,nb_poses_l,nb_poses_h,forme_speciale,actif
+1,outil_60x40_3p1d,60,40,3,1,false,true
+2,outil_80x50_2p1d,80,50,2,1,false,true
+3,outil_30x20_6p2d,30,20,6,2,false,true
+4,outil_100x70_2p1d_forme,100,70,2,1,true,true

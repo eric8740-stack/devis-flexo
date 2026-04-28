@@ -19,6 +19,8 @@ EXPECTED_COUNTS = {
     "temps_operation_standard": 15,
     "correspondance_laize_metrage": 33,
     "charge_machine_mensuelle": 1,
+    # Sprint 5 Lot 5a
+    "outil_decoupe": 4,
 }
 
 

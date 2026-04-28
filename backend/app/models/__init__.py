@@ -8,6 +8,7 @@ from app.models.entreprise import Entreprise
 from app.models.fournisseur import Fournisseur
 from app.models.machine import Machine
 from app.models.operation_finition import OperationFinition
+from app.models.outil_decoupe import OutilDecoupe
 from app.models.partenaire_st import PartenaireST
 from app.models.tarif_encre import TarifEncre
 from app.models.tarif_poste import TarifPoste
@@ -24,6 +25,7 @@ __all__ = [
     "Fournisseur",
     "Machine",
     "OperationFinition",
+    "OutilDecoupe",
     "PartenaireST",
     "TarifEncre",
     "TarifPoste",

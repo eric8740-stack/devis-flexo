@@ -28,6 +28,7 @@ from app.models import (
     Fournisseur,
     Machine,
     OperationFinition,
+    OutilDecoupe,
     PartenaireST,
     TarifEncre,
     TarifPoste,
@@ -347,6 +348,24 @@ def seed_correspondance_laize_metrage(session: Session) -> int:
     return len(rows)
 
 
+def seed_outil_decoupe(session: Session) -> int:
+    rows = read_csv_rows(SEEDS_DIR / "outil_decoupe.csv")
+    for row in rows:
+        session.add(
+            OutilDecoupe(
+                id=_to_int(row["id"]),
+                libelle=row["libelle"],
+                format_l_mm=_to_int(row["format_l_mm"]),
+                format_h_mm=_to_int(row["format_h_mm"]),
+                nb_poses_l=_to_int(row["nb_poses_l"]),
+                nb_poses_h=_to_int(row["nb_poses_h"]),
+                forme_speciale=_to_bool(row.get("forme_speciale")),
+                actif=_to_bool(row.get("actif")),
+            )
+        )
+    return len(rows)
+
+
 def seed_charge_machine_mensuelle(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "charge_machine_mensuelle.csv")
     for row in rows:
@@ -401,6 +420,8 @@ def run_seed() -> dict[str, int]:
         session.query(TempsOperationStandard).delete()
         session.query(CorrespondanceLaizeMetrage).delete()
         session.query(ChargeMachineMensuelle).delete()
+        # S5
+        session.query(OutilDecoupe).delete()
         session.flush()  # commit logique des DELETE en transaction
 
         # Phase 2 — INSERT ascendant + flush entre chaque pour respecter FK
@@ -420,6 +441,8 @@ def run_seed() -> dict[str, int]:
             ("temps_operation_standard", seed_temps_operation_standard),
             ("correspondance_laize_metrage", seed_correspondance_laize_metrage),
             ("charge_machine_mensuelle", seed_charge_machine_mensuelle),
+            # S5 Lot 5a — catalogue outils de découpe
+            ("outil_decoupe", seed_outil_decoupe),
         ):
             counts[name] = fn(session)
             session.flush()
@@ -447,6 +470,8 @@ def main() -> None:
     print(f"TempsOpStandard     : {counts['temps_operation_standard']}")
     print(f"LaizeMetrage        : {counts['correspondance_laize_metrage']}")
     print(f"ChargeMachineMois   : {counts['charge_machine_mensuelle']}")
+    print("=== Sprint 5 Lot 5a ===")
+    print(f"OutilDecoupe        : {counts['outil_decoupe']}")
     print(f"\nTotal : {sum(counts.values())} lignes insérées.")
 
 
