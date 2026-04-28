@@ -465,6 +465,16 @@ export interface DevisInput {
   ml_total: number;
   nb_couleurs_par_type: Record<string, number>;
   machine_id: number;
+  // Sprint 5 Lot 5b — format / outillage / découpe (defaults backend Option B)
+  format_etiquette_largeur_mm?: number;
+  format_etiquette_hauteur_mm?: number;
+  nb_poses_largeur?: number;
+  nb_poses_developpement?: number;
+  forme_speciale?: boolean;
+  outil_decoupe_existant?: boolean;
+  outil_decoupe_id?: number | null;
+  nb_traces_complexite?: number;
+  // Sous-traitance + overrides
   forfaits_st: PartenaireSTForfait[];
   heures_dossier_override?: string | null;
   pct_marge_override?: string | null;
@@ -475,8 +485,9 @@ export interface PosteResult {
   libelle: string;
   // Decimal côté backend → string en JSON.
   montant_eur: string;
-  // dict[str, float | int | str] côté backend.
-  details: Record<string, string | number>;
+  // dict[str, float | int | str | None] côté backend.
+  // null autorisé (ex. outil_decoupe_id non identifié, Lot 5c).
+  details: Record<string, string | number | null>;
 }
 
 export interface DevisOutput {
@@ -484,6 +495,8 @@ export interface DevisOutput {
   cout_revient_eur: string;
   pct_marge_appliquee: string;
   prix_vente_ht_eur: string;
+  // Sprint 5 Lot 5c — livrable commercial clé (Note 9 mémoire).
+  prix_au_mille_eur: string;
 }
 
 export const calculerDevis = (input: DevisInput) =>
@@ -491,3 +504,22 @@ export const calculerDevis = (input: DevisInput) =>
     method: "POST",
     body: JSON.stringify(input),
   });
+
+// ---------------------------------------------------------------------------
+// Sprint 5 Lot 5b : Catalogue outils de découpe
+// ---------------------------------------------------------------------------
+
+export interface OutilDecoupeRead {
+  id: number;
+  libelle: string;
+  format_l_mm: number;
+  format_h_mm: number;
+  nb_poses_l: number;
+  nb_poses_h: number;
+  forme_speciale: boolean;
+  actif: boolean;
+  date_creation: string;
+}
+
+export const listOutilsDecoupe = () =>
+  apiFetch<OutilDecoupeRead[]>("/api/outils");

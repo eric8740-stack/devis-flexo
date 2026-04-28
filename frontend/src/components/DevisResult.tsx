@@ -29,7 +29,9 @@ const fmtEur = (s: string) =>
 const fmtPct = (s: string, decimals = 1) =>
   `${(parseFloat(s) * 100).toFixed(decimals)} %`;
 
-const fmtDetailValue = (v: string | number): string => {
+const fmtDetailValue = (v: string | number | null): string => {
+  // null autorisé depuis Lot 5c (ex. outil_decoupe_id non identifié).
+  if (v === null) return "—";
   if (typeof v === "string") return v;
   if (Number.isInteger(v)) return String(v);
   // Montre jusqu'à 4 décimales utiles, supprime les 0 finals
@@ -136,6 +138,13 @@ export function DevisResult({ data }: DevisResultProps) {
             <div className="text-sm text-muted-foreground">Prix de vente HT</div>
             <div className="font-mono text-3xl font-bold text-primary">
               {fmtEur(data.prix_vente_ht_eur)}
+            </div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              Prix au mille :{" "}
+              <span className="font-mono text-xl font-semibold text-foreground">
+                {fmtEur(data.prix_au_mille_eur)}
+              </span>{" "}
+              / 1000 étiq.
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">

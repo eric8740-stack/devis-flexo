@@ -18,12 +18,14 @@ import {
   calculerDevis,
   listComplexes,
   listMachines,
+  listOutilsDecoupe,
   listPartenairesST,
   type Complexe,
   type DevisInput,
   type DevisOutput,
   type EncreType,
   type Machine,
+  type OutilDecoupeRead,
   type PartenaireST,
 } from "@/lib/api";
 
@@ -38,13 +40,23 @@ interface FormState {
   ml_total: number;
   nb_couleurs_par_type: Record<EncreType, number>;
   machine_id: number;
+  // Sprint 5 Lot 5d — format / outillage
+  format_etiquette_largeur_mm: number;
+  format_etiquette_hauteur_mm: number;
+  nb_poses_largeur: number;
+  nb_poses_developpement: number;
+  outil_decoupe_existant: boolean;
+  outil_decoupe_id: number | null;
+  forme_speciale: boolean;
+  nb_traces_complexite: number;
+  // Sous-traitance + overrides
   forfaits_st: { partenaire_st_id: number; montant_eur: string }[];
   heures_dossier_override: string;
   pct_marge_override_pct: string; // saisi en % (0-200), divisé /100 au submit
 }
 
-// Pré-remplissage cas V1 médian (figé Lot 3d, total HT attendu 1449.09 €).
-const PREFILL_V1: FormState = {
+// Pré-remplissage cas V1a médian (Sprint 5 Lot 5c, total HT attendu 1449.09 €).
+const PREFILL_V1A: FormState = {
   complexe_id: 31,
   laize_utile_mm: 220,
   ml_total: 3000,
@@ -56,6 +68,16 @@ const PREFILL_V1: FormState = {
     metallise: 0,
   },
   machine_id: 1,
+  // V1a : format 60×40, 3p1d (cohérent laize 220 = 3×60 + 2×20),
+  // outil existant non référencé.
+  format_etiquette_largeur_mm: 60,
+  format_etiquette_hauteur_mm: 40,
+  nb_poses_largeur: 3,
+  nb_poses_developpement: 1,
+  outil_decoupe_existant: true,
+  outil_decoupe_id: null,
+  forme_speciale: false,
+  nb_traces_complexite: 1,
   forfaits_st: [{ partenaire_st_id: 1, montant_eur: "50.00" }],
   heures_dossier_override: "",
   pct_marge_override_pct: "",
@@ -66,22 +88,29 @@ interface DevisCalculFormProps {
 }
 
 export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
-  const [data, setData] = useState<FormState>(PREFILL_V1);
+  const [data, setData] = useState<FormState>(PREFILL_V1A);
   const [complexes, setComplexes] = useState<Complexe[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [partenaires, setPartenaires] = useState<PartenaireST[]>([]);
+  const [outils, setOutils] = useState<OutilDecoupeRead[]>([]);
   const [isLoadingLists, setIsLoadingLists] = useState(true);
   const [listsError, setListsError] = useState<string | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Charger les 3 listes au mount, en parallèle.
+  // Charger les 4 listes au mount, en parallèle.
   useEffect(() => {
-    Promise.all([listComplexes(), listMachines(), listPartenairesST()])
-      .then(([cx, mx, px]) => {
+    Promise.all([
+      listComplexes(),
+      listMachines(),
+      listPartenairesST(),
+      listOutilsDecoupe(),
+    ])
+      .then(([cx, mx, px, ox]) => {
         setComplexes(cx);
         setMachines(mx);
         setPartenaires(px);
+        setOutils(ox);
       })
       .catch((err: unknown) => {
         setListsError(
@@ -131,7 +160,7 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
     }));
 
   const reset = () => {
-    setData(PREFILL_V1);
+    setData(PREFILL_V1A);
     setError(null);
     onResult(null);
   };
@@ -150,6 +179,17 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
       ml_total: data.ml_total,
       nb_couleurs_par_type: couleurs,
       machine_id: data.machine_id,
+      // S5 — format / outillage
+      format_etiquette_largeur_mm: data.format_etiquette_largeur_mm,
+      format_etiquette_hauteur_mm: data.format_etiquette_hauteur_mm,
+      nb_poses_largeur: data.nb_poses_largeur,
+      nb_poses_developpement: data.nb_poses_developpement,
+      outil_decoupe_existant: data.outil_decoupe_existant,
+      outil_decoupe_id: data.outil_decoupe_existant
+        ? data.outil_decoupe_id
+        : null,
+      forme_speciale: data.forme_speciale,
+      nb_traces_complexite: data.nb_traces_complexite,
       forfaits_st: data.forfaits_st.map((f) => ({
         partenaire_st_id: f.partenaire_st_id,
         montant_eur: f.montant_eur || "0",
@@ -277,7 +317,7 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Couleurs (P2 Encres + P3 Clichés)</CardTitle>
+          <CardTitle>Couleurs (P2 Encres + P3a Clichés)</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {ENCRES_TYPES.map((type) => (
@@ -295,6 +335,170 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
               />
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Format & Outillage (P3b Découpe + prix au mille)</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid gap-2">
+              <Label htmlFor="format_l">Format largeur (mm) *</Label>
+              <Input
+                id="format_l"
+                type="number"
+                min={1}
+                required
+                value={data.format_etiquette_largeur_mm}
+                onChange={(e) =>
+                  setField(
+                    "format_etiquette_largeur_mm",
+                    Math.max(1, Number(e.target.value) || 1)
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="format_h">Format hauteur (mm) *</Label>
+              <Input
+                id="format_h"
+                type="number"
+                min={1}
+                required
+                value={data.format_etiquette_hauteur_mm}
+                onChange={(e) =>
+                  setField(
+                    "format_etiquette_hauteur_mm",
+                    Math.max(1, Number(e.target.value) || 1)
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="poses_l">Poses largeur *</Label>
+              <Input
+                id="poses_l"
+                type="number"
+                min={1}
+                required
+                value={data.nb_poses_largeur}
+                onChange={(e) =>
+                  setField(
+                    "nb_poses_largeur",
+                    Math.max(1, Number(e.target.value) || 1)
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="poses_d">Poses dévelop. *</Label>
+              <Input
+                id="poses_d"
+                type="number"
+                min={1}
+                required
+                value={data.nb_poses_developpement}
+                onChange={(e) =>
+                  setField(
+                    "nb_poses_developpement",
+                    Math.max(1, Number(e.target.value) || 1)
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <Label>Outil de découpe</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={data.outil_decoupe_existant ? "default" : "outline"}
+                size="sm"
+                onClick={() => setField("outil_decoupe_existant", true)}
+              >
+                Outil existant (0 €)
+              </Button>
+              <Button
+                type="button"
+                variant={!data.outil_decoupe_existant ? "default" : "outline"}
+                size="sm"
+                onClick={() => setField("outil_decoupe_existant", false)}
+              >
+                Nouvel outil (à fabriquer)
+              </Button>
+            </div>
+
+            {data.outil_decoupe_existant ? (
+              <div className="grid gap-2">
+                <Label htmlFor="outil_id">
+                  Outil du catalogue (optionnel — None = générique)
+                </Label>
+                <select
+                  id="outil_id"
+                  className={selectClass}
+                  value={data.outil_decoupe_id ?? ""}
+                  onChange={(e) =>
+                    setField(
+                      "outil_decoupe_id",
+                      e.target.value ? Number(e.target.value) : null
+                    )
+                  }
+                >
+                  <option value="">(non référencé)</option>
+                  {outils.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.libelle} ({o.format_l_mm}×{o.format_h_mm},{" "}
+                      {o.nb_poses_l}p×{o.nb_poses_h}d
+                      {o.forme_speciale ? ", forme spé" : ""})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Outil existant = déjà amorti, P3b = 0 €. L&apos;identifiant
+                  sert uniquement à tracer dans l&apos;audit.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="nb_traces">Nombre de tracés (1-10)</Label>
+                  <Input
+                    id="nb_traces"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={data.nb_traces_complexite}
+                    onChange={(e) =>
+                      setField(
+                        "nb_traces_complexite",
+                        Math.min(10, Math.max(1, Number(e.target.value) || 1))
+                      )
+                    }
+                  />
+                </div>
+                <div className="flex items-end">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={data.forme_speciale}
+                      onChange={(e) =>
+                        setField("forme_speciale", e.target.checked)
+                      }
+                    />
+                    Forme spéciale (surcoût plaque +40 %)
+                  </label>
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Nouvel outil : 200 € + nb_traces × 50 € (× 1.40 si forme
+              spéciale).
+            </p>
+          </div>
         </CardContent>
       </Card>
 
