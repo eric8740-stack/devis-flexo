@@ -15,6 +15,7 @@ from app.routers import (
     fournisseur,
     machine,
     operation_finition,
+    outil_decoupe,
     partenaire_st,
 )
 from app.services.cost_engine import CostEngineError
@@ -52,6 +53,8 @@ app.include_router(complexe.router)
 app.include_router(catalogue.router)
 # Sprint 3 Lot 3f
 app.include_router(cost.router)
+# Sprint 5 Lot 5b
+app.include_router(outil_decoupe.router)
 
 
 @app.exception_handler(IntegrityError)

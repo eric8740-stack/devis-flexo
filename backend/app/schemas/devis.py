@@ -35,7 +35,13 @@ class PartenaireSTForfait(BaseModel):
 
 
 class DevisInput(BaseModel):
-    """Saisie deviseur — alimente les 7 calculateurs v2."""
+    """Saisie deviseur — alimente les 7 calculateurs v2.
+
+    Sprint 5 Lot 5b : 8 champs « format / outillage » ajoutés avec defaults
+    rétrocompatibles (Option B validée Eric). Les payloads existants (S3 V1-V5)
+    fonctionnent sans les passer, les defaults sont appliqués. Les calculateurs
+    P3 et le calcul `prix_au_mille_eur` consommeront ces champs en Lot 5c.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -51,7 +57,7 @@ class DevisInput(BaseModel):
     )
     ml_total: int = Field(gt=0, description="Métrage total commandé en mètres")
 
-    # --- Couleurs (P2 + P3) ---
+    # --- Couleurs (P2 + P3a) ---
     nb_couleurs_par_type: dict[str, int] = Field(
         default_factory=dict,
         description="Clés = tarif_encre.type_encre. Ex : {'process_cmj': 4, "
@@ -62,6 +68,49 @@ class DevisInput(BaseModel):
     machine_id: int = Field(
         gt=0,
         description="Machine de production — détermine vitesse_moyenne_m_h",
+    )
+
+    # --- Format étiquette + outillage découpe (P3b + prix_au_mille — Sprint 5) ---
+    format_etiquette_largeur_mm: int = Field(
+        default=60,
+        gt=0,
+        description="Largeur unitaire de l'étiquette (mm). Default cas V1a.",
+    )
+    format_etiquette_hauteur_mm: int = Field(
+        default=40,
+        gt=0,
+        description="Hauteur unitaire de l'étiquette (mm). Default cas V1a.",
+    )
+    nb_poses_largeur: int = Field(
+        default=3,
+        ge=1,
+        description="Nombre d'étiquettes en largeur de laize. Default cas V1a.",
+    )
+    nb_poses_developpement: int = Field(
+        default=1,
+        ge=1,
+        description="Nombre d'étiquettes dans le développement cylindre. Default cas V1a.",
+    )
+    forme_speciale: bool = Field(
+        default=False,
+        description="Forme non-rectangulaire — surcoût plaque +40 % si nouvel outil.",
+    )
+    outil_decoupe_existant: bool = Field(
+        default=True,
+        description="True (cas standard) → P3b = 0 €. False → calcul à la volée.",
+    )
+    outil_decoupe_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Référence catalogue si outil existant identifié. None autorisé "
+        "(cas outil existant générique non référencé). Sert à tracer dans details.",
+    )
+    nb_traces_complexite: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Nombre de tracés à découper. Utilisé seulement si nouvel outil. "
+        "Coût base = 200 + nb_traces × 50.",
     )
 
     # --- Sous-traitance saisie à la volée (P6) ---
