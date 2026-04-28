@@ -11,7 +11,7 @@ EXPECTED_COUNTS = {
     "operation_finition": 5,
     "partenaire_st": 4,
     "charge_mensuelle": 6,
-    "complexe": 30,
+    "complexe": 31,
     "catalogue": 5,
     # Sprint 3 Lot 3b — 5 tables paramétriques moteur v2
     "tarif_poste": 7,

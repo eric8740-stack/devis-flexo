@@ -18,6 +18,16 @@ def get_tarif_encre(db: Session, tarif_id: int) -> TarifEncre | None:
     return db.query(TarifEncre).filter(TarifEncre.id == tarif_id).first()
 
 
+def get_by_type_encre(db: Session, type_encre: str) -> TarifEncre | None:
+    """Accès par clé symbolique (`process_cmj`, `pantone`, ...) pour le moteur v2.
+
+    Utilisé par le calculateur Poste 2 Encres pour résoudre chaque clé
+    de `nb_couleurs_par_type` en tarif d'achat. Si retourne None, le
+    calculateur lève CostEngineError("type_encre '...' inconnu").
+    """
+    return db.query(TarifEncre).filter(TarifEncre.type_encre == type_encre).first()
+
+
 def create_tarif_encre(db: Session, data: TarifEncreCreate) -> TarifEncre:
     tarif = TarifEncre(**data.model_dump())
     db.add(tarif)

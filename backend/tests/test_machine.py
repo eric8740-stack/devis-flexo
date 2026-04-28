@@ -89,7 +89,7 @@ def test_seeded_machine_exposes_calc_params():
     response = client.get("/api/machines/1")
     data = response.json()
     assert data["vitesse_moyenne_m_h"] == 6000
-    assert float(data["duree_calage_h"]) == 0.50
+    assert float(data["duree_calage_h"]) == 1.00
     # vitesse_max_m_min reste exposée et différente (200 m/min = 12000 m/h pic)
     assert data["vitesse_max_m_min"] == 200
 

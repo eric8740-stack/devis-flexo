@@ -20,6 +20,9 @@ venv/
 backend/*.db
 backend/*.db-journal
 
+# Rapports moteur de coût (générés par pytest, régénérables à la demande)
+backend/cost_breakdown.md
+
 # Next.js / Node
 node_modules/
 .next/

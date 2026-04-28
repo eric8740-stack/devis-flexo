@@ -29,3 +29,4 @@ id,reference,famille,face_matiere,grammage_g_m2,adhesif_type,prix_m2_eur,fournis
 28,KRAFT_120,papier_kraft,Papier kraft naturel 120g,120,permanent,1.2500,4,actif,
 29,VERGE_100,papier_verge,Papier vergé 100g,100,permanent,1.3500,4,actif,Premium vin / spiritueux
 30,VERGE_120,papier_verge,Papier vergé 120g,120,permanent,1.5000,4,actif,
+31,VELIN_STANDARD_80,papier_standard,Papier vélin standard 80g,80,permanent,0.3500,2,actif,Cas-test médian Lot 3d - matière représentative ~25% production réelle (1 301 dossiers analysés)
