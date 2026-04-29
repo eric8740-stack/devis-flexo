@@ -21,10 +21,11 @@ import {
   listOutilsDecoupe,
   listPartenairesST,
   type Complexe,
+  type DevisCalculResult,
   type DevisInput,
-  type DevisOutput,
   type EncreType,
   type Machine,
+  type ModeCalcul,
   type OutilDecoupeRead,
   type PartenaireST,
 } from "@/lib/api";
@@ -49,6 +50,9 @@ interface FormState {
   outil_decoupe_id: number | null;
   forme_speciale: boolean;
   nb_traces_complexite: number;
+  // Sprint 7 Lot 7f — mode de calcul + intervalle conditionnel
+  mode_calcul: ModeCalcul;
+  intervalle_mm: number; // visible/utilisé seulement si mode='manuel'
   // Sous-traitance + overrides
   forfaits_st: { partenaire_st_id: number; montant_eur: string }[];
   heures_dossier_override: string;
@@ -78,13 +82,15 @@ const PREFILL_V1A: FormState = {
   outil_decoupe_id: null,
   forme_speciale: false,
   nb_traces_complexite: 1,
+  mode_calcul: "manuel",
+  intervalle_mm: 3,
   forfaits_st: [{ partenaire_st_id: 1, montant_eur: "50.00" }],
   heures_dossier_override: "",
   pct_marge_override_pct: "",
 };
 
 interface DevisCalculFormProps {
-  onResult: (result: DevisOutput | null) => void;
+  onResult: (result: DevisCalculResult | null) => void;
 }
 
 export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
@@ -190,6 +196,11 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
         : null,
       forme_speciale: data.forme_speciale,
       nb_traces_complexite: data.nb_traces_complexite,
+      // Sprint 7 — mode + intervalle conditionnel
+      mode_calcul: data.mode_calcul,
+      // En mode 'matching', intervalle_mm DOIT être null (validateur backend)
+      intervalle_mm:
+        data.mode_calcul === "manuel" ? String(data.intervalle_mm) : null,
       forfaits_st: data.forfaits_st.map((f) => ({
         partenaire_st_id: f.partenaire_st_id,
         montant_eur: f.montant_eur || "0",
@@ -257,6 +268,69 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Mode de calcul</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={data.mode_calcul === "manuel" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setField("mode_calcul", "manuel")}
+            >
+              Manuel
+            </Button>
+            <Button
+              type="button"
+              variant={data.mode_calcul === "matching" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setField("mode_calcul", "matching")}
+            >
+              Matching cylindres
+            </Button>
+          </div>
+
+          {data.mode_calcul === "manuel" ? (
+            <div className="grid gap-3 sm:grid-cols-[200px_1fr] sm:items-end">
+              <div className="grid gap-2">
+                <Label htmlFor="intervalle_mm">
+                  Intervalle entre étiquettes (mm)
+                </Label>
+                <Input
+                  id="intervalle_mm"
+                  type="number"
+                  min={2.5}
+                  max={15}
+                  step="0.1"
+                  value={data.intervalle_mm}
+                  onChange={(e) =>
+                    setField(
+                      "intervalle_mm",
+                      Math.min(15, Math.max(2.5, Number(e.target.value) || 3))
+                    )
+                  }
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Mode manuel : vous fixez l&apos;intervalle (default 3 mm = preset
+                V1a). Le prix au mille est calculé directement à partir de ce
+                paramètre, sans matcher de cylindre.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Mode matching : l&apos;app cherche les 3 cylindres magnétiques les
+              plus économiques compatibles avec votre format hauteur (intervalle
+              entre 2,5 et 15 mm) et la largeur de plaque (effet banane). Le HT
+              est identique entre candidats — seul le prix au mille varie selon
+              le cylindre choisi.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Matière et format (P1)</CardTitle>

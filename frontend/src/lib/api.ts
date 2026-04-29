@@ -459,6 +459,9 @@ export interface PartenaireSTForfait {
   montant_eur: string;
 }
 
+// Sprint 7 Lot 7b — mode_calcul (manuel = Sprint 5 / matching = nouveau S7)
+export type ModeCalcul = "manuel" | "matching";
+
 export interface DevisInput {
   complexe_id: number;
   laize_utile_mm: number;
@@ -474,6 +477,9 @@ export interface DevisInput {
   outil_decoupe_existant?: boolean;
   outil_decoupe_id?: number | null;
   nb_traces_complexite?: number;
+  // Sprint 7 Lot 7b — mode + intervalle conditionnel
+  mode_calcul?: ModeCalcul;
+  intervalle_mm?: string | null; // Decimal backend → string ; null en matching
   // Sous-traitance + overrides
   forfaits_st: PartenaireSTForfait[];
   heures_dossier_override?: string | null;
@@ -491,6 +497,8 @@ export interface PosteResult {
 }
 
 export interface DevisOutput {
+  // Sprint 7 Lot 7c V2 — discriminant pour Union avec DevisOutputMatching
+  mode: "manuel";
   postes: PosteResult[];
   cout_revient_eur: string;
   pct_marge_appliquee: string;
@@ -499,8 +507,33 @@ export interface DevisOutput {
   prix_au_mille_eur: string;
 }
 
+// Sprint 7 Lot 7c V2 — sortie multi-résultats mode 'matching'
+export interface CandidatCylindreOutput {
+  z: number; // 51-144
+  nb_etiq_par_tour: number; // 1-40
+  circonference_mm: string; // Decimal
+  pas_mm: string;
+  intervalle_mm: string;
+  nb_etiq_par_metre: number;
+  // Devis calculé pour ce candidat (HT identique entre candidats — postes
+  // ne dépendent pas du cylindre dans le moteur actuel)
+  postes: PosteResult[];
+  cout_revient_eur: string;
+  pct_marge_appliquee: string;
+  prix_vente_ht_eur: string;
+  prix_au_mille_eur: string;
+}
+
+export interface DevisOutputMatching {
+  mode: "matching";
+  candidats: CandidatCylindreOutput[]; // 1-3 entrées
+}
+
+// Union discriminée par `mode` — TypeScript narrowing automatique sur data.mode
+export type DevisCalculResult = DevisOutput | DevisOutputMatching;
+
 export const calculerDevis = (input: DevisInput) =>
-  apiFetch<DevisOutput>("/api/cost/calculer", {
+  apiFetch<DevisCalculResult>("/api/cost/calculer", {
     method: "POST",
     body: JSON.stringify(input),
   });

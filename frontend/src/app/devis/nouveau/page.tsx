@@ -4,10 +4,10 @@ import { useState } from "react";
 
 import { DevisCalculForm } from "@/components/DevisCalculForm";
 import { DevisResult } from "@/components/DevisResult";
-import type { DevisOutput } from "@/lib/api";
+import type { DevisCalculResult } from "@/lib/api";
 
 export default function NouveauDevisPage() {
-  const [result, setResult] = useState<DevisOutput | null>(null);
+  const [result, setResult] = useState<DevisCalculResult | null>(null);
 
   return (
     <main className="container mx-auto max-w-5xl p-4 sm:p-8">
