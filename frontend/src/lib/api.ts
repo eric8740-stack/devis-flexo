@@ -556,3 +556,118 @@ export interface OutilDecoupeRead {
 
 export const listOutilsDecoupe = () =>
   apiFetch<OutilDecoupeRead[]>("/api/outils");
+
+// ---------------------------------------------------------------------------
+// Sprint 4 Lot 4b : Persistance Devis (CRUD /api/devis)
+// ---------------------------------------------------------------------------
+
+export type DevisStatut = "brouillon" | "valide";
+export type DevisSort = "date_desc" | "date_asc" | "numero_asc" | "ht_desc";
+
+// Snapshot du payload_input/payload_output côté API. Stocké en JSON donc
+// on type minimal — la donnée est consommée par DevisResult / DevisCalculForm
+// qui re-décodent comme DevisInput / DevisCalculResult.
+type Json = Record<string, unknown>;
+
+export interface DevisListItem {
+  id: number;
+  numero: string;
+  date_creation: string;
+  statut: DevisStatut;
+  client_id: number | null;
+  client_nom: string | null;
+  machine_id: number;
+  machine_nom: string;
+  format_h_mm: string;
+  format_l_mm: string;
+  ht_total_eur: string;
+  mode_calcul: string;
+}
+
+export interface DevisDetail {
+  id: number;
+  numero: string;
+  date_creation: string;
+  date_modification: string;
+  statut: DevisStatut;
+  client_id: number | null;
+  client_nom: string | null;
+  machine_id: number;
+  machine_nom: string;
+  payload_input: Json;
+  payload_output: Json;
+  mode_calcul: string;
+  cylindre_choisi_z: number | null;
+  cylindre_choisi_nb_etiq: number | null;
+  format_h_mm: string;
+  format_l_mm: string;
+  ht_total_eur: string;
+}
+
+export interface DevisListResponse {
+  items: DevisListItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export interface DevisCreate {
+  payload_input: Json;
+  payload_output: Json;
+  client_id?: number | null;
+  statut?: DevisStatut;
+  cylindre_choisi_z?: number | null;
+  cylindre_choisi_nb_etiq?: number | null;
+}
+
+export interface DevisUpdate {
+  payload_input?: Json;
+  payload_output?: Json;
+  client_id?: number | null;
+  statut?: DevisStatut;
+  cylindre_choisi_z?: number | null;
+  cylindre_choisi_nb_etiq?: number | null;
+}
+
+export interface ListDevisParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  statut?: DevisStatut;
+  sort?: DevisSort;
+}
+
+export const listDevis = (params: ListDevisParams = {}) => {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.per_page) qs.set("per_page", String(params.per_page));
+  if (params.search) qs.set("search", params.search);
+  if (params.statut) qs.set("statut", params.statut);
+  if (params.sort) qs.set("sort", params.sort);
+  const suffix = qs.toString();
+  return apiFetch<DevisListResponse>(
+    `/api/devis${suffix ? `?${suffix}` : ""}`
+  );
+};
+
+export const getDevisDetail = (id: number) =>
+  apiFetch<DevisDetail>(`/api/devis/${id}`);
+
+export const createDevis = (data: DevisCreate) =>
+  apiFetch<DevisDetail>("/api/devis", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const updateDevis = (id: number, data: DevisUpdate) =>
+  apiFetch<DevisDetail>(`/api/devis/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const deleteDevis = (id: number) =>
+  apiFetch<void>(`/api/devis/${id}`, { method: "DELETE" });
+
+export const duplicateDevis = (id: number) =>
+  apiFetch<DevisDetail>(`/api/devis/${id}/duplicate`, { method: "POST" });
