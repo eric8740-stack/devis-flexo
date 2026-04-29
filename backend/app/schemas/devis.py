@@ -121,8 +121,10 @@ class DevisInput(BaseModel):
     mode_calcul: ModeCalcul = Field(
         default="manuel",
         description="'manuel' : utilisateur saisit intervalle_mm libre (rétrocompat "
-        "Sprint 5 V1a/V1b). 'matching' : le moteur cherche les 3 cylindres optimaux "
-        "dans la plage Z=72-187 (sortie multi-résultats DevisOutputMatching).",
+        "Sprint 5 V1a/V1b). 'matching' : le moteur cherche les 3 couples (Z, "
+        "nb_etiq_par_tour) optimaux dans la plage Z=51-144 × nb_etiq=1-40 "
+        "(sortie multi-résultats DevisOutputMatching). Plage corrigée par tableau "
+        "Excel Develop.xlsx Eric (28 ans flexo ICE).",
     )
     intervalle_mm: Decimal | None = Field(
         default=None,
@@ -168,14 +170,83 @@ class DevisInput(BaseModel):
 
 
 class DevisOutput(BaseModel):
-    """Sortie moteur — 7 postes + totaux HT + prix au mille (Sprint 5)."""
+    """Sortie moteur — mode 'manuel' (Sprint 5 + Sprint 7 Lot 7b).
 
+    7 postes + totaux HT + prix au mille calculé pour 1 cylindre théorique
+    (l'utilisateur a saisi intervalle_mm, le moteur applique 3 mm si None).
+    Discriminant `mode='manuel'` pour distinguer du DevisOutputMatching.
+    """
+
+    mode: Literal["manuel"] = "manuel"
     postes: list[PosteResult] = Field(min_length=7, max_length=7)
     cout_revient_eur: Decimal = Field(ge=0)
     pct_marge_appliquee: Decimal = Field(ge=0)
     prix_vente_ht_eur: Decimal = Field(ge=0)
     # Sprint 5 Lot 5c : prix au mille étiquettes (livrable commercial clé).
-    # Calculé par l'orchestrateur à partir de format_h, intervalle 3 mm en dur,
-    # nb_poses_l × nb_poses_d et ml_total. Voir Note 9 mémoire (intervalle
-    # paramétrable reporté Sprint 6).
+    # Calculé par l'orchestrateur à partir de format_h, intervalle (3 mm
+    # default mode manuel ou saisi user), nb_poses_l × nb_poses_d et ml_total.
     prix_au_mille_eur: Decimal = Field(ge=0)
+
+
+# ---------------------------------------------------------------------------
+# Sprint 7 Lot 7c V2 — sortie multi-résultats pour mode 'matching'
+# Formule corrigée (tableau Eric Develop.xlsx) :
+#   pas_mm = (Z × 3.175) / nb_etiq_par_tour
+#   intervalle_mm = pas_mm - format_h
+# ---------------------------------------------------------------------------
+
+
+class CandidatCylindreOutput(BaseModel):
+    """Un candidat cylindre magnétique = 1 couple (Z, nb_etiq_par_tour).
+
+    Le moteur retourne 1-3 candidats triés par intervalle croissant
+    (= meilleur prix au mille en premier). Pour chaque cylindre physique
+    (Z donné), on garde le couple (Z, nb_etiq) qui donne le meilleur
+    intervalle (cf. Règle 8 brief Sprint 7 v2).
+
+    Plages :
+      Z              : 51 à 144 (vraie plage flexo ICE, abaque Develop.xlsx)
+      nb_etiq_par_tour : 1 à 40 (limite haute du tableau Eric)
+      intervalle_mm  : 2.5 à 15 (contrainte hauteur métier)
+    """
+
+    z: int = Field(ge=51, le=144, description="Nombre de dents du cylindre (1 dent = 3.175 mm)")
+    nb_etiq_par_tour: int = Field(
+        ge=1,
+        le=40,
+        description="Nombre d'étiquettes imprimées par tour de cylindre. "
+        "circonférence = pas × nb_etiq.",
+    )
+    circonference_mm: Decimal = Field(gt=0, description="Z × 3.175 mm")
+    pas_mm: Decimal = Field(
+        gt=0,
+        description="Pas de répétition = circonférence / nb_etiq_par_tour = "
+        "format_h + intervalle.",
+    )
+    intervalle_mm: Decimal = Field(ge=Decimal("2.5"), le=Decimal("15"))
+    nb_etiq_par_metre: int = Field(gt=0, description="floor(1000 / pas_mm)")
+
+    # Devis calculé pour ce candidat (les 7 postes ne dépendent PAS du choix
+    # de cylindre dans le moteur actuel — seul prix_au_mille varie via le
+    # nb_etiq_total dérivé du pas. Donc HT identique entre candidats, mais
+    # exposition complète conservée pour audit + évolution Sprint 8+).
+    postes: list[PosteResult] = Field(min_length=7, max_length=7)
+    cout_revient_eur: Decimal = Field(ge=0)
+    pct_marge_appliquee: Decimal = Field(ge=0)
+    prix_vente_ht_eur: Decimal = Field(ge=0)
+    prix_au_mille_eur: Decimal = Field(ge=0)
+
+
+class DevisOutputMatching(BaseModel):
+    """Sortie moteur — mode 'matching' (Sprint 7 Lot 7c V2).
+
+    1 à 3 cylindres candidats triés par intervalle croissant (= meilleur
+    prix au mille en premier). Si moins de 3 compatibles avec les contraintes
+    (effet banane + plage intervalle + laize machine), 2 ou 1 retournés.
+    Si aucun → CostEngineError 422 levée par le moteur en amont (Lot 7d V2).
+
+    Discriminant `mode='matching'` pour distinguer du DevisOutput Sprint 5.
+    """
+
+    mode: Literal["matching"] = "matching"
+    candidats: list[CandidatCylindreOutput] = Field(min_length=1, max_length=3)
