@@ -11,6 +11,7 @@ from app.routers import (
     client,
     complexe,
     cost,
+    devis,
     entreprise,
     fournisseur,
     machine,
@@ -55,6 +56,8 @@ app.include_router(catalogue.router)
 app.include_router(cost.router)
 # Sprint 5 Lot 5b
 app.include_router(outil_decoupe.router)
+# Sprint 4 Lot 4b — persistance devis
+app.include_router(devis.router)
 
 
 @app.exception_handler(IntegrityError)
