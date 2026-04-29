@@ -89,12 +89,61 @@ const PREFILL_V1A: FormState = {
   pct_marge_override_pct: "",
 };
 
-interface DevisCalculFormProps {
-  onResult: (result: DevisCalculResult | null) => void;
+// Sprint 4 Lot 4d — mapping inverse DevisInput → FormState pour pré-remplir
+// le formulaire en édition (route /devis/[id]/edit).
+function devisInputToFormState(input: DevisInput): FormState {
+  const couleurs: Record<EncreType, number> = {
+    process_cmj: 0,
+    process_black_hc: 0,
+    pantone: 0,
+    blanc_high_opaque: 0,
+    metallise: 0,
+  };
+  for (const [k, v] of Object.entries(input.nb_couleurs_par_type ?? {})) {
+    if (k in couleurs) couleurs[k as EncreType] = v;
+  }
+  return {
+    complexe_id: input.complexe_id,
+    laize_utile_mm: input.laize_utile_mm,
+    ml_total: input.ml_total,
+    nb_couleurs_par_type: couleurs,
+    machine_id: input.machine_id,
+    format_etiquette_largeur_mm: input.format_etiquette_largeur_mm ?? 60,
+    format_etiquette_hauteur_mm: input.format_etiquette_hauteur_mm ?? 40,
+    nb_poses_largeur: input.nb_poses_largeur ?? 1,
+    nb_poses_developpement: input.nb_poses_developpement ?? 1,
+    outil_decoupe_existant: input.outil_decoupe_existant ?? true,
+    outil_decoupe_id: input.outil_decoupe_id ?? null,
+    forme_speciale: input.forme_speciale ?? false,
+    nb_traces_complexite: input.nb_traces_complexite ?? 1,
+    mode_calcul: input.mode_calcul ?? "manuel",
+    intervalle_mm: input.intervalle_mm ? parseFloat(input.intervalle_mm) : 3,
+    forfaits_st: input.forfaits_st.map((f) => ({
+      partenaire_st_id: f.partenaire_st_id,
+      montant_eur: f.montant_eur,
+    })),
+    heures_dossier_override: input.heures_dossier_override ?? "",
+    pct_marge_override_pct: input.pct_marge_override
+      ? (parseFloat(input.pct_marge_override) * 100).toFixed(2).replace(/\.?0+$/, "")
+      : "",
+  };
 }
 
-export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
-  const [data, setData] = useState<FormState>(PREFILL_V1A);
+interface DevisCalculFormProps {
+  // Sprint 4 Lot 4d : onResult expose aussi le payload_input envoyé à l'API
+  // pour permettre au parent de le sauvegarder via POST /api/devis.
+  onResult: (result: DevisCalculResult | null, input?: DevisInput) => void;
+  // Sprint 4 Lot 4d : pré-remplissage en édition (depuis devis.payload_input).
+  initialPayloadInput?: DevisInput | null;
+}
+
+export function DevisCalculForm({
+  onResult,
+  initialPayloadInput,
+}: DevisCalculFormProps) {
+  const [data, setData] = useState<FormState>(() =>
+    initialPayloadInput ? devisInputToFormState(initialPayloadInput) : PREFILL_V1A
+  );
   const [complexes, setComplexes] = useState<Complexe[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [partenaires, setPartenaires] = useState<PartenaireST[]>([]);
@@ -220,8 +269,9 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
     setError(null);
     setIsCalculating(true);
     try {
-      const result = await calculerDevis(buildPayload());
-      onResult(result);
+      const payload = buildPayload();
+      const result = await calculerDevis(payload);
+      onResult(result, payload);
       // Scroll doux vers les résultats si l'utilisateur est en haut de page.
       setTimeout(() => {
         document

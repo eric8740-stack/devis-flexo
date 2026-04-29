@@ -1,13 +1,17 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { DevisCalculForm } from "@/components/DevisCalculForm";
 import { DevisResult } from "@/components/DevisResult";
-import type { DevisCalculResult } from "@/lib/api";
+import { DevisSaveBar } from "@/components/DevisSaveBar";
+import type { DevisCalculResult, DevisInput } from "@/lib/api";
 
 export default function NouveauDevisPage() {
+  const router = useRouter();
   const [result, setResult] = useState<DevisCalculResult | null>(null);
+  const [input, setInput] = useState<DevisInput | null>(null);
 
   return (
     <main className="container mx-auto max-w-5xl p-4 sm:p-8">
@@ -21,11 +25,24 @@ export default function NouveauDevisPage() {
         </p>
       </header>
 
-      <DevisCalculForm onResult={setResult} />
+      <DevisCalculForm
+        onResult={(r, i) => {
+          setResult(r);
+          setInput(i ?? null);
+        }}
+      />
 
       {result && (
-        <section className="mt-8">
+        <section className="mt-8 grid gap-6">
           <DevisResult data={result} />
+          {input && (
+            <DevisSaveBar
+              input={input}
+              result={result}
+              mode="create"
+              onSaved={(id) => router.push(`/devis/${id}`)}
+            />
+          )}
         </section>
       )}
     </main>
