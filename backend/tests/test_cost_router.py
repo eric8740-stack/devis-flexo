@@ -28,6 +28,8 @@ def test_post_cost_calculer_returns_200_and_full_devis_output():
     response = client.post("/api/cost/calculer", json=_payload_median())
     assert response.status_code == 200
     data = response.json()
+    # Sprint 7 : discriminant mode présent (default 'manuel' pour rétrocompat V1a)
+    assert data["mode"] == "manuel"
     assert len(data["postes"]) == 7
     assert [p["poste_numero"] for p in data["postes"]] == [1, 2, 3, 4, 5, 6, 7]
     # Cas médian figé Lot 3d
@@ -80,5 +82,55 @@ def test_post_cost_calculer_invalid_payload_returns_422_pydantic():
 def test_post_cost_calculer_extra_field_rejected():
     """extra='forbid' sur DevisInput → champ inconnu rejeté en 422."""
     payload = _payload_median() | {"champ_inconnu": 42}
+    response = client.post("/api/cost/calculer", json=payload)
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Sprint 7 Lot 7e — mode matching (Union response discriminée par 'mode')
+# ---------------------------------------------------------------------------
+
+
+def test_post_cost_calculer_mode_matching_v1a_returns_candidats():
+    """V1a en mode matching → DevisOutputMatching avec 1-3 candidats."""
+    payload = _payload_median() | {"mode_calcul": "matching"}
+    response = client.post("/api/cost/calculer", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "matching"
+    assert "candidats" in data
+    assert 1 <= len(data["candidats"]) <= 3
+    # Premier candidat = meilleur intervalle (= meilleur prix au mille en premier)
+    intervalles = [Decimal(c["intervalle_mm"]) for c in data["candidats"]]
+    assert intervalles == sorted(intervalles)
+    # Chaque candidat a sa structure complète
+    for c in data["candidats"]:
+        assert 51 <= c["z"] <= 144
+        assert 1 <= c["nb_etiq_par_tour"] <= 40
+        assert Decimal("2.5") <= Decimal(c["intervalle_mm"]) <= Decimal("15")
+        assert len(c["postes"]) == 7
+        # HT identique entre candidats (postes ne dépendent pas du cylindre)
+        assert Decimal(c["prix_vente_ht_eur"]) == Decimal("1449.09")
+
+
+def test_post_cost_calculer_mode_matching_largeur_excede_laize_returns_422():
+    """Plaque trop large pour la machine → 422 explicite (handler global)."""
+    # Machine 1 (Mark Andy) laize 330, marge 2×5=10, max admissible = 320.
+    # Largeur plaque = format_l × nb_poses_largeur = 60 × 6 = 360 mm > 320.
+    payload = _payload_median() | {
+        "mode_calcul": "matching",
+        "nb_poses_largeur": 6,  # 60 × 6 = 360 mm > 320 max
+    }
+    response = client.post("/api/cost/calculer", json=payload)
+    assert response.status_code == 422
+    assert "laize" in response.json()["detail"].lower()
+
+
+def test_post_cost_calculer_mode_matching_intervalle_set_rejected():
+    """Validateur cross-field DevisInput : intervalle_mm interdit en matching → 422."""
+    payload = _payload_median() | {
+        "mode_calcul": "matching",
+        "intervalle_mm": "3",
+    }
     response = client.post("/api/cost/calculer", json=payload)
     assert response.status_code == 422
