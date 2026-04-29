@@ -20,6 +20,12 @@ class Machine(Base):
     nb_couleurs: Mapped[int | None] = mapped_column(Integer)
     cout_horaire_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
+    # Sprint 7 Lot 7a — laize machine (largeur max imprimable physique de la
+    # presse, mm). Sert au matching cylindres magnétiques (contrainte largeur
+    # plaque ≤ laize_max - 2 × MARGE_SECURITE_LAIZE_MM). Sémantique alignée
+    # sur largeur_max_mm pour les machines actuelles (à dédupliquer Sprint 8).
+    laize_max_mm: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+
     # Paramètres calcul S3 — vitesse réaliste de production (vs vitesse_max
     # qui reste un argument catalogue) et durée de mise au point machine.
     vitesse_moyenne_m_h: Mapped[int | None] = mapped_column(Integer)

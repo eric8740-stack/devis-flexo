@@ -168,6 +168,7 @@ def seed_machine(session: Session) -> int:
                 id=_to_int(row["id"]),
                 nom=row["nom"],
                 largeur_max_mm=_to_int(row.get("largeur_max_mm")),
+                laize_max_mm=_to_float(row.get("laize_max_mm")),
                 vitesse_max_m_min=_to_int(row.get("vitesse_max_m_min")),
                 nb_couleurs=_to_int(row.get("nb_couleurs")),
                 cout_horaire_eur=_to_float(row.get("cout_horaire_eur")),

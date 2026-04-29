@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,6 +10,10 @@ StatutMachine = Literal["actif", "inactif", "maintenance"]
 class MachineBase(BaseModel):
     nom: str = Field(min_length=1, max_length=100)
     largeur_max_mm: int | None = Field(default=None, gt=0)
+    # Sprint 7 Lot 7a — laize machine (largeur max imprimable mm). Requis,
+    # consommé par le matcher cylindres pour valider la contrainte largeur
+    # plaque ≤ laize_max - 2 × MARGE_SECURITE_LAIZE_MM.
+    laize_max_mm: Decimal = Field(gt=0)
     vitesse_max_m_min: int | None = Field(default=None, gt=0)
     nb_couleurs: int | None = Field(default=None, ge=1, le=12)
     cout_horaire_eur: float | None = Field(default=None, ge=0)
@@ -35,6 +40,7 @@ class MachineUpdate(BaseModel):
 
     nom: str | None = Field(default=None, min_length=1, max_length=100)
     largeur_max_mm: int | None = Field(default=None, gt=0)
+    laize_max_mm: Decimal | None = Field(default=None, gt=0)
     vitesse_max_m_min: int | None = Field(default=None, gt=0)
     nb_couleurs: int | None = Field(default=None, ge=1, le=12)
     cout_horaire_eur: float | None = Field(default=None, ge=0)

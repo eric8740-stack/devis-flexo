@@ -13,10 +13,16 @@ def test_list_machines_returns_seeded_3():
     assert data[0]["nom"] == "Mark Andy P5"
 
 
+# Sprint 7 Lot 7a — laize_max_mm requis dans MachineCreate
+# (consommé par le matcher cylindres pour la contrainte largeur plaque)
+_DEFAULT_LAIZE = 330
+
+
 def test_create_machine_returns_201():
     payload = {
         "nom": "TEST Press Unique",
         "largeur_max_mm": 330,
+        "laize_max_mm": _DEFAULT_LAIZE,
         "vitesse_max_m_min": 200,
         "nb_couleurs": 8,
         "cout_horaire_eur": 60.0,
@@ -29,14 +35,27 @@ def test_create_machine_returns_201():
     assert data["nom"] == "TEST Press Unique"
     assert data["nb_couleurs"] == 8
     assert data["statut"] == "actif"
+    assert float(data["laize_max_mm"]) == 330
     assert "date_creation" in data
     assert "date_maj" in data
 
 
 def test_create_machine_duplicate_nom_returns_409():
     """UNIQUE sur nom → IntegrityError convertie en 409 par le handler global."""
-    response = client.post("/api/machines", json={"nom": "Mark Andy P5"})
+    response = client.post(
+        "/api/machines",
+        json={"nom": "Mark Andy P5", "laize_max_mm": _DEFAULT_LAIZE},
+    )
     assert response.status_code == 409
+
+
+def test_create_machine_missing_laize_returns_422():
+    """Sprint 7 — laize_max_mm est requis Pydantic."""
+    response = client.post(
+        "/api/machines",
+        json={"nom": "Sans laize", "largeur_max_mm": 330},
+    )
+    assert response.status_code == 422
 
 
 def test_get_machine_existing_returns_200():
@@ -53,7 +72,8 @@ def test_get_machine_missing_returns_404():
 
 def test_update_machine_modifies_field():
     created = client.post(
-        "/api/machines", json={"nom": "Test Press", "nb_couleurs": 4}
+        "/api/machines",
+        json={"nom": "Test Press", "nb_couleurs": 4, "laize_max_mm": _DEFAULT_LAIZE},
     ).json()
     response = client.put(
         f"/api/machines/{created['id']}",
@@ -67,7 +87,10 @@ def test_update_machine_modifies_field():
 
 
 def test_delete_machine_returns_204_then_get_404():
-    created = client.post("/api/machines", json={"nom": "À supprimer"}).json()
+    created = client.post(
+        "/api/machines",
+        json={"nom": "À supprimer", "laize_max_mm": _DEFAULT_LAIZE},
+    ).json()
     response = client.delete(f"/api/machines/{created['id']}")
     assert response.status_code == 204
     response = client.get(f"/api/machines/{created['id']}")
@@ -77,7 +100,7 @@ def test_delete_machine_returns_204_then_get_404():
 def test_create_machine_invalid_statut_returns_422():
     response = client.post(
         "/api/machines",
-        json={"nom": "X", "statut": "n_importe_quoi"},
+        json={"nom": "X", "laize_max_mm": _DEFAULT_LAIZE, "statut": "n_importe_quoi"},
     )
     assert response.status_code == 422
 
@@ -92,6 +115,8 @@ def test_seeded_machine_exposes_calc_params():
     assert float(data["duree_calage_h"]) == 1.00
     # vitesse_max_m_min reste exposée et différente (200 m/min = 12000 m/h pic)
     assert data["vitesse_max_m_min"] == 200
+    # Sprint 7 Lot 7a — laize machine pour matcher cylindres
+    assert float(data["laize_max_mm"]) == 330.0
 
 
 def test_update_machine_calc_params():
