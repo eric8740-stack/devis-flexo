@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ devis.numero }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm 2cm;
+            @bottom-center {
+                content: "Devis valable 30 jours · Page " counter(page) "/" counter(pages);
+                font-size: 9pt;
+                color: #888;
+            }
+        }
+        body {
+            font-family: 'Liberation Sans', 'Helvetica', sans-serif;
+            font-size: 10pt;
+            color: #333;
+        }
+        .entete {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 2px solid #1e3a5f;
+            padding-bottom: 1em;
+            margin-bottom: 1.5em;
+        }
+        .entete-gauche h1 {
+            color: #1e3a5f;
+            margin: 0;
+            font-size: 22pt;
+        }
+        .entete-droite {
+            text-align: right;
+        }
+        .numero-devis {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #1e3a5f;
+        }
+        h2 {
+            color: #1e3a5f;
+            font-size: 12pt;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+        }
+        th {
+            background: #1e3a5f;
+            color: white;
+            text-align: left;
+            padding: 0.5em;
+            font-size: 9pt;
+        }
+        td {
+            padding: 0.5em;
+            border-bottom: 1px solid #eee;
+        }
+        td.right {
+            text-align: right;
+        }
+        .recap {
+            background: #f8f9fa;
+            padding: 1em;
+            border-left: 4px solid #1e3a5f;
+            margin-top: 1em;
+        }
+        .total-ht {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #1e3a5f;
+            margin: 0.5em 0;
+        }
+        .specs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5em;
+        }
+        .specs strong {
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+<div class="entete">
+    <div class="entete-gauche">
+        <h1>Devis Flexo</h1>
+        <p style="font-size: 9pt; color: #666; margin: 0.3em 0 0;">
+            Devis automatique · Calcul des coûts d'impression flexographique
+        </p>
+    </div>
+    <div class="entete-droite">
+        <div class="numero-devis">{{ devis.numero }}</div>
+        <div>Date : {{ devis.date_creation.strftime('%d/%m/%Y') }}</div>
+        <div>Statut : {{ devis.statut|capitalize }}</div>
+    </div>
+</div>
+
+{% if client_nom %}
+<h2>Client</h2>
+<p><strong>{{ client_nom }}</strong></p>
+{% endif %}
+
+<h2>Spécifications techniques</h2>
+<div class="specs">
+    <div><strong>Format :</strong> {{ "%g"|format(devis.format_l_mm) }} × {{ "%g"|format(devis.format_h_mm) }} mm</div>
+    <div><strong>Machine :</strong> {{ machine_nom }}</div>
+    <div><strong>Tirage :</strong> {{ devis.payload_input.get('ml_total', '—') }} m linéaires</div>
+    <div><strong>Laize utile :</strong> {{ devis.payload_input.get('laize_utile_mm', '—') }} mm</div>
+    <div><strong>Mode calcul :</strong> {{ devis.mode_calcul|capitalize }}</div>
+    {% if devis.mode_calcul == 'matching' %}
+    <div><strong>Cylindre choisi :</strong>
+        {% if devis.cylindre_choisi_z %}
+            Z={{ devis.cylindre_choisi_z }}, {{ devis.cylindre_choisi_nb_etiq }} étiq/tour
+        {% else %}—{% endif %}
+    </div>
+    {% else %}
+    <div><strong>Intervalle :</strong> {{ devis.payload_input.get('intervalle_mm', '3') }} mm</div>
+    {% endif %}
+</div>
+
+<h2>Détail des 7 postes</h2>
+<table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Libellé</th>
+            <th class="right">Montant HT</th>
+            <th class="right">% revient</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for poste in postes %}
+        <tr>
+            <td>P{{ poste.poste_numero }}</td>
+            <td>{{ poste.libelle }}</td>
+            <td class="right">{{ "%.2f"|format(poste.montant_eur|float) }} €</td>
+            <td class="right">{{ "%.1f"|format((poste.montant_eur|float / cout_revient * 100) if cout_revient else 0) }} %</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Récapitulatif</h2>
+<div class="recap">
+    <p><strong>Coût de revient :</strong> {{ "%.2f"|format(cout_revient) }} €</p>
+    <p><strong>Marge appliquée :</strong> {{ "%.1f"|format(marge_pct * 100) }} %</p>
+    <p class="total-ht">Prix de vente HT : {{ "%.2f"|format(devis.ht_total_eur|float) }} €</p>
+    <p style="margin-top: 0.5em;">
+        Prix au mille : <strong>{{ "%.2f"|format(prix_au_mille) }} €</strong> / 1000 étiq.
+    </p>
+</div>
+
+<p style="margin-top: 2em; font-size: 8pt; color: #999;">
+    Devis généré automatiquement par Devis Flexo le {{ now.strftime('%d/%m/%Y à %H:%M') }}.
+    Conditions de paiement : 30 jours fin de mois. Devis valable 30 jours.
+</p>
+
+</body>
+</html>

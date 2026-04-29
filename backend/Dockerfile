@@ -13,6 +13,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Sprint 4 Lot 4e — deps système weasyprint (génération PDF) :
+# cairo + pango + harfbuzz + gdk-pixbuf + fonts liberation (fallback Helvetica/Arial).
+# Sans ces libs, weasyprint.HTML.write_pdf() lève OSError au runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0 \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
 # Layer cache : install des deps avant de copier le code
 COPY requirements.txt .
 RUN pip install -r requirements.txt
