@@ -104,6 +104,76 @@ def test_devis_input_pct_marge_override_capped_at_2():
 
 
 # ---------------------------------------------------------------------------
+# Sprint 7 Lot 7b — mode_calcul + intervalle_mm conditionnel
+# ---------------------------------------------------------------------------
+
+
+def test_devis_input_mode_default_manuel():
+    """Sans mode_calcul → default 'manuel' (préserve V1a payload Sprint 5)."""
+    payload = DevisInput(**_minimal_input_kwargs())
+    assert payload.mode_calcul == "manuel"
+    assert payload.intervalle_mm is None
+
+
+def test_devis_input_mode_manuel_intervalle_None_autorise():
+    """En mode manuel, intervalle_mm = None est autorisé (default 3 dans moteur)."""
+    payload = DevisInput(**_minimal_input_kwargs(), mode_calcul="manuel")
+    assert payload.mode_calcul == "manuel"
+    assert payload.intervalle_mm is None
+
+
+def test_devis_input_mode_manuel_intervalle_explicite_OK():
+    """En mode manuel, intervalle_mm explicite OK dans la plage 2.5-15."""
+    payload = DevisInput(
+        **_minimal_input_kwargs(),
+        mode_calcul="manuel",
+        intervalle_mm=Decimal("4.5"),
+    )
+    assert payload.intervalle_mm == Decimal("4.5")
+
+
+def test_devis_input_mode_matching_intervalle_None_OK():
+    """En mode matching, intervalle_mm DOIT être None."""
+    payload = DevisInput(**_minimal_input_kwargs(), mode_calcul="matching")
+    assert payload.mode_calcul == "matching"
+    assert payload.intervalle_mm is None
+
+
+def test_devis_input_mode_matching_intervalle_set_rejette():
+    """En mode matching, intervalle_mm fourni → ValidationError (incohérent)."""
+    with pytest.raises(ValidationError, match="matching"):
+        DevisInput(
+            **_minimal_input_kwargs(),
+            mode_calcul="matching",
+            intervalle_mm=Decimal("3"),
+        )
+
+
+def test_devis_input_mode_invalid_rejette():
+    """Literal contraint à 'manuel' ou 'matching'."""
+    with pytest.raises(ValidationError):
+        DevisInput(**_minimal_input_kwargs(), mode_calcul="auto")
+
+
+def test_devis_input_intervalle_mm_borne_basse_25_acceptee():
+    DevisInput(**_minimal_input_kwargs(), intervalle_mm=Decimal("2.5"))
+
+
+def test_devis_input_intervalle_mm_borne_haute_15_acceptee():
+    DevisInput(**_minimal_input_kwargs(), intervalle_mm=Decimal("15"))
+
+
+def test_devis_input_intervalle_mm_rejette_sous_borne():
+    with pytest.raises(ValidationError):
+        DevisInput(**_minimal_input_kwargs(), intervalle_mm=Decimal("2.4"))
+
+
+def test_devis_input_intervalle_mm_rejette_au_dessus_borne():
+    with pytest.raises(ValidationError):
+        DevisInput(**_minimal_input_kwargs(), intervalle_mm=Decimal("15.1"))
+
+
+# ---------------------------------------------------------------------------
 # DevisOutput
 # ---------------------------------------------------------------------------
 

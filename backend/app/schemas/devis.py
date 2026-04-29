@@ -17,10 +17,14 @@ les 3 totaux du HT seul. TVA / total TTC viennent en S4 quand on aura
 le devis persisté avec un client.
 """
 from decimal import Decimal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.poste_result import PosteResult
+
+
+ModeCalcul = Literal["manuel", "matching"]
 
 
 class PartenaireSTForfait(BaseModel):
@@ -113,6 +117,23 @@ class DevisInput(BaseModel):
         "Coût base = 200 + nb_traces × 50.",
     )
 
+    # --- Mode de calcul (Sprint 7 Note 11 vraie réalisation) ---
+    mode_calcul: ModeCalcul = Field(
+        default="manuel",
+        description="'manuel' : utilisateur saisit intervalle_mm libre (rétrocompat "
+        "Sprint 5 V1a/V1b). 'matching' : le moteur cherche les 3 cylindres optimaux "
+        "dans la plage Z=72-187 (sortie multi-résultats DevisOutputMatching).",
+    )
+    intervalle_mm: Decimal | None = Field(
+        default=None,
+        ge=Decimal("2.5"),
+        le=Decimal("15"),
+        description="Distance en mm entre 2 étiquettes consécutives (sens longitudinal). "
+        "Pas de saisie 0.5. Utilisé seulement si mode_calcul='manuel'. "
+        "Si None en mode manuel → default 3 mm appliqué par le moteur (préserve "
+        "V1a EXACT). En mode 'matching', DOIT rester None (validateur cross-field).",
+    )
+
     # --- Sous-traitance saisie à la volée (P6) ---
     forfaits_st: list[PartenaireSTForfait] = Field(default_factory=list)
 
@@ -129,6 +150,21 @@ class DevisInput(BaseModel):
         le=Decimal("2"),
         description="Si null, lit entreprise.pct_marge_defaut (curseur 4 presets)",
     )
+
+    @model_validator(mode="after")
+    def _check_intervalle_coherent_avec_mode(self) -> Self:
+        """Sprint 7 Lot 7b — interdit intervalle_mm en mode matching.
+
+        En mode 'matching', l'intervalle est CONSÉQUENCE du choix de cylindre
+        magnétique (Z × 3.175 - format_h), pas une entrée. Permettre les deux
+        en même temps serait sémantiquement incohérent.
+        """
+        if self.mode_calcul == "matching" and self.intervalle_mm is not None:
+            raise ValueError(
+                "intervalle_mm doit être None en mode 'matching' — "
+                "le moteur le calcule à partir du cylindre optimal trouvé"
+            )
+        return self
 
 
 class DevisOutput(BaseModel):
