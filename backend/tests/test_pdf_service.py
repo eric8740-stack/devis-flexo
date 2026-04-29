@@ -149,6 +149,36 @@ def test_pdf_generation_v1a_matching_uses_chosen_candidat():
             db.commit()
 
 
+def test_get_devis_pdf_endpoint_returns_application_pdf():
+    """Sprint 4 Lot 4f — endpoint HTTP GET /api/devis/{id}/pdf."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    test_client = TestClient(app)
+    with SessionLocal() as db:
+        db.query(Devis).filter(Devis.numero.like("DEV-PDF-%")).delete()
+        db.commit()
+        devis = _make_devis_in_db("manuel", numero="DEV-PDF-HTTP")
+        db.add(devis)
+        db.commit()
+        db.refresh(devis)
+        devis_id = devis.id
+    try:
+        r = test_client.get(f"/api/devis/{devis_id}/pdf")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "application/pdf"
+        assert "DEV-PDF-HTTP.pdf" in r.headers["content-disposition"]
+        assert r.content.startswith(b"%PDF-")
+        assert len(r.content) > 1000
+    finally:
+        with SessionLocal() as db:
+            d = db.get(Devis, devis_id)
+            if d:
+                db.delete(d)
+                db.commit()
+
+
 def test_pdf_generation_now_injection():
     """Vérifie que la variable `now` (datetime) est bien passée au template
     (utile pour le footer 'généré le ...').

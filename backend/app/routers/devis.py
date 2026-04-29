@@ -6,7 +6,7 @@ POST duplicate. Le PDF arrive en Lot 4f (endpoint séparé).
 import math
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.crud import devis as crud
@@ -17,6 +17,7 @@ from app.schemas.devis_persist import (
     DevisListResponse,
     DevisUpdate,
 )
+from app.services.pdf_service import generate_devis_pdf
 
 router = APIRouter(prefix="/api/devis", tags=["devis"])
 
@@ -112,3 +113,27 @@ def duplicate_devis(devis_id: int, db: Session = Depends(get_db)):
             detail=f"Devis {devis_id} introuvable",
         )
     return nouveau
+
+
+@router.get("/{devis_id}/pdf")
+def download_devis_pdf(devis_id: int, db: Session = Depends(get_db)):
+    """Génère le PDF du devis et le retourne en téléchargement.
+
+    Lot 4f : nom de fichier = {numero}.pdf (Content-Disposition attachment).
+    Le service PDF (Lot 4e) lit weasyprint en lazy import — sur Linux
+    Docker prod, les libs natives sont installées via Dockerfile.
+    """
+    devis = crud.get_devis(db, devis_id)
+    if devis is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Devis {devis_id} introuvable",
+        )
+    pdf_bytes = generate_devis_pdf(devis, db)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{devis.numero}.pdf"'
+        },
+    )
