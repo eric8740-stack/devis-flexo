@@ -4,6 +4,7 @@ from app.models.charge_mensuelle import ChargeMensuelle
 from app.models.client import Client
 from app.models.complexe import Complexe
 from app.models.correspondance_laize_metrage import CorrespondanceLaizeMetrage
+from app.models.devis import Devis
 from app.models.entreprise import Entreprise
 from app.models.fournisseur import Fournisseur
 from app.models.machine import Machine
@@ -21,6 +22,7 @@ __all__ = [
     "Client",
     "Complexe",
     "CorrespondanceLaizeMetrage",
+    "Devis",
     "Entreprise",
     "Fournisseur",
     "Machine",
