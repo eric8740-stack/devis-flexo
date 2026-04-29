@@ -231,7 +231,7 @@ export function DevisCalculForm({ onResult }: DevisCalculFormProps) {
     } catch (err) {
       onResult(null);
       if (err instanceof ApiError) {
-        setError(`Erreur ${err.status} : ${err.message.split(" → ").pop() ?? err.message}`);
+        setError(`Erreur : ${err.message.split(" → ").pop() ?? err.message}`);
       } else {
         setError(
           err instanceof Error ? err.message : "Erreur serveur inconnue"
