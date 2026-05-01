@@ -141,7 +141,7 @@
             <td>P{{ poste.poste_numero }}</td>
             <td>{{ poste.libelle }}</td>
             <td class="right">{{ "%.2f"|format(poste.montant_eur|float) }} €</td>
-            <td class="right">{{ "%.1f"|format((poste.montant_eur|float / cout_revient * 100) if cout_revient else 0) }} %</td>
+            <td class="right">{{ "%.1f"|format((poste.montant_eur|float / (cout_revient|float) * 100) if cout_revient else 0) }} %</td>
         </tr>
         {% endfor %}
     </tbody>
