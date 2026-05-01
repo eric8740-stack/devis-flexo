@@ -6,6 +6,10 @@ gracefully (les tests passent en CI Linux + Railway prod).
 
 Probe d'exécution réelle au chargement du module : si write_pdf échoue
 sur un HTML trivial, on skip tout le fichier.
+
+Garde-fou bruyant : voir tests/test_weasyprint_runtime.py (Hotfix-PDF-B)
+qui FAIL si la probe échoue sur Linux ou en CI (alerte immédiate au lieu
+du skip silencieux qui a masqué le bug TypeError float/Decimal Sprint 4).
 """
 from datetime import datetime
 from decimal import Decimal
