@@ -164,13 +164,22 @@ class MoteurDevis:
         )
 
         # Pour chaque candidat : prix_au_mille calculé via nb_etiq_par_metre
-        # du candidat (pas la formule Sprint 5 manuel, qui multiplie par
-        # nb_poses_developpement — en mode matching, le nb d'étiquettes par
-        # tour est porté par le candidat, pas par nb_poses_developpement).
+        # du candidat. Cohérence stricte avec mode manuel : nb_poses_developpement
+        # est un multiplicateur d'instances de l'étiquette dans le sens
+        # développement (axe défilement), INDÉPENDANT du choix de cylindre.
+        # Le candidat porte nb_etiq_par_tour (étiquettes uniques par tour),
+        # pas l'instance multipliée. Hotfix bug prix_au_mille mode matching :
+        # avant ce fix, le facteur nb_poses_developpement était oublié →
+        # prix_au_mille surévalué d'un facteur N pour les cas poses_d ≥ 2
+        # (cas figés V7 tous à poses_d=1, donc bug invisible jusqu'à un cas
+        # métier réel Eric ICE 60×100 mm 2×2 poses).
         candidats_output: list[CandidatCylindreOutput] = []
         for c in candidats:
             nb_etiq_total = (
-                devis.nb_poses_largeur * c.nb_etiq_par_metre * devis.ml_total
+                devis.nb_poses_largeur
+                * devis.nb_poses_developpement
+                * c.nb_etiq_par_metre
+                * devis.ml_total
             )
             if nb_etiq_total <= 0:
                 raise CostEngineError(
