@@ -11,11 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  FAMILLES_COMPLEXE,
-  STATUTS_COMPLEXE,
-  type ComplexeCreate,
-} from "@/lib/api";
+import { FAMILLES_COMPLEXE, type ComplexeCreate } from "@/lib/api";
 
 const EMPTY: ComplexeCreate = {
   reference: "",
@@ -25,7 +21,7 @@ const EMPTY: ComplexeCreate = {
   adhesif_type: null,
   prix_m2_eur: 0,
   fournisseur_id: null,
-  statut: "actif",
+  actif: true,
   commentaire: null,
 };
 
@@ -174,22 +170,17 @@ export function ComplexeForm({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="statut">Statut</Label>
-            <select
-              id="statut"
-              value={data.statut}
-              onChange={(e) =>
-                setField("statut", e.target.value as ComplexeCreate["statut"])
-              }
-              className={SELECT_CN}
-            >
-              {STATUTS_COMPLEXE.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-2">
+            <input
+              id="actif"
+              type="checkbox"
+              checked={data.actif}
+              onChange={(e) => setField("actif", e.target.checked)}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="actif" className="cursor-pointer">
+              Actif (proposé dans la sélection des nouveaux devis)
+            </Label>
           </div>
 
           <div className="grid gap-2">

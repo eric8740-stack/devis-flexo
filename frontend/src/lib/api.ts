@@ -148,9 +148,7 @@ export const deleteFournisseur = (id: number) =>
 // Sprint 2 : Machine (presses flexo)
 // ---------------------------------------------------------------------------
 
-export const STATUTS_MACHINE = ["actif", "inactif", "maintenance"] as const;
-export type StatutMachine = (typeof STATUTS_MACHINE)[number];
-
+// Sprint 9 v2 Lot 9d : refactor statut String → actif Boolean uniformisé
 export interface Machine {
   id: number;
   nom: string;
@@ -158,7 +156,7 @@ export interface Machine {
   vitesse_max_m_min: number | null;
   nb_couleurs: number | null;
   cout_horaire_eur: number | null;
-  statut: StatutMachine;
+  actif: boolean;
   commentaire: string | null;
   date_creation: string;
   date_maj: string;
@@ -167,7 +165,10 @@ export interface Machine {
 export type MachineCreate = Omit<Machine, "id" | "date_creation" | "date_maj">;
 export type MachineUpdate = Partial<MachineCreate>;
 
-export const listMachines = () => apiFetch<Machine[]>("/api/machines?limit=200");
+export const listMachines = (includeInactives = false) =>
+  apiFetch<Machine[]>(
+    `/api/machines?limit=200${includeInactives ? "&include_inactives=true" : ""}`
+  );
 export const getMachine = (id: number) => apiFetch<Machine>(`/api/machines/${id}`);
 export const createMachine = (data: MachineCreate) =>
   apiFetch<Machine>("/api/machines", { method: "POST", body: JSON.stringify(data) });
@@ -178,6 +179,8 @@ export const updateMachine = (id: number, data: MachineUpdate) =>
   });
 export const deleteMachine = (id: number) =>
   apiFetch<void>(`/api/machines/${id}`, { method: "DELETE" });
+export const reactiverMachine = (id: number) =>
+  apiFetch<Machine>(`/api/machines/${id}/reactiver`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
 // Sprint 2 : OperationFinition
@@ -229,9 +232,7 @@ export const deleteOperationFinition = (id: number) =>
 
 export const PRESTATION_TYPES = ["finition", "decoupe", "dorure", "autre"] as const;
 export type PrestationType = (typeof PRESTATION_TYPES)[number];
-export const STATUTS_PARTENAIRE = ["actif", "inactif"] as const;
-export type StatutPartenaire = (typeof STATUTS_PARTENAIRE)[number];
-
+// Sprint 9 v2 Lot 9d : refactor statut → actif Boolean
 export interface PartenaireST {
   id: number;
   raison_sociale: string;
@@ -243,7 +244,7 @@ export interface PartenaireST {
   delai_jours_moyen: number | null;
   qualite_score: number | null;
   commentaire: string | null;
-  statut: StatutPartenaire;
+  actif: boolean;
   date_creation: string;
   date_maj: string;
 }
@@ -254,8 +255,10 @@ export type PartenaireSTCreate = Omit<
 >;
 export type PartenaireSTUpdate = Partial<PartenaireSTCreate>;
 
-export const listPartenairesST = () =>
-  apiFetch<PartenaireST[]>("/api/partenaires-st?limit=200");
+export const listPartenairesST = (includeInactives = false) =>
+  apiFetch<PartenaireST[]>(
+    `/api/partenaires-st?limit=200${includeInactives ? "&include_inactives=true" : ""}`
+  );
 export const getPartenaireST = (id: number) =>
   apiFetch<PartenaireST>(`/api/partenaires-st/${id}`);
 export const createPartenaireST = (data: PartenaireSTCreate) =>
@@ -270,6 +273,10 @@ export const updatePartenaireST = (id: number, data: PartenaireSTUpdate) =>
   });
 export const deletePartenaireST = (id: number) =>
   apiFetch<void>(`/api/partenaires-st/${id}`, { method: "DELETE" });
+export const reactiverPartenaireST = (id: number) =>
+  apiFetch<PartenaireST>(`/api/partenaires-st/${id}/reactiver`, {
+    method: "POST",
+  });
 
 // ---------------------------------------------------------------------------
 // Sprint 2 : ChargeMensuelle (frais fixes)
@@ -337,9 +344,7 @@ export const FAMILLES_COMPLEXE = [
   "papier_verge",
 ] as const;
 export type FamilleComplexe = (typeof FAMILLES_COMPLEXE)[number];
-export const STATUTS_COMPLEXE = ["actif", "archive"] as const;
-export type StatutComplexe = (typeof STATUTS_COMPLEXE)[number];
-
+// Sprint 9 v2 Lot 9d : refactor statut → actif Boolean
 export interface Complexe {
   id: number;
   reference: string;
@@ -349,7 +354,7 @@ export interface Complexe {
   adhesif_type: string | null;
   prix_m2_eur: number;
   fournisseur_id: number | null;
-  statut: StatutComplexe;
+  actif: boolean;
   commentaire: string | null;
   date_creation: string;
   date_maj: string;
@@ -358,8 +363,10 @@ export interface Complexe {
 export type ComplexeCreate = Omit<Complexe, "id" | "date_creation" | "date_maj">;
 export type ComplexeUpdate = Partial<ComplexeCreate>;
 
-export const listComplexes = () =>
-  apiFetch<Complexe[]>("/api/complexes?limit=200");
+export const listComplexes = (includeInactives = false) =>
+  apiFetch<Complexe[]>(
+    `/api/complexes?limit=200${includeInactives ? "&include_inactives=true" : ""}`
+  );
 export const getComplexe = (id: number) =>
   apiFetch<Complexe>(`/api/complexes/${id}`);
 export const createComplexe = (data: ComplexeCreate) =>
@@ -374,6 +381,8 @@ export const updateComplexe = (id: number, data: ComplexeUpdate) =>
   });
 export const deleteComplexe = (id: number) =>
   apiFetch<void>(`/api/complexes/${id}`, { method: "DELETE" });
+export const reactiverComplexe = (id: number) =>
+  apiFetch<Complexe>(`/api/complexes/${id}/reactiver`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
 // Sprint 2 : Catalogue (produits récurrents par client)
@@ -554,8 +563,29 @@ export interface OutilDecoupeRead {
   date_creation: string;
 }
 
-export const listOutilsDecoupe = () =>
-  apiFetch<OutilDecoupeRead[]>("/api/outils");
+export type OutilDecoupeCreate = Omit<OutilDecoupeRead, "id" | "date_creation">;
+export type OutilDecoupeUpdate = Partial<OutilDecoupeCreate>;
+
+export const listOutilsDecoupe = (includeInactives = false) =>
+  apiFetch<OutilDecoupeRead[]>(
+    `/api/outils${includeInactives ? "?include_inactives=true" : ""}`
+  );
+export const getOutilDecoupe = (id: number) =>
+  apiFetch<OutilDecoupeRead>(`/api/outils/${id}`);
+export const createOutilDecoupe = (data: OutilDecoupeCreate) =>
+  apiFetch<OutilDecoupeRead>("/api/outils", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateOutilDecoupe = (id: number, data: OutilDecoupeUpdate) =>
+  apiFetch<OutilDecoupeRead>(`/api/outils/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteOutilDecoupe = (id: number) =>
+  apiFetch<void>(`/api/outils/${id}`, { method: "DELETE" });
+export const reactiverOutilDecoupe = (id: number) =>
+  apiFetch<OutilDecoupeRead>(`/api/outils/${id}/reactiver`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
 // Sprint 9 v2 Lot 9c : Paramètres tarifaires (table tarif_poste)

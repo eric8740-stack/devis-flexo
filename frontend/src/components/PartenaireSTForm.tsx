@@ -11,11 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  PRESTATION_TYPES,
-  STATUTS_PARTENAIRE,
-  type PartenaireSTCreate,
-} from "@/lib/api";
+import { PRESTATION_TYPES, type PartenaireSTCreate } from "@/lib/api";
 
 const EMPTY: PartenaireSTCreate = {
   raison_sociale: "",
@@ -27,7 +23,7 @@ const EMPTY: PartenaireSTCreate = {
   delai_jours_moyen: null,
   qualite_score: null,
   commentaire: null,
-  statut: "actif",
+  actif: true,
 };
 
 interface Props {
@@ -184,22 +180,17 @@ export function PartenaireSTForm({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="statut">Statut</Label>
-            <select
-              id="statut"
-              value={data.statut}
-              onChange={(e) =>
-                setField("statut", e.target.value as PartenaireSTCreate["statut"])
-              }
-              className={SELECT_CN}
-            >
-              {STATUTS_PARTENAIRE.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-2">
+            <input
+              id="actif"
+              type="checkbox"
+              checked={data.actif}
+              onChange={(e) => setField("actif", e.target.checked)}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="actif" className="cursor-pointer">
+              Actif
+            </Label>
           </div>
 
           <div className="grid gap-2">

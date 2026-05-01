@@ -11,39 +11,39 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type MachineCreate } from "@/lib/api";
+import { type OutilDecoupeCreate } from "@/lib/api";
 
-const EMPTY: MachineCreate = {
-  nom: "",
-  largeur_max_mm: null,
-  vitesse_max_m_min: null,
-  nb_couleurs: null,
-  cout_horaire_eur: null,
+const EMPTY: OutilDecoupeCreate = {
+  libelle: "",
+  format_l_mm: 60,
+  format_h_mm: 40,
+  nb_poses_l: 1,
+  nb_poses_h: 1,
+  forme_speciale: false,
   actif: true,
-  commentaire: null,
 };
 
 interface Props {
-  initial?: MachineCreate;
-  onSubmit: (data: MachineCreate) => Promise<void>;
+  initial?: OutilDecoupeCreate;
+  onSubmit: (data: OutilDecoupeCreate) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
   title?: string;
 }
 
-export function MachineForm({
+export function OutilDecoupeForm({
   initial,
   onSubmit,
   onCancel,
   submitLabel = "Enregistrer",
-  title = "Machine",
+  title = "Outil de découpe",
 }: Props) {
-  const [data, setData] = useState<MachineCreate>(initial ?? EMPTY);
+  const [data, setData] = useState<OutilDecoupeCreate>(initial ?? EMPTY);
   const [busy, setBusy] = useState(false);
 
-  const setField = <K extends keyof MachineCreate>(
+  const setField = <K extends keyof OutilDecoupeCreate>(
     field: K,
-    value: MachineCreate[K]
+    value: OutilDecoupeCreate[K]
   ) => setData((prev) => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e: FormEvent) => {
@@ -64,41 +64,40 @@ export function MachineForm({
         </CardHeader>
         <CardContent className="grid gap-6">
           <div className="grid gap-2">
-            <Label htmlFor="nom">Nom *</Label>
+            <Label htmlFor="libelle">Libellé *</Label>
             <Input
-              id="nom"
+              id="libelle"
               required
-              value={data.nom}
-              onChange={(e) => setField("nom", e.target.value)}
+              value={data.libelle}
+              onChange={(e) => setField("libelle", e.target.value)}
+              placeholder="ex. outil_60x40_3p1d"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="largeur_max_mm">Laize max (mm)</Label>
+              <Label htmlFor="format_l_mm">Largeur étiquette (mm) *</Label>
               <Input
-                id="largeur_max_mm"
+                id="format_l_mm"
                 type="number"
-                value={data.largeur_max_mm ?? ""}
+                min={1}
+                required
+                value={data.format_l_mm}
                 onChange={(e) =>
-                  setField(
-                    "largeur_max_mm",
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
+                  setField("format_l_mm", Number(e.target.value || 0))
                 }
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="vitesse_max_m_min">Vitesse max (m/min)</Label>
+              <Label htmlFor="format_h_mm">Hauteur étiquette (mm) *</Label>
               <Input
-                id="vitesse_max_m_min"
+                id="format_h_mm"
                 type="number"
-                value={data.vitesse_max_m_min ?? ""}
+                min={1}
+                required
+                value={data.format_h_mm}
                 onChange={(e) =>
-                  setField(
-                    "vitesse_max_m_min",
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
+                  setField("format_h_mm", Number(e.target.value || 0))
                 }
               />
             </div>
@@ -106,36 +105,44 @@ export function MachineForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="nb_couleurs">Nb couleurs</Label>
+              <Label htmlFor="nb_poses_l">Nb poses largeur *</Label>
               <Input
-                id="nb_couleurs"
+                id="nb_poses_l"
                 type="number"
                 min={1}
-                max={12}
-                value={data.nb_couleurs ?? ""}
+                required
+                value={data.nb_poses_l}
                 onChange={(e) =>
-                  setField(
-                    "nb_couleurs",
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
+                  setField("nb_poses_l", Number(e.target.value || 1))
                 }
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="cout_horaire_eur">Coût horaire (€)</Label>
+              <Label htmlFor="nb_poses_h">Nb poses développement *</Label>
               <Input
-                id="cout_horaire_eur"
+                id="nb_poses_h"
                 type="number"
-                step="0.01"
-                value={data.cout_horaire_eur ?? ""}
+                min={1}
+                required
+                value={data.nb_poses_h}
                 onChange={(e) =>
-                  setField(
-                    "cout_horaire_eur",
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
+                  setField("nb_poses_h", Number(e.target.value || 1))
                 }
               />
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="forme_speciale"
+              type="checkbox"
+              checked={data.forme_speciale}
+              onChange={(e) => setField("forme_speciale", e.target.checked)}
+              className="h-4 w-4"
+            />
+            <Label htmlFor="forme_speciale" className="cursor-pointer">
+              Forme spéciale (surcoût plaque +40 % si nouvel outil)
+            </Label>
           </div>
 
           <div className="flex items-center gap-2">
@@ -147,19 +154,8 @@ export function MachineForm({
               className="h-4 w-4"
             />
             <Label htmlFor="actif" className="cursor-pointer">
-              Actif (apparaît dans la sélection des nouveaux devis)
+              Actif (proposé dans les nouveaux devis)
             </Label>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="commentaire">Commentaire</Label>
-            <Input
-              id="commentaire"
-              value={data.commentaire ?? ""}
-              onChange={(e) =>
-                setField("commentaire", e.target.value || null)
-              }
-            />
           </div>
 
           <div className="flex justify-end gap-2">

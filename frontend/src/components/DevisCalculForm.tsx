@@ -644,7 +644,7 @@ export function DevisCalculForm({
                 {m.vitesse_max_m_min
                   ? ` · vitesse max ${m.vitesse_max_m_min} m/min`
                   : ""}
-                {m.statut !== "actif" ? ` (${m.statut})` : ""}
+                {!m.actif ? " (inactif)" : ""}
               </option>
             ))}
           </select>
