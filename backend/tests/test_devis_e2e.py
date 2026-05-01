@@ -196,7 +196,8 @@ def test_e2e_non_regression_v1a_manuel_sacre():
 
 def test_e2e_non_regression_v1a_matching_3_candidats():
     """Garde-fou critique Sprint 4 : V1a matching = 3 candidats Z=134/121/108
-    avec HT identique 1449.09 € + prix_au_mille 7.00 €."""
+    avec HT identique 1449.09 € + meilleur prix_au_mille = 6.85 € (recalibré
+    Phase 2 fix précision matching 01/05/2026, avant : 7.00)."""
     r = client.post("/api/cost/calculer", json=_v1a_input_matching())
     assert r.status_code == 200
     data = r.json()
@@ -204,6 +205,13 @@ def test_e2e_non_regression_v1a_matching_3_candidats():
     assert len(data["candidats"]) == 3
     couples = [(c["z"], c["nb_etiq_par_tour"]) for c in data["candidats"]]
     assert couples == [(134, 10), (121, 9), (108, 8)]
+    # HT identique sur les 3 candidats (postes indépendants du cylindre)
     for c in data["candidats"]:
         assert Decimal(c["prix_vente_ht_eur"]) == Decimal("1449.09")
-        assert Decimal(c["prix_au_mille_eur"]) == Decimal("7.00")
+    # Phase 2 : prix_au_mille différent par candidat (cylindre plus serré
+    # = prix plus bas). Meilleur candidat figé à 6.85 €/1000.
+    assert Decimal(data["candidats"][0]["prix_au_mille_eur"]) == Decimal("6.85")
+    prix_list = [Decimal(c["prix_au_mille_eur"]) for c in data["candidats"]]
+    assert prix_list == sorted(prix_list), (
+        f"Tri prix croissant attendu, obtenu {prix_list}"
+    )

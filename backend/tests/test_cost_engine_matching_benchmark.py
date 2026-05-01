@@ -1,4 +1,4 @@
-"""Benchmarks figés mode 'matching' (Sprint 7 Lot 7g).
+"""Benchmarks figés mode 'matching' (Sprint 7 Lot 7g + Phase 2 fix précision 01/05/2026).
 
 Cas V7a-V7d vérifient la non-régression du moteur de coût v2 mode matching :
   V7a — V1a en mode matching → 3 candidats figés (HT identique à V1a manuel)
@@ -6,11 +6,20 @@ Cas V7a-V7d vérifient la non-régression du moteur de coût v2 mode matching :
   V7c — Plaque > laize - marge → 422 (filtre laize machine)
   V7d — Format extrême → 422 (intervalle hors plage 2.5-15)
 
-V7a = preuve mathématique que les postes ne dépendent pas du choix de
-cylindre dans le moteur actuel (HT = HT_manuel_V1a = 1449.09 €). Le prix
-au mille varie en théorie selon nb_etiq_par_metre, mais dans le cas V1a
-les 3 cylindres trouvés ont le même nb_etiq_par_metre=23 → prix_au_mille
-identique 7.00 €/1000.
+V7a = preuve mathématique que les postes (HT) ne dépendent pas du choix de
+cylindre dans le moteur actuel (HT = HT_manuel_V1a = 1449.09 €).
+
+Phase 2 fix précision matching (01/05/2026) :
+Avant Phase 2 : les 3 candidats avaient le MÊME prix_au_mille (7.00 €/1000)
+parce que le calcul utilisait nb_etiq_par_metre=23 (entier) identique
+pour les 3. Avec le fix, le calcul utilise pas_mm (Decimal) du candidat,
+donc les 3 prix diffèrent légèrement selon le pas exact :
+  Z=134 (pas 42.545)   → 6.85 €/1000 (meilleur, intervalle le plus serré)
+  Z=121 (pas 42.6861…) → 6.87 €/1000
+  Z=108 (pas 42.8625)  → 6.90 €/1000
+Cohérent métier : un cylindre plus serré = plus d'étiquettes = prix au
+mille plus bas. Le 1er candidat (tri intervalle croissant) reste le
+meilleur prix.
 
 Génère cost_breakdown_matching.md pour audit / démo.
 """
@@ -29,7 +38,10 @@ REPORT_PATH = Path(__file__).resolve().parent.parent / "cost_breakdown_matching.
 # HT V1a SACRÉ — le moteur matching ne doit pas le modifier (postes
 # indépendants du choix de cylindre dans la modélisation actuelle).
 EXPECTED_HT_V1A = Decimal("1449.09")
-EXPECTED_PRIX_MILLE_V7A = Decimal("7.00")
+# V7a meilleur candidat (Z=134, pas le plus serré) — recalibré Phase 2 fix
+# précision matching 01/05/2026 (avant : 7.00 — surévalué de ~2,2% suite à
+# arrondi nb_etiq_par_metre).
+EXPECTED_PRIX_MILLE_V7A_BEST = Decimal("6.85")
 
 
 def _devis_v1a_matching() -> DevisInput:
@@ -97,13 +109,36 @@ def test_v7a_v1a_matching_intervalles_dans_plage():
         assert Decimal("2.5") <= iv <= Decimal("15.0")
 
 
-def test_v7a_v1a_matching_prix_au_mille_700():
-    """Prix au mille V1a matching = 7.00 €/1000 (3 candidats avec
-    nb_etiq_par_metre=23 → même prix au mille)."""
+def test_v7a_v1a_matching_prix_au_mille_recalibre_phase2():
+    """Prix au mille V1a matching — recalibré Phase 2 fix précision (01/05/2026).
+
+    Avant Phase 2 : tous les candidats avaient le même prix 7.00 (calcul via
+    nb_etiq_par_metre=23 entier identique pour les 3 → même nb_etiq_total).
+
+    Après Phase 2 : calcul via pas_mm Decimal du candidat → les 3 prix
+    diffèrent légèrement selon le pas exact (cylindre plus serré = plus
+    d'étiq = prix plus bas) :
+      Z=134 (pas 42.545)     → 6.85 €/1000 (best, intervalle 2.545 mm)
+      Z=121 (pas 42.6861...)  → 6.87 €/1000 (intervalle 2.6861 mm)
+      Z=108 (pas 42.8625)     → 6.90 €/1000 (intervalle 2.8625 mm)
+
+    Le tri intervalle croissant garantit le meilleur prix en 1er.
+    nb_etiq_par_metre=23 reste exposé pour l'UI/PDF (indicateur visuel)
+    mais n'est plus utilisé pour le calcul prix.
+    """
     with SessionLocal() as db:
         out = MoteurDevis(db).calculer(_devis_v1a_matching())
+    # Meilleur candidat (Z=134, intervalle le plus serré) = meilleur prix
+    assert out.candidats[0].prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A_BEST
+    # Tri prix croissant strict (pas serré → moins d'étiq par tour mais
+    # plus de tours par mètre → plus d'étiq totales → prix plus bas)
+    prix_list = [c.prix_au_mille_eur for c in out.candidats]
+    assert prix_list == sorted(prix_list), (
+        f"Tri prix croissant attendu (= meilleur prix en 1er), obtenu {prix_list}"
+    )
+    # nb_etiq_par_metre identique entre les 3 (même indicateur UI) — exposition
+    # conservée Phase 2, juste plus utilisée pour le calcul.
     for c in out.candidats:
-        assert c.prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A
         assert c.nb_etiq_par_metre == 23
 
 
@@ -238,11 +273,16 @@ def test_v7a_writes_matching_breakdown_md():
 def test_v8a_v1a_matching_poses_d_2_divides_prix_mille_by_2():
     """V1a payload + nb_poses_developpement=2 → prix_au_mille ÷ 2 vs V7a.
 
-    V7a (poses_d=1) → 7,00 €/1000. Avec poses_d=2, on imprime 2× plus
-    d'étiquettes par mètre linéaire dans le sens développement →
-    prix_au_mille divisé par 2 = 3,50 €/1000.
+    V7a (poses_d=1) meilleur candidat → 6.85 €/1000 (recalibré Phase 2).
+    Avec poses_d=2, on imprime 2× plus d'étiquettes dans le sens
+    développement → prix_au_mille divisé par 2 ≈ 3.43 €/1000.
 
-    Sans le fix, prix_au_mille resterait à 7,00 (× 1 implicite) → fail.
+    Sans le Hotfix nb_poses_developpement (29/04), prix_au_mille resterait
+    à 6.85 (× 1 implicite) → fail.
+
+    Phase 2 (01/05) : valeur recalibrée 3.50 → 3.43 (correction précision
+    matching, le calcul utilise pas_mm Decimal du candidat au lieu de
+    nb_etiq_par_metre entier).
     """
     payload = _devis_v1a_matching().model_copy(
         update={"nb_poses_developpement": 2}
@@ -251,13 +291,19 @@ def test_v8a_v1a_matching_poses_d_2_divides_prix_mille_by_2():
         out = MoteurDevis(db).calculer(payload)
     # Z + HT préservés (postes/cylindres indépendants de poses_d)
     assert [c.z for c in out.candidats] == [134, 121, 108]
+    # Meilleur candidat (Z=134) : 3.43 EXACT (= V7a_BEST 6.85 / 2 à l'arrondi près)
+    assert out.candidats[0].prix_au_mille_eur == Decimal("3.43"), (
+        f"V8a meilleur candidat Z=134 : prix_au_mille={out.candidats[0].prix_au_mille_eur} "
+        f"≠ 3.43 attendu (Phase 2). Bug nb_poses_developpement ou précision matching ?"
+    )
+    # HT préservé sur les 3 candidats
     for c in out.candidats:
         assert c.prix_vente_ht_eur == EXPECTED_HT_V1A
-        # 7.00 / 2 = 3.50 EXACT (V7a / 2)
-        assert c.prix_au_mille_eur == Decimal("3.50"), (
-            f"Cylindre Z={c.z} : prix_au_mille={c.prix_au_mille_eur} "
-            f"≠ 3.50 attendu (V7a 7.00 / poses_d=2). Bug nb_poses_developpement ?"
-        )
+    # Tri prix croissant strict (cylindre plus serré = prix plus bas)
+    prix_list = [c.prix_au_mille_eur for c in out.candidats]
+    assert prix_list == sorted(prix_list), (
+        f"Tri prix croissant attendu, obtenu {prix_list}"
+    )
 
 
 def test_v8b_cas_eric_ice_60x100_2x2_consistance_mode_agnostique():
@@ -392,18 +438,23 @@ def test_v8d_coherence_mode_agnostique_50x80_3_2():
     )
 
 
-def test_v8e_anti_regression_v7a_poses_d_1_reste_700():
-    """Garde-fou anti-régression du fix : V7a (poses_d=1) doit rester EXACT
-    à 7.00 €/1000. Le `× 1` du facteur poses_d est neutre, le hotfix ne
-    doit donc rien changer pour ce cas figé Sprint 7 V2.
+def test_v8e_anti_regression_v7a_poses_d_1_meilleur_candidat_recalibre():
+    """Garde-fou anti-régression Hotfix nb_poses_developpement (29/04/2026) :
+    V7a (poses_d=1) → meilleur candidat = EXPECTED_PRIX_MILLE_V7A_BEST.
 
-    Test redondant avec test_v7a_v1a_matching_prix_au_mille_700 mais
-    explicité ici pour matérialiser le garde-fou hotfix dans le bloc V8.
+    Phase 2 (01/05/2026) : valeur figée recalibrée 7.00 → 6.85 (correction
+    du défaut de précision matching). Le `× 1` du facteur poses_d reste
+    neutre côté Hotfix prix_au_mille.
+
+    Test redondant avec test_v7a_v1a_matching_prix_au_mille_recalibre_phase2
+    mais explicité ici pour matérialiser les 2 garde-fous successifs (Hotfix
+    poses_developpement + Phase 2 précision) dans le bloc V8.
     """
     with SessionLocal() as db:
         out = MoteurDevis(db).calculer(_devis_v1a_matching())
-    for c in out.candidats:
-        assert c.prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A, (
-            f"REGRESSION HOTFIX : V7a prix_au_mille = {c.prix_au_mille_eur} "
-            f"≠ {EXPECTED_PRIX_MILLE_V7A} EXACT figé Sprint 7 V2 !"
-        )
+    # Meilleur candidat (Z=134, intervalle le plus serré) figé à 6.85
+    assert out.candidats[0].prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A_BEST, (
+        f"REGRESSION : V7a meilleur prix_au_mille = "
+        f"{out.candidats[0].prix_au_mille_eur} ≠ {EXPECTED_PRIX_MILLE_V7A_BEST} "
+        f"recalibré Phase 2 !"
+    )
