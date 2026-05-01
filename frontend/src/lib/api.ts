@@ -558,6 +558,51 @@ export const listOutilsDecoupe = () =>
   apiFetch<OutilDecoupeRead[]>("/api/outils");
 
 // ---------------------------------------------------------------------------
+// Sprint 9 v2 Lot 9c : Paramètres tarifaires (table tarif_poste)
+// ---------------------------------------------------------------------------
+
+export interface TarifPosteRead {
+  id: number;
+  cle: string;
+  poste_numero: number;
+  libelle: string;
+  valeur_defaut: string; // Decimal renvoyé en string par FastAPI
+  valeur_min: string | null;
+  valeur_max: string | null;
+  unite: string;
+  actif: boolean;
+  description: string | null;
+  ordre_affichage: number;
+  date_creation: string;
+  date_maj: string;
+}
+
+export interface TarifPosteByPoste {
+  poste_numero: number;
+  libelle_poste: string;
+  parametres: TarifPosteRead[];
+}
+
+export interface TarifsGrouped {
+  postes: TarifPosteByPoste[];
+}
+
+export const getTarifsGrouped = () =>
+  apiFetch<TarifsGrouped>("/api/tarif-poste");
+
+export const updateTarifValeur = (cle: string, valeur_defaut: string) =>
+  apiFetch<TarifPosteRead>(`/api/tarif-poste/${cle}`, {
+    method: "PUT",
+    body: JSON.stringify({ valeur_defaut }),
+  });
+
+export const resetPoste = (poste_numero: number) =>
+  apiFetch<{ poste_numero: number; n_reset: number }>(
+    `/api/tarif-poste/reset/${poste_numero}`,
+    { method: "POST" }
+  );
+
+// ---------------------------------------------------------------------------
 // Sprint 4 Lot 4b : Persistance Devis (CRUD /api/devis)
 // ---------------------------------------------------------------------------
 
