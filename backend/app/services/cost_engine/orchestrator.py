@@ -163,23 +163,30 @@ class MoteurDevis:
             Decimal("0.01")
         )
 
-        # Pour chaque candidat : prix_au_mille calculé via nb_etiq_par_metre
-        # du candidat. Cohérence stricte avec mode manuel : nb_poses_developpement
-        # est un multiplicateur d'instances de l'étiquette dans le sens
-        # développement (axe défilement), INDÉPENDANT du choix de cylindre.
-        # Le candidat porte nb_etiq_par_tour (étiquettes uniques par tour),
-        # pas l'instance multipliée. Hotfix bug prix_au_mille mode matching :
-        # avant ce fix, le facteur nb_poses_developpement était oublié →
-        # prix_au_mille surévalué d'un facteur N pour les cas poses_d ≥ 2
-        # (cas figés V7 tous à poses_d=1, donc bug invisible jusqu'à un cas
-        # métier réel Eric ICE 60×100 mm 2×2 poses).
+        # Pour chaque candidat : prix_au_mille calculé avec la MÊME formule
+        # que le mode manuel (Phase 2 fix précision matching 01/05/2026) :
+        #   etiq_par_pose_h = floor((ml × 1000) / pas_mm)  ← UN seul floor sur le total
+        #   nb_etiq_total   = nb_poses_l × nb_poses_d × etiq_par_pose_h
+        #
+        # Avant Phase 2 : le matching utilisait c.nb_etiq_par_metre (= floor(1000/pas))
+        # × ml, qui jetait les fractions par mètre puis multipliait → perte de
+        # précision ~7-8% sur les cas où pas_mm n'est pas multiple entier de 1000.
+        # Symptôme : ratio prix_au_mille_matching/manuel = 1,078 sur cas Eric
+        # 60×100 mm 2×2 poses, alors que mathématiquement il devrait être ~1,01
+        # (le pas cylindre matching est très proche du pas manuel idéal).
+        #
+        # Le champ c.nb_etiq_par_metre reste exposé dans CandidatCylindreOutput
+        # pour l'UI/PDF (indicateur visuel "9 étiq/m linéaire") mais n'est plus
+        # utilisé pour le calcul prix.
         candidats_output: list[CandidatCylindreOutput] = []
         for c in candidats:
+            etiq_par_pose_h = int(
+                (Decimal(devis.ml_total) * Decimal(1000)) // c.pas_mm
+            )
             nb_etiq_total = (
                 devis.nb_poses_largeur
                 * devis.nb_poses_developpement
-                * c.nb_etiq_par_metre
-                * devis.ml_total
+                * etiq_par_pose_h
             )
             if nb_etiq_total <= 0:
                 raise CostEngineError(
