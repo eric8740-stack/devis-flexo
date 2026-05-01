@@ -3,6 +3,17 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Sprint 9 v2 — libellés humains des postes 1..7 pour l'UI groupée /parametres/tarifs
+LIBELLE_POSTE = {
+    1: "Matière",
+    2: "Encres",
+    3: "Outillage / Clichés",
+    4: "Mise en route / Calage",
+    5: "Roulage presse",
+    6: "Finitions",
+    7: "Main d'œuvre",
+}
+
 
 class TarifPosteBase(BaseModel):
     cle: str = Field(min_length=1, max_length=50)
@@ -41,3 +52,35 @@ class TarifPosteUpdate(BaseModel):
     actif: bool | None = None
     description: str | None = None
     ordre_affichage: int | None = Field(default=None, ge=0)
+
+
+# Sprint 9 v2 — schémas dédiés au router /api/tarif-poste
+
+
+class TarifPosteUpdateValeur(BaseModel):
+    """Body PUT léger pour l'UI Sprint 9 v2 — modifie uniquement la valeur."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    valeur_defaut: Decimal
+
+
+class TarifPosteByPoste(BaseModel):
+    """Groupe de paramètres d'un poste pour l'UI groupée."""
+
+    poste_numero: int
+    libelle_poste: str
+    parametres: list[TarifPosteRead]
+
+
+class TarifsGrouped(BaseModel):
+    """Sortie GET /api/tarif-poste — paramètres groupés par poste."""
+
+    postes: list[TarifPosteByPoste]
+
+
+class ResetPosteResponse(BaseModel):
+    """Sortie POST /api/tarif-poste/reset/{poste_numero}."""
+
+    poste_numero: int
+    n_reset: int
