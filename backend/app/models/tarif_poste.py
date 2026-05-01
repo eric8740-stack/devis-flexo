@@ -8,6 +8,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,6 +22,9 @@ class TarifPoste(Base):
     Identifié par une clé symbolique snake_case (`matiere_prix_kg_defaut`,
     `marge_confort_roulage_mm`, ...) — le moteur de calcul accède toujours
     via `repo.get_by_cle("...")`, jamais par libellé.
+
+    Sprint 9 v2 : ajout `description` (aide contextuelle UI) +
+    `ordre_affichage` (tri visuel par poste dans /parametres/tarifs).
     """
 
     __tablename__ = "tarif_poste"
@@ -40,6 +44,8 @@ class TarifPoste(Base):
     valeur_max: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     unite: Mapped[str] = mapped_column(String(30), nullable=False)
     actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    ordre_affichage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

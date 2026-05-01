@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -31,8 +31,10 @@ class Machine(Base):
     vitesse_moyenne_m_h: Mapped[int | None] = mapped_column(Integer)
     duree_calage_h: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
 
-    # actif / inactif / maintenance — validé côté Pydantic, colonne SQL souple
-    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="actif")
+    # Sprint 9 v2 : refactor `statut` String → `actif` Boolean.
+    # Mapping migration : 'actif'/'maintenance' → True, 'inactif' → False
+    # (perte info "maintenance" assumée par Eric brief 4.3).
+    actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     commentaire: Mapped[str | None] = mapped_column(Text)
 

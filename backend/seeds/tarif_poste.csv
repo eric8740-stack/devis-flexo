@@ -1,8 +1,11 @@
-id,cle,poste_numero,libelle,valeur_defaut,valeur_min,valeur_max,unite,actif
-1,matiere_prix_kg_defaut,1,Prix matière par kilo (défaut),1.7500,1.0000,2.5000,€/kg,true
-2,cliche_prix_couleur,3,Prix d'un cliché par couleur,45.0000,30.0000,60.0000,€/couleur,true
-3,calage_forfait,4,Calage forfaitaire par devis,225.0000,150.0000,300.0000,€/devis,true
-4,roulage_prix_horaire,5,Prix horaire de roulage presse,375.0000,250.0000,500.0000,€/h,true
-5,marge_confort_roulage_mm,1,Marge de confort en roulage (surface support),10.0000,5.0000,20.0000,mm,true
-6,finitions_prix_m2,6,Prix finitions par m²,0.1250,0.0500,0.2000,€/m²,true
-7,mo_prix_horaire,7,Prix horaire main d'œuvre,70.0000,50.0000,90.0000,€/h,true
+id,cle,poste_numero,libelle,valeur_defaut,valeur_min,valeur_max,unite,actif,description,ordre_affichage
+1,matiere_prix_kg_defaut,1,Prix matière par kilo (défaut),1.7500,1.0000,2.5000,€/kg,true,Valeur utilisée si le complexe choisi n'a pas de prix matière défini,1
+2,cliche_prix_couleur,3,Prix d'un cliché par couleur,45.0000,30.0000,60.0000,€/couleur,true,Coût d'un cliché par couleur (P3a). Multiplié par nb_couleurs_total,1
+3,calage_forfait,4,Calage forfaitaire par devis,225.0000,150.0000,300.0000,€/devis,true,Forfait de mise en route et calage (P4) appliqué une fois par devis,1
+4,roulage_prix_horaire,5,Prix horaire de roulage presse,375.0000,250.0000,500.0000,€/h,true,Prix horaire machine pour le roulage (P5). Multiplié par durée roulage,1
+5,marge_confort_roulage_mm,1,Marge de confort en roulage (surface support),10.0000,5.0000,20.0000,mm,true,Marge ajoutée à la laize utile pour le calcul de la surface support (P1),2
+6,finitions_prix_m2,6,Prix finitions par m²,0.1250,0.0500,0.2000,€/m²,true,Prix au m² des opérations de finition standard (P6),1
+7,mo_prix_horaire,7,Prix horaire main d'œuvre,70.0000,50.0000,90.0000,€/h,true,Prix horaire main d'œuvre opérateur (P7) pour calage et roulage,1
+8,outil_base_eur,3,Coût outil neuf (forfait fixe),200.0000,100.0000,500.0000,€,true,Forfait fabrication d'un nouvel outil de découpe (P3b mode nouvel outil),10
+9,outil_par_trace_eur,3,Coût par trace de complexité,50.0000,20.0000,150.0000,€,true,Coût additionnel par trace de complexité de l'outil neuf (P3b),11
+10,surcout_forme_speciale_pct,3,Majoration forme spéciale,1.4000,1.0000,2.0000,×,true,Multiplicateur appliqué au coût outil neuf si forme spéciale (P3b),12

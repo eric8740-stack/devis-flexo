@@ -1,7 +1,16 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -34,7 +43,8 @@ class Complexe(Base):
         ForeignKey("fournisseur.id", ondelete="SET NULL")
     )
 
-    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="actif")
+    # Sprint 9 v2 : refactor `statut` String ('actif'/'archive') → `actif` Boolean
+    actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     commentaire: Mapped[str | None] = mapped_column(Text)
 
     date_creation: Mapped[datetime] = mapped_column(

@@ -14,7 +14,8 @@ EXPECTED_COUNTS = {
     "complexe": 31,
     "catalogue": 5,
     # Sprint 3 Lot 3b — 5 tables paramétriques moteur v2
-    "tarif_poste": 7,
+    # Sprint 9 v2 — 7 préexistants + 3 nouveaux outillage (Dette 1 migrée)
+    "tarif_poste": 10,
     "tarif_encre": 5,
     "temps_operation_standard": 15,
     "correspondance_laize_metrage": 33,

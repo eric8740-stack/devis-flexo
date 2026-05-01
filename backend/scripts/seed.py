@@ -163,6 +163,9 @@ def seed_fournisseur(session: Session) -> int:
 def seed_machine(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "machine.csv")
     for row in rows:
+        # Sprint 9 v2 — `actif` Boolean (refactor depuis statut String)
+        actif_val = row.get("actif")
+        actif = _to_bool(actif_val) if actif_val is not None else True
         session.add(
             Machine(
                 id=_to_int(row["id"]),
@@ -174,7 +177,7 @@ def seed_machine(session: Session) -> int:
                 cout_horaire_eur=_to_float(row.get("cout_horaire_eur")),
                 vitesse_moyenne_m_h=_to_int(row.get("vitesse_moyenne_m_h")),
                 duree_calage_h=_to_float(row.get("duree_calage_h")),
-                statut=row.get("statut") or "actif",
+                actif=actif,
                 commentaire=row.get("commentaire"),
             )
         )
@@ -201,6 +204,9 @@ def seed_operation_finition(session: Session) -> int:
 def seed_partenaire_st(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "partenaire_st.csv")
     for row in rows:
+        # Sprint 9 v2 — `actif` Boolean (refactor depuis statut String)
+        actif_val = row.get("actif")
+        actif = _to_bool(actif_val) if actif_val is not None else True
         session.add(
             PartenaireST(
                 id=_to_int(row["id"]),
@@ -213,7 +219,7 @@ def seed_partenaire_st(session: Session) -> int:
                 delai_jours_moyen=_to_int(row.get("delai_jours_moyen")),
                 qualite_score=_to_int(row.get("qualite_score")),
                 commentaire=row.get("commentaire"),
-                statut=row.get("statut") or "actif",
+                actif=actif,
             )
         )
     return len(rows)
@@ -239,6 +245,9 @@ def seed_charge_mensuelle(session: Session) -> int:
 def seed_complexe(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "complexe.csv")
     for row in rows:
+        # Sprint 9 v2 — `actif` Boolean (refactor depuis statut String)
+        actif_val = row.get("actif")
+        actif = _to_bool(actif_val) if actif_val is not None else True
         session.add(
             Complexe(
                 id=_to_int(row["id"]),
@@ -249,7 +258,7 @@ def seed_complexe(session: Session) -> int:
                 adhesif_type=row.get("adhesif_type"),
                 prix_m2_eur=_to_float(row["prix_m2_eur"]),
                 fournisseur_id=_to_int(row.get("fournisseur_id")),
-                statut=row.get("statut") or "actif",
+                actif=actif,
                 commentaire=row.get("commentaire"),
             )
         )
@@ -286,6 +295,9 @@ def seed_catalogue(session: Session) -> int:
 def seed_tarif_poste(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "tarif_poste.csv")
     for row in rows:
+        # Sprint 9 v2 — colonnes description (Text NULL) + ordre_affichage (Integer)
+        ordre_val = row.get("ordre_affichage")
+        ordre = _to_int(ordre_val) if ordre_val is not None else 0
         session.add(
             TarifPoste(
                 id=_to_int(row["id"]),
@@ -297,6 +309,8 @@ def seed_tarif_poste(session: Session) -> int:
                 valeur_max=_to_float(row.get("valeur_max")),
                 unite=row["unite"],
                 actif=_to_bool(row.get("actif")),
+                description=row.get("description"),
+                ordre_affichage=ordre or 0,
             )
         )
     return len(rows)

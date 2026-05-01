@@ -27,7 +27,7 @@ def test_create_partenaire_returns_201():
     data = response.json()
     assert data["raison_sociale"] == "Pelliculage Lyonnais"
     assert data["qualite_score"] == 4
-    assert data["statut"] == "actif"
+    assert data["actif"] is True
 
 
 def test_get_partenaire_existing_returns_200():
@@ -52,12 +52,12 @@ def test_update_partenaire_modifies_field():
     ).json()
     response = client.put(
         f"/api/partenaires-st/{created['id']}",
-        json={"qualite_score": 5, "statut": "inactif"},
+        json={"qualite_score": 5, "actif": False},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["qualite_score"] == 5
-    assert data["statut"] == "inactif"
+    assert data["actif"] is False
 
 
 def test_delete_partenaire_returns_204():

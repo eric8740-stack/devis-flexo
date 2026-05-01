@@ -10,9 +10,10 @@ from app.db import SessionLocal
 from app.schemas.tarif_poste import TarifPosteCreate, TarifPosteUpdate
 
 
-def test_seed_loads_7_tarifs_poste():
+def test_seed_loads_10_tarifs_poste():
+    """Sprint 9 v2 : 7 préexistants + 3 nouveaux outillage (Dette 1 migrée)."""
     with SessionLocal() as db:
-        assert len(list_tarifs_poste(db)) == 7
+        assert len(list_tarifs_poste(db)) == 10
 
 
 def test_get_by_cle_returns_matching_record():

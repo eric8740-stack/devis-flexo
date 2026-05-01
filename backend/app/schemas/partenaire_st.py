@@ -4,7 +4,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 PrestationType = Literal["finition", "decoupe", "dorure", "autre"]
-StatutPartenaire = Literal["actif", "inactif"]
 
 
 class PartenaireSTBase(BaseModel):
@@ -17,7 +16,8 @@ class PartenaireSTBase(BaseModel):
     delai_jours_moyen: int | None = Field(default=None, ge=0)
     qualite_score: int | None = Field(default=None, ge=1, le=5)
     commentaire: str | None = None
-    statut: StatutPartenaire = "actif"
+    # Sprint 9 v2 — soft delete uniformisé Boolean (refactor depuis statut String)
+    actif: bool = True
 
 
 class PartenaireSTRead(PartenaireSTBase):
@@ -41,4 +41,4 @@ class PartenaireSTUpdate(BaseModel):
     delai_jours_moyen: int | None = Field(default=None, ge=0)
     qualite_score: int | None = Field(default=None, ge=1, le=5)
     commentaire: str | None = None
-    statut: StatutPartenaire | None = None
+    actif: bool | None = None

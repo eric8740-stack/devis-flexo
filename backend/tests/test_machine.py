@@ -26,7 +26,7 @@ def test_create_machine_returns_201():
         "vitesse_max_m_min": 200,
         "nb_couleurs": 8,
         "cout_horaire_eur": 60.0,
-        "statut": "actif",
+        "actif": True,
     }
     response = client.post("/api/machines", json=payload)
     assert response.status_code == 201
@@ -34,7 +34,7 @@ def test_create_machine_returns_201():
     assert data["id"] > 3
     assert data["nom"] == "TEST Press Unique"
     assert data["nb_couleurs"] == 8
-    assert data["statut"] == "actif"
+    assert data["actif"] is True
     assert float(data["laize_max_mm"]) == 330
     assert "date_creation" in data
     assert "date_maj" in data
@@ -77,12 +77,12 @@ def test_update_machine_modifies_field():
     ).json()
     response = client.put(
         f"/api/machines/{created['id']}",
-        json={"nb_couleurs": 6, "statut": "maintenance"},
+        json={"nb_couleurs": 6, "actif": False},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["nb_couleurs"] == 6
-    assert data["statut"] == "maintenance"
+    assert data["actif"] is False
     assert data["nom"] == "Test Press"  # non touché
 
 
@@ -97,10 +97,12 @@ def test_delete_machine_returns_204_then_get_404():
     assert response.status_code == 404
 
 
-def test_create_machine_invalid_statut_returns_422():
+def test_create_machine_invalid_actif_returns_422():
+    """Sprint 9 v2 : `actif` est Boolean strict, une string non-coercible
+    déclenche une 422 Pydantic."""
     response = client.post(
         "/api/machines",
-        json={"nom": "X", "laize_max_mm": _DEFAULT_LAIZE, "statut": "n_importe_quoi"},
+        json={"nom": "X", "laize_max_mm": _DEFAULT_LAIZE, "actif": "n_importe_quoi"},
     )
     assert response.status_code == 422
 

@@ -1,10 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
-StatutMachine = Literal["actif", "inactif", "maintenance"]
 
 
 class MachineBase(BaseModel):
@@ -20,7 +17,8 @@ class MachineBase(BaseModel):
     # Paramètres calcul S3
     vitesse_moyenne_m_h: int | None = Field(default=None, gt=0)
     duree_calage_h: float | None = Field(default=None, ge=0)
-    statut: StatutMachine = "actif"
+    # Sprint 9 v2 — soft delete uniformisé Boolean (refactor depuis statut String)
+    actif: bool = True
     commentaire: str | None = None
 
 
@@ -46,5 +44,5 @@ class MachineUpdate(BaseModel):
     cout_horaire_eur: float | None = Field(default=None, ge=0)
     vitesse_moyenne_m_h: int | None = Field(default=None, gt=0)
     duree_calage_h: float | None = Field(default=None, ge=0)
-    statut: StatutMachine | None = None
+    actif: bool | None = None
     commentaire: str | None = None

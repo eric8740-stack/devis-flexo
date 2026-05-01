@@ -1,5 +1,5 @@
-id,raison_sociale,siret,contact_nom,contact_email,contact_tel,prestation_type,delai_jours_moyen,qualite_score,commentaire,statut
-1,Pelliculage Express SARL,52364125700089,M. Bertrand,contact@pelliculage-express.fr,04 78 12 34 56,finition,3,4,Spécialiste pelliculage grand format,actif
-2,Dorure Lyonnaise,49587456300012,Mme Lavoisier,info@dorure-lyon.fr,04 72 88 99 11,dorure,7,5,Or véritable + estampage à chaud,actif
-3,Découpe Numérique Pro,67498523100054,M. Mercier,contact@decoupe-pro.fr,01 60 45 78 90,decoupe,5,4,Découpe complexe basse-cadence numérique,actif
-4,Atelier Dos Carré,12378945600032,Mme Faure,production@atelier-dos.fr,03 26 78 12 45,autre,4,3,Dos carré pour produits de niche,inactif
+id,raison_sociale,siret,contact_nom,contact_email,contact_tel,prestation_type,delai_jours_moyen,qualite_score,commentaire,actif
+1,Pelliculage Express SARL,52364125700089,M. Bertrand,contact@pelliculage-express.fr,04 78 12 34 56,finition,3,4,Spécialiste pelliculage grand format,true
+2,Dorure Lyonnaise,49587456300012,Mme Lavoisier,info@dorure-lyon.fr,04 72 88 99 11,dorure,7,5,Or véritable + estampage à chaud,true
+3,Découpe Numérique Pro,67498523100054,M. Mercier,contact@decoupe-pro.fr,01 60 45 78 90,decoupe,5,4,Découpe complexe basse-cadence numérique,true
+4,Atelier Dos Carré,12378945600032,Mme Faure,production@atelier-dos.fr,03 26 78 12 45,autre,4,3,Dos carré pour produits de niche,false

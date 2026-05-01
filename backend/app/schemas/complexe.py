@@ -15,7 +15,6 @@ FamilleComplexe = Literal[
     "papier_kraft",
     "papier_verge",
 ]
-StatutComplexe = Literal["actif", "archive"]
 
 
 class ComplexeBase(BaseModel):
@@ -26,7 +25,8 @@ class ComplexeBase(BaseModel):
     adhesif_type: str | None = Field(default=None, max_length=50)
     prix_m2_eur: float = Field(gt=0)  # CRITIQUE pour le moteur de calcul S3
     fournisseur_id: int | None = None
-    statut: StatutComplexe = "actif"
+    # Sprint 9 v2 — soft delete uniformisé Boolean (refactor depuis statut String)
+    actif: bool = True
     commentaire: str | None = None
 
 
@@ -49,5 +49,5 @@ class ComplexeUpdate(BaseModel):
     adhesif_type: str | None = Field(default=None, max_length=50)
     prix_m2_eur: float | None = Field(default=None, gt=0)
     fournisseur_id: int | None = None
-    statut: StatutComplexe | None = None
+    actif: bool | None = None
     commentaire: str | None = None

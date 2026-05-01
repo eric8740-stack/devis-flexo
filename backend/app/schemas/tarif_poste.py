@@ -13,6 +13,8 @@ class TarifPosteBase(BaseModel):
     valeur_max: Decimal | None = None
     unite: str = Field(min_length=1, max_length=30)
     actif: bool = True
+    description: str | None = None
+    ordre_affichage: int = Field(default=0, ge=0)
 
 
 class TarifPosteRead(TarifPosteBase):
@@ -37,3 +39,5 @@ class TarifPosteUpdate(BaseModel):
     valeur_max: Decimal | None = None
     unite: str | None = Field(default=None, min_length=1, max_length=30)
     actif: bool | None = None
+    description: str | None = None
+    ordre_affichage: int | None = Field(default=None, ge=0)
