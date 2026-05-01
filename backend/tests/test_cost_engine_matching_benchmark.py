@@ -217,3 +217,193 @@ def test_v7a_writes_matching_breakdown_md():
     REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")
     assert REPORT_PATH.exists()
     assert REPORT_PATH.stat().st_size > 0
+
+
+# ---------------------------------------------------------------------------
+# V8a-V8e — Hotfix bug prix_au_mille mode matching (01/05/2026)
+#
+# Tests qui auraient capté le bug d'oubli de nb_poses_developpement dans
+# orchestrator._compute_matching (lignes 167-174). Avant ce hotfix, tous
+# les cas figés Sprint 5/7 V2 avaient nb_poses_developpement=1 (default
+# Pydantic), donc le bug était invisible. Le cas Eric ICE 60×100 mm
+# 2 poses_l × 2 poses_d a déclenché la détection en prod.
+#
+# Vérifié manuellement avant commit : V8a-V8d ÉCHOUENT sur le code AVANT
+# Hotfix-A (orchestrator.py sans le facteur nb_poses_developpement).
+# V8e reste vert avec ou sans fix (poses_d=1 → × 1 neutre = garde-fou
+# anti-régression du fix lui-même).
+# ---------------------------------------------------------------------------
+
+
+def test_v8a_v1a_matching_poses_d_2_divides_prix_mille_by_2():
+    """V1a payload + nb_poses_developpement=2 → prix_au_mille ÷ 2 vs V7a.
+
+    V7a (poses_d=1) → 7,00 €/1000. Avec poses_d=2, on imprime 2× plus
+    d'étiquettes par mètre linéaire dans le sens développement →
+    prix_au_mille divisé par 2 = 3,50 €/1000.
+
+    Sans le fix, prix_au_mille resterait à 7,00 (× 1 implicite) → fail.
+    """
+    payload = _devis_v1a_matching().model_copy(
+        update={"nb_poses_developpement": 2}
+    )
+    with SessionLocal() as db:
+        out = MoteurDevis(db).calculer(payload)
+    # Z + HT préservés (postes/cylindres indépendants de poses_d)
+    assert [c.z for c in out.candidats] == [134, 121, 108]
+    for c in out.candidats:
+        assert c.prix_vente_ht_eur == EXPECTED_HT_V1A
+        # 7.00 / 2 = 3.50 EXACT (V7a / 2)
+        assert c.prix_au_mille_eur == Decimal("3.50"), (
+            f"Cylindre Z={c.z} : prix_au_mille={c.prix_au_mille_eur} "
+            f"≠ 3.50 attendu (V7a 7.00 / poses_d=2). Bug nb_poses_developpement ?"
+        )
+
+
+def test_v8b_cas_eric_ice_60x100_2x2_consistance_mode_agnostique():
+    """Cas réel Eric ICE 60×100 mm, 2 poses_l × 2 poses_d, 30 000 m.
+
+    Vérifie consistance mode-agnostique : prix_au_mille_matching[0] et
+    prix_au_mille_manuel doivent être à ±10%% l'un de l'autre (le delta
+    vient de l'écart pas_idéal manuel vs pas_cylindre matching).
+
+    Sans le fix : ratio matching/manuel = ~2.146 (× nb_poses_developpement)
+                  → assertion échoue.
+    Avec le fix : ratio ~1.07 → assertion passe.
+    """
+    base = DevisInput(
+        complexe_id=31,
+        laize_utile_mm=220,
+        ml_total=30000,
+        nb_couleurs_par_type={"process_cmj": 4, "pantone": 1},
+        machine_id=1,
+        format_etiquette_largeur_mm=60,
+        format_etiquette_hauteur_mm=100,
+        nb_poses_largeur=2,
+        nb_poses_developpement=2,
+        forfaits_st=[
+            PartenaireSTForfait(partenaire_st_id=1, montant_eur=Decimal("50.00"))
+        ],
+    )
+    manuel = base.model_copy(
+        update={"mode_calcul": "manuel", "intervalle_mm": Decimal("3.5")}
+    )
+    matching = base.model_copy(update={"mode_calcul": "matching"})
+
+    with SessionLocal() as db:
+        moteur = MoteurDevis(db)
+        out_m = moteur.calculer(manuel)
+        out_x = moteur.calculer(matching)
+
+    # HT identique entre les 2 modes (postes ne dépendent pas du mode)
+    assert out_m.prix_vente_ht_eur == out_x.candidats[0].prix_vente_ht_eur
+
+    # Consistance prix_au_mille : matching ~ manuel à ±10%%
+    ratio = out_x.candidats[0].prix_au_mille_eur / out_m.prix_au_mille_eur
+    assert Decimal("0.9") <= ratio <= Decimal("1.1"), (
+        f"Ratio matching/manuel = {ratio:.3f} hors [0.9, 1.1]. "
+        f"manuel={out_m.prix_au_mille_eur} matching={out_x.candidats[0].prix_au_mille_eur}. "
+        "Bug d'oubli de dimension de poses dans un des modes ?"
+    )
+
+
+def test_v8c_format_80x60_2_poses_l_3_poses_d_facteur_6_applique():
+    """Format 80×60, 2 poses_l × 3 poses_d, mode matching.
+
+    Vérifie que le facteur 6 (= 2 × 3) est bien appliqué : le prix_au_mille
+    avec poses_d=3 doit être 1/3 de celui avec poses_d=1 (toutes choses
+    égales par ailleurs).
+
+    Sans le fix, les 2 prix seraient identiques (poses_d ignoré) → ratio=1
+    au lieu de 1/3 → fail.
+    """
+    base = DevisInput(
+        complexe_id=31,
+        laize_utile_mm=220,
+        ml_total=10000,
+        nb_couleurs_par_type={"process_cmj": 4, "pantone": 1},
+        machine_id=1,
+        format_etiquette_largeur_mm=80,
+        format_etiquette_hauteur_mm=60,
+        nb_poses_largeur=2,
+        mode_calcul="matching",
+        forfaits_st=[],
+    )
+    poses_d_1 = base.model_copy(update={"nb_poses_developpement": 1})
+    poses_d_3 = base.model_copy(update={"nb_poses_developpement": 3})
+
+    with SessionLocal() as db:
+        moteur = MoteurDevis(db)
+        out_1 = moteur.calculer(poses_d_1)
+        out_3 = moteur.calculer(poses_d_3)
+
+    # HT identique (postes indépendants de poses_d)
+    assert out_1.candidats[0].prix_vente_ht_eur == out_3.candidats[0].prix_vente_ht_eur
+    # Mêmes cylindres (matcher indépendant de poses_d)
+    assert [c.z for c in out_1.candidats] == [c.z for c in out_3.candidats]
+
+    # prix_au_mille_3 = prix_au_mille_1 / 3 (à 1 cent près pour quantize)
+    expected = (out_1.candidats[0].prix_au_mille_eur / Decimal(3)).quantize(
+        Decimal("0.01")
+    )
+    assert out_3.candidats[0].prix_au_mille_eur == expected, (
+        f"poses_d=1 → {out_1.candidats[0].prix_au_mille_eur}, "
+        f"poses_d=3 → {out_3.candidats[0].prix_au_mille_eur}, "
+        f"attendu {expected} (= poses_d_1 / 3). Facteur poses_d non appliqué ?"
+    )
+
+
+def test_v8d_coherence_mode_agnostique_50x80_3_2():
+    """Anti-régression structurelle : payload générique 50×80, 3×2 poses,
+    20 000 m. Le ratio prix_au_mille_matching / prix_au_mille_manuel doit
+    rester proche de 1 (pas un facteur N), TOUT en mode confondu.
+
+    Vise à capter tout futur bug similaire (oubli d'une dimension dans
+    un des modes), pas seulement le bug actuel.
+    """
+    base = DevisInput(
+        complexe_id=31,
+        laize_utile_mm=220,
+        ml_total=20000,
+        nb_couleurs_par_type={"process_cmj": 4, "pantone": 1},
+        machine_id=1,
+        format_etiquette_largeur_mm=50,
+        format_etiquette_hauteur_mm=80,
+        nb_poses_largeur=3,
+        nb_poses_developpement=2,
+        forfaits_st=[],
+    )
+    manuel = base.model_copy(
+        update={"mode_calcul": "manuel", "intervalle_mm": Decimal("3")}
+    )
+    matching = base.model_copy(update={"mode_calcul": "matching"})
+
+    with SessionLocal() as db:
+        moteur = MoteurDevis(db)
+        out_m = moteur.calculer(manuel)
+        out_x = moteur.calculer(matching)
+
+    ratio = out_x.candidats[0].prix_au_mille_eur / out_m.prix_au_mille_eur
+    assert Decimal("0.85") <= ratio <= Decimal("1.15"), (
+        f"Ratio matching/manuel = {ratio:.3f} hors [0.85, 1.15] sur 50×80, "
+        f"3×2 poses, 20000 m. manuel={out_m.prix_au_mille_eur} "
+        f"matching={out_x.candidats[0].prix_au_mille_eur}. "
+        "Soupçon de bug oubli dimension de poses dans un mode."
+    )
+
+
+def test_v8e_anti_regression_v7a_poses_d_1_reste_700():
+    """Garde-fou anti-régression du fix : V7a (poses_d=1) doit rester EXACT
+    à 7.00 €/1000. Le `× 1` du facteur poses_d est neutre, le hotfix ne
+    doit donc rien changer pour ce cas figé Sprint 7 V2.
+
+    Test redondant avec test_v7a_v1a_matching_prix_au_mille_700 mais
+    explicité ici pour matérialiser le garde-fou hotfix dans le bloc V8.
+    """
+    with SessionLocal() as db:
+        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+    for c in out.candidats:
+        assert c.prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A, (
+            f"REGRESSION HOTFIX : V7a prix_au_mille = {c.prix_au_mille_eur} "
+            f"≠ {EXPECTED_PRIX_MILLE_V7A} EXACT figé Sprint 7 V2 !"
+        )
