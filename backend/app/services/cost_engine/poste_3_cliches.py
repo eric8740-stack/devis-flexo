@@ -9,13 +9,13 @@ Sous-postes :
     SI devis.outil_decoupe_existant = True :
         cout = 0 €  (outil amorti, pas de re-facturation)
     SINON (nouvel outil) :
-        cout_base = 200 + (nb_traces_complexite × 50)
+        cout_base = tarif("outil_base_eur") + (nb_traces_complexite × tarif("outil_par_trace_eur"))
         SI devis.forme_speciale :
-            cout = cout_base × 1.40    (surcoût plaque +40 %)
+            cout = cout_base × tarif("surcout_forme_speciale_pct")
         SINON :
             cout = cout_base
 
-    Validation arithmétique :
+    Validation arithmétique (avec valeurs seed défaut S9 v2 200/50/1.40) :
       Existant                                      :   0 €
       Nouveau · 1 tracé   · simple                  : 250 €
       Nouveau · 4 tracés  · simple                  : 400 €
@@ -24,6 +24,10 @@ Sous-postes :
 Total P3 = 3a + 3b. Le `outil_decoupe_id` n'impacte pas le calcul (cas
 existant = 0 € quel que soit l'outil identifié), il sert uniquement à
 tracer dans `details` pour audit en démo.
+
+Sprint 9 v2 Lot 9b : les 3 constantes outillage (200/50/1.40) sont
+migrées vers la table `tarif_poste` (Dette 1 résorbée). Valeurs seedées
+identiques aux constantes en dur → V1a/V1b/V1b forme spé EXACT préservés.
 """
 import logging
 from decimal import Decimal
@@ -37,9 +41,19 @@ from app.services.cost_engine.errors import CostEngineError
 
 logger = logging.getLogger(__name__)
 
-COUT_OUTIL_BASE_FIXE = Decimal("200")
-COUT_OUTIL_PAR_TRACE = Decimal("50")
-SURCOUT_FORME_SPECIALE = Decimal("1.40")
+
+def _get_tarif_value(db: Session, cle: str) -> Decimal:
+    """Charge la valeur d'un paramètre tarifaire ou lève une erreur explicite.
+
+    Centralise la lecture pour Sprint 9 v2 — toutes les valeurs paramétrables
+    du moteur transitent par `tarif_poste`.
+    """
+    tarif = get_by_cle(db, cle)
+    if tarif is None:
+        raise CostEngineError(
+            f"Tarif {cle!r} introuvable — seed tarif_poste manquant"
+        )
+    return Decimal(tarif.valeur_defaut)
 
 
 class CalculateurPoste3ClichesOutillage:
@@ -51,27 +65,28 @@ class CalculateurPoste3ClichesOutillage:
 
     def calculer(self, devis: DevisInput) -> PosteResult:
         # 3a Clichés (inchangé Sprint 3)
-        tarif = get_by_cle(self.db, "cliche_prix_couleur")
-        if tarif is None:
-            raise CostEngineError(
-                "Tarif 'cliche_prix_couleur' introuvable — seed tarif_poste manquant"
-            )
-        prix_couleur = Decimal(tarif.valeur_defaut)
+        prix_couleur = _get_tarif_value(self.db, "cliche_prix_couleur")
         nb_couleurs_total = sum(devis.nb_couleurs_par_type.values())
         cout_3a = (Decimal(nb_couleurs_total) * prix_couleur).quantize(Decimal("0.01"))
 
-        # 3b Outil découpe
+        # 3b Outil découpe — Sprint 9 v2 : lecture des 3 valeurs depuis tarif_poste
         if devis.outil_decoupe_existant:
             cout_3b = Decimal("0.00")
             mode_outil = "existant"
             surcout_pct = 0
         else:
-            cout_base = COUT_OUTIL_BASE_FIXE + (
-                Decimal(devis.nb_traces_complexite) * COUT_OUTIL_PAR_TRACE
+            outil_base = _get_tarif_value(self.db, "outil_base_eur")
+            outil_par_trace = _get_tarif_value(self.db, "outil_par_trace_eur")
+            cout_base = outil_base + (
+                Decimal(devis.nb_traces_complexite) * outil_par_trace
             )
             if devis.forme_speciale:
-                cout_3b = (cout_base * SURCOUT_FORME_SPECIALE).quantize(Decimal("0.01"))
-                surcout_pct = 40
+                surcout_factor = _get_tarif_value(
+                    self.db, "surcout_forme_speciale_pct"
+                )
+                cout_3b = (cout_base * surcout_factor).quantize(Decimal("0.01"))
+                # Le pct affiché = (factor - 1) × 100 (ex. 1.40 → 40 %)
+                surcout_pct = int(((surcout_factor - Decimal("1")) * Decimal("100")).quantize(Decimal("1")))
             else:
                 cout_3b = cout_base.quantize(Decimal("0.01"))
                 surcout_pct = 0
@@ -101,7 +116,3 @@ class CalculateurPoste3ClichesOutillage:
                 "surcout_forme_speciale_pct": surcout_pct,
             },
         )
-
-
-# Alias rétrocompat pour orchestrator (sera mis à jour dans cette même PR)
-CalculateurPoste3Cliches = CalculateurPoste3ClichesOutillage
