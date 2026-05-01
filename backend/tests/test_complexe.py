@@ -67,7 +67,8 @@ def test_update_complexe_modifies_prix_m2():
     assert float(response.json()["prix_m2_eur"]) == 1.55
 
 
-def test_delete_complexe_returns_204():
+def test_delete_complexe_soft_delete_then_reactiver():
+    """Sprint 9 v2 — DELETE = soft delete (`actif=False`)."""
     created = client.post(
         "/api/complexes",
         json={"reference": "À_ZAPPER", "famille": "autre", "prix_m2_eur": 0.5},
@@ -79,8 +80,19 @@ def test_delete_complexe_returns_204():
         "/api/complexes",
         json={"reference": "ZAP_OK", "famille": "pp", "prix_m2_eur": 0.5},
     ).json()
-    response = client.delete(f"/api/complexes/{created['id']}")
+    complexe_id = created["id"]
+    response = client.delete(f"/api/complexes/{complexe_id}")
     assert response.status_code == 204
+
+    # Le record existe toujours et est marqué inactif
+    response = client.get(f"/api/complexes/{complexe_id}")
+    assert response.status_code == 200
+    assert response.json()["actif"] is False
+
+    # Réactivation
+    response = client.post(f"/api/complexes/{complexe_id}/reactiver")
+    assert response.status_code == 200
+    assert response.json()["actif"] is True
 
 
 def test_create_complexe_negative_prix_returns_422():

@@ -5,15 +5,16 @@ from app.schemas.partenaire_st import PartenaireSTCreate, PartenaireSTUpdate
 
 
 def list_partenaires(
-    db: Session, skip: int = 0, limit: int = 50
+    db: Session,
+    skip: int = 0,
+    limit: int = 50,
+    include_inactives: bool = False,
 ) -> list[PartenaireST]:
-    return (
-        db.query(PartenaireST)
-        .order_by(PartenaireST.id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    """Sprint 9 v2 — `include_inactives=False` (default) filtre actif=True."""
+    query = db.query(PartenaireST)
+    if not include_inactives:
+        query = query.filter(PartenaireST.actif.is_(True))
+    return query.order_by(PartenaireST.id).offset(skip).limit(limit).all()
 
 
 def get_partenaire(db: Session, partenaire_id: int) -> PartenaireST | None:
@@ -44,9 +45,20 @@ def update_partenaire(
 
 
 def delete_partenaire(db: Session, partenaire_id: int) -> bool:
+    """Sprint 9 v2 — soft delete (passe `actif=False`)."""
     p = get_partenaire(db, partenaire_id)
     if p is None:
         return False
-    db.delete(p)
+    p.actif = False
+    db.commit()
+    return True
+
+
+def reactiver_partenaire(db: Session, partenaire_id: int) -> bool:
+    """Sprint 9 v2 — passe `actif=True`."""
+    p = get_partenaire(db, partenaire_id)
+    if p is None:
+        return False
+    p.actif = True
     db.commit()
     return True

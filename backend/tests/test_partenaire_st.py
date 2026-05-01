@@ -5,11 +5,19 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_list_partenaires_returns_seeded_4():
+def test_list_partenaires_returns_3_actifs_by_default():
+    """Sprint 9 v2 — 4 partenaires seedés dont 1 inactif (Atelier Dos Carré).
+
+    GET sans include_inactives → 3 actifs.
+    GET ?include_inactives=true → 4.
+    """
     response = client.get("/api/partenaires-st")
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 4
+    assert len(response.json()) == 3
+
+    response = client.get("/api/partenaires-st?include_inactives=true")
+    assert response.status_code == 200
+    assert len(response.json()) == 4
 
 
 def test_create_partenaire_returns_201():
@@ -60,12 +68,28 @@ def test_update_partenaire_modifies_field():
     assert data["actif"] is False
 
 
-def test_delete_partenaire_returns_204():
+def test_delete_partenaire_soft_delete_then_reactiver():
+    """Sprint 9 v2 — DELETE = soft delete (`actif=False`)."""
     created = client.post(
         "/api/partenaires-st", json={"raison_sociale": "À zapper"}
     ).json()
-    response = client.delete(f"/api/partenaires-st/{created['id']}")
+    partenaire_id = created["id"]
+    response = client.delete(f"/api/partenaires-st/{partenaire_id}")
     assert response.status_code == 204
+
+    # Le record reste accessible via GET id, marqué inactif
+    response = client.get(f"/api/partenaires-st/{partenaire_id}")
+    assert response.status_code == 200
+    assert response.json()["actif"] is False
+
+    # Liste include_inactives=true le contient
+    listed = client.get("/api/partenaires-st?include_inactives=true").json()
+    assert any(p["id"] == partenaire_id and p["actif"] is False for p in listed)
+
+    # Réactivation
+    response = client.post(f"/api/partenaires-st/{partenaire_id}/reactiver")
+    assert response.status_code == 200
+    assert response.json()["actif"] is True
 
 
 def test_create_partenaire_invalid_qualite_score_returns_422():

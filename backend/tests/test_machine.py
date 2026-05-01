@@ -86,14 +86,47 @@ def test_update_machine_modifies_field():
     assert data["nom"] == "Test Press"  # non touché
 
 
-def test_delete_machine_returns_204_then_get_404():
+def test_delete_machine_soft_delete_then_reactiver():
+    """Sprint 9 v2 — DELETE = soft delete (`actif=False`).
+
+    La machine reste consultable via GET /id, disparaît de la liste par
+    défaut (filtre actif=True), réapparaît avec ?include_inactives=true,
+    et peut être réactivée via POST /id/reactiver.
+    """
     created = client.post(
         "/api/machines",
         json={"nom": "À supprimer", "laize_max_mm": _DEFAULT_LAIZE},
     ).json()
-    response = client.delete(f"/api/machines/{created['id']}")
+    machine_id = created["id"]
+
+    # DELETE soft : 204, le record existe toujours en BDD
+    response = client.delete(f"/api/machines/{machine_id}")
     assert response.status_code == 204
-    response = client.get(f"/api/machines/{created['id']}")
+
+    # GET individuel reste accessible (utile pour la modale de réactivation)
+    response = client.get(f"/api/machines/{machine_id}")
+    assert response.status_code == 200
+    assert response.json()["actif"] is False
+
+    # Liste par défaut filtre actif=True → la machine n'apparaît plus
+    listed_ids = [m["id"] for m in client.get("/api/machines").json()]
+    assert machine_id not in listed_ids
+
+    # Liste include_inactives=true → la machine apparaît avec actif=False
+    listed_with_inactives = client.get("/api/machines?include_inactives=true").json()
+    inactif = next(m for m in listed_with_inactives if m["id"] == machine_id)
+    assert inactif["actif"] is False
+
+    # Réactivation : 200, actif=True, réapparaît dans la liste par défaut
+    response = client.post(f"/api/machines/{machine_id}/reactiver")
+    assert response.status_code == 200
+    assert response.json()["actif"] is True
+    listed_ids = [m["id"] for m in client.get("/api/machines").json()]
+    assert machine_id in listed_ids
+
+
+def test_reactiver_machine_missing_returns_404():
+    response = client.post("/api/machines/9999/reactiver")
     assert response.status_code == 404
 
 

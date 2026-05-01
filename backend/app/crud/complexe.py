@@ -5,11 +5,16 @@ from app.schemas.complexe import ComplexeCreate, ComplexeUpdate
 
 
 def list_complexes(
-    db: Session, skip: int = 0, limit: int = 50
+    db: Session,
+    skip: int = 0,
+    limit: int = 50,
+    include_inactives: bool = False,
 ) -> list[Complexe]:
-    return (
-        db.query(Complexe).order_by(Complexe.id).offset(skip).limit(limit).all()
-    )
+    """Sprint 9 v2 — `include_inactives=False` (default) filtre actif=True."""
+    query = db.query(Complexe)
+    if not include_inactives:
+        query = query.filter(Complexe.actif.is_(True))
+    return query.order_by(Complexe.id).offset(skip).limit(limit).all()
 
 
 def get_complexe(db: Session, complexe_id: int) -> Complexe | None:
@@ -38,9 +43,20 @@ def update_complexe(
 
 
 def delete_complexe(db: Session, complexe_id: int) -> bool:
+    """Sprint 9 v2 — soft delete (passe `actif=False`)."""
     c = get_complexe(db, complexe_id)
     if c is None:
         return False
-    db.delete(c)
+    c.actif = False
+    db.commit()
+    return True
+
+
+def reactiver_complexe(db: Session, complexe_id: int) -> bool:
+    """Sprint 9 v2 — passe `actif=True`."""
+    c = get_complexe(db, complexe_id)
+    if c is None:
+        return False
+    c.actif = True
     db.commit()
     return True
