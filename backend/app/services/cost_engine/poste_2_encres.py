@@ -29,8 +29,10 @@ class CalculateurPoste2Encres:
     POSTE_NUMERO = 2
     LIBELLE = "Encres"
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, entreprise_id: int) -> None:
+        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_encre."""
         self.db = db
+        self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
         surface_m2 = (
@@ -44,7 +46,7 @@ class CalculateurPoste2Encres:
         for type_encre, nb_couleurs in devis.nb_couleurs_par_type.items():
             if nb_couleurs <= 0:
                 continue
-            tarif = get_by_type_encre(self.db, type_encre)
+            tarif = get_by_type_encre(self.db, type_encre, self.entreprise_id)
             if tarif is None:
                 raise CostEngineError(
                     f"type_encre {type_encre!r} inconnu en base — vérifier seed tarif_encre"

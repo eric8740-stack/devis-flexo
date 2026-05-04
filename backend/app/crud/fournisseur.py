@@ -22,9 +22,11 @@ def get_fournisseur(db: Session, fournisseur_id: int) -> Fournisseur | None:
     )
 
 
-def create_fournisseur(db: Session, data: FournisseurCreate) -> Fournisseur:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    fournisseur = Fournisseur(entreprise_id=1, **data.model_dump())
+def create_fournisseur(
+    db: Session, data: FournisseurCreate, entreprise_id: int
+) -> Fournisseur:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    fournisseur = Fournisseur(entreprise_id=entreprise_id, **data.model_dump())
     db.add(fournisseur)
     db.commit()
     db.refresh(fournisseur)

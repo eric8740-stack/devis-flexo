@@ -27,9 +27,11 @@ def get_charge(db: Session, charge_id: int) -> ChargeMensuelle | None:
     )
 
 
-def create_charge(db: Session, data: ChargeMensuelleCreate) -> ChargeMensuelle:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    c = ChargeMensuelle(entreprise_id=1, **data.model_dump())
+def create_charge(
+    db: Session, data: ChargeMensuelleCreate, entreprise_id: int
+) -> ChargeMensuelle:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    c = ChargeMensuelle(entreprise_id=entreprise_id, **data.model_dump())
     db.add(c)
     db.commit()
     db.refresh(c)

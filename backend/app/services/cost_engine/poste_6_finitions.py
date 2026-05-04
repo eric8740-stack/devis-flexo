@@ -26,11 +26,13 @@ class CalculateurPoste6Finitions:
     POSTE_NUMERO = 6
     LIBELLE = "Finitions"
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, entreprise_id: int) -> None:
+        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
         self.db = db
+        self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
-        tarif = get_by_cle(self.db, "finitions_prix_m2")
+        tarif = get_by_cle(self.db, "finitions_prix_m2", self.entreprise_id)
         if tarif is None:
             raise CostEngineError(
                 "Tarif 'finitions_prix_m2' introuvable — seed tarif_poste manquant"

@@ -21,9 +21,11 @@ def get_complexe(db: Session, complexe_id: int) -> Complexe | None:
     return db.query(Complexe).filter(Complexe.id == complexe_id).first()
 
 
-def create_complexe(db: Session, data: ComplexeCreate) -> Complexe:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    c = Complexe(entreprise_id=1, **data.model_dump())
+def create_complexe(
+    db: Session, data: ComplexeCreate, entreprise_id: int
+) -> Complexe:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    c = Complexe(entreprise_id=entreprise_id, **data.model_dump())
     db.add(c)
     db.commit()
     db.refresh(c)

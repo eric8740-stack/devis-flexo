@@ -42,13 +42,12 @@ from app.services.cost_engine.errors import CostEngineError
 logger = logging.getLogger(__name__)
 
 
-def _get_tarif_value(db: Session, cle: str) -> Decimal:
+def _get_tarif_value(db: Session, cle: str, entreprise_id: int) -> Decimal:
     """Charge la valeur d'un paramètre tarifaire ou lève une erreur explicite.
 
-    Centralise la lecture pour Sprint 9 v2 — toutes les valeurs paramétrables
-    du moteur transitent par `tarif_poste`.
+    Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste.
     """
-    tarif = get_by_cle(db, cle)
+    tarif = get_by_cle(db, cle, entreprise_id)
     if tarif is None:
         raise CostEngineError(
             f"Tarif {cle!r} introuvable — seed tarif_poste manquant"
@@ -60,12 +59,16 @@ class CalculateurPoste3ClichesOutillage:
     POSTE_NUMERO = 3
     LIBELLE = "Outillage / Clichés"
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, entreprise_id: int) -> None:
+        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
         self.db = db
+        self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
         # 3a Clichés (inchangé Sprint 3)
-        prix_couleur = _get_tarif_value(self.db, "cliche_prix_couleur")
+        prix_couleur = _get_tarif_value(
+            self.db, "cliche_prix_couleur", self.entreprise_id
+        )
         nb_couleurs_total = sum(devis.nb_couleurs_par_type.values())
         cout_3a = (Decimal(nb_couleurs_total) * prix_couleur).quantize(Decimal("0.01"))
 
@@ -75,14 +78,18 @@ class CalculateurPoste3ClichesOutillage:
             mode_outil = "existant"
             surcout_pct = 0
         else:
-            outil_base = _get_tarif_value(self.db, "outil_base_eur")
-            outil_par_trace = _get_tarif_value(self.db, "outil_par_trace_eur")
+            outil_base = _get_tarif_value(
+                self.db, "outil_base_eur", self.entreprise_id
+            )
+            outil_par_trace = _get_tarif_value(
+                self.db, "outil_par_trace_eur", self.entreprise_id
+            )
             cout_base = outil_base + (
                 Decimal(devis.nb_traces_complexite) * outil_par_trace
             )
             if devis.forme_speciale:
                 surcout_factor = _get_tarif_value(
-                    self.db, "surcout_forme_speciale_pct"
+                    self.db, "surcout_forme_speciale_pct", self.entreprise_id
                 )
                 cout_3b = (cout_base * surcout_factor).quantize(Decimal("0.01"))
                 # Le pct affiché = (factor - 1) × 100 (ex. 1.40 → 40 %)

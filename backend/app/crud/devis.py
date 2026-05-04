@@ -95,17 +95,22 @@ SORT_MAP = {
 
 def list_devis(
     db: Session,
+    entreprise_id: int,
     page: int = 1,
     per_page: int = 25,
     search: str | None = None,
     statut: str | None = None,
     sort: str = "date_desc",
 ) -> tuple[list[Devis], int]:
-    """Liste paginée + tri + recherche (numero ou raison sociale client).
+    """Liste paginée + tri + recherche scopée par entreprise (S12-C).
 
     Retourne (items_de_la_page, total_count).
     """
-    query = db.query(Devis).outerjoin(Client, Devis.client_id == Client.id)
+    query = (
+        db.query(Devis)
+        .outerjoin(Client, Devis.client_id == Client.id)
+        .filter(Devis.entreprise_id == entreprise_id)
+    )
 
     if statut:
         query = query.filter(Devis.statut == statut)
@@ -135,13 +140,18 @@ def get_devis(db: Session, devis_id: int) -> Devis | None:
     return _attach_relation_names(devis, db)
 
 
-def create_devis(db: Session, data: DevisCreate) -> Devis:
-    """Crée un devis : génère numero auto + extrait dénormalisés."""
+def create_devis(
+    db: Session, data: DevisCreate, entreprise_id: int
+) -> Devis:
+    """Crée un devis : génère numero auto + extrait dénormalisés.
+
+    S12-C : `entreprise_id` injecté par le router via user.entreprise_id.
+    """
     denorm = _extract_denormalised_fields(data.payload_input, data.payload_output)
     numero = generate_next_numero(db)
     devis = Devis(
-        # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-        entreprise_id=1,
+        # S12-C : entreprise_id passé en paramètre par le router (user.entreprise_id)
+        entreprise_id=entreprise_id,
         numero=numero,
         statut=data.statut,
         client_id=data.client_id,

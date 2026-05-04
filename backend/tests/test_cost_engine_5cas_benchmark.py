@@ -209,7 +209,7 @@ VARIANTES = [
 def test_benchmark_variante_business_assertion(variante: BenchmarkVariante):
     """Chaque variante doit satisfaire sa propriété métier attendue."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(variante.devis_factory())
+        out = MoteurDevis(db, entreprise_id=1).calculer(variante.devis_factory())
     variante.business_check(out)
 
 
@@ -221,7 +221,7 @@ def test_benchmark_variante_total_ht_figeage(variante: BenchmarkVariante):
             f"{variante.name}: total HT pas encore figé (validation Eric en attente)"
         )
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(variante.devis_factory())
+        out = MoteurDevis(db, entreprise_id=1).calculer(variante.devis_factory())
     assert out.prix_vente_ht_eur == variante.expected_total_ht
 
 
@@ -237,7 +237,7 @@ def test_5cas_writes_comparison_report():
     """
     results: list[tuple[BenchmarkVariante, DevisOutput, DevisInput]] = []
     with SessionLocal() as db:
-        moteur = MoteurDevis(db)
+        moteur = MoteurDevis(db, entreprise_id=1)
         for v in VARIANTES:
             devis = v.devis_factory()
             out = moteur.calculer(devis)

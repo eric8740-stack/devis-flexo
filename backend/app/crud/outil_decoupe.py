@@ -37,10 +37,10 @@ def list_outils_decoupe(
 
 
 def create_outil_decoupe(
-    db: Session, data: OutilDecoupeCreate
+    db: Session, data: OutilDecoupeCreate, entreprise_id: int
 ) -> OutilDecoupe:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    outil = OutilDecoupe(entreprise_id=1, **data.model_dump())
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    outil = OutilDecoupe(entreprise_id=entreprise_id, **data.model_dump())
     db.add(outil)
     db.commit()
     db.refresh(outil)

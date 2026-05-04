@@ -32,7 +32,7 @@ def test_create_temps_operation_persists():
         ordre_affichage=99,
     )
     with SessionLocal() as db:
-        created = create_temps_operation(db, payload)
+        created = create_temps_operation(db, payload, entreprise_id=1)
         assert created.id is not None
         assert created.actif is True
 

@@ -20,9 +20,11 @@ def get_catalogue(db: Session, item_id: int) -> Catalogue | None:
     return db.query(Catalogue).filter(Catalogue.id == item_id).first()
 
 
-def create_catalogue(db: Session, data: CatalogueCreate) -> Catalogue:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    item = Catalogue(entreprise_id=1, **data.model_dump())
+def create_catalogue(
+    db: Session, data: CatalogueCreate, entreprise_id: int
+) -> Catalogue:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    item = Catalogue(entreprise_id=entreprise_id, **data.model_dump())
     db.add(item)
     db.commit()
     db.refresh(item)

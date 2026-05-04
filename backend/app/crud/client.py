@@ -18,9 +18,11 @@ def get_client(db: Session, client_id: int) -> Client | None:
     return db.query(Client).filter(Client.id == client_id).first()
 
 
-def create_client(db: Session, data: ClientCreate) -> Client:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    client = Client(entreprise_id=1, **data.model_dump())
+def create_client(
+    db: Session, data: ClientCreate, entreprise_id: int
+) -> Client:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    client = Client(entreprise_id=entreprise_id, **data.model_dump())
     db.add(client)
     db.commit()
     db.refresh(client)

@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+"""Router /api/catalogue — Sprint 12-C scoped."""
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.crud import catalogue as crud
 from app.db import get_db
+from app.dependencies import get_current_user
+from app.models import Catalogue, User
 from app.schemas.catalogue import CatalogueCreate, CatalogueRead, CatalogueUpdate
+from app.services.scope_service import get_or_404_scoped, scope_to_entreprise
 
 router = APIRouter(prefix="/api/catalogue", tags=["catalogue"])
 
@@ -17,46 +21,56 @@ def list_catalogue(
         description="Filtre : ne renvoie que les produits du client donné",
     ),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    return crud.list_catalogue(db, skip=skip, limit=limit, client_id=client_id)
+    query = scope_to_entreprise(db.query(Catalogue), Catalogue, user)
+    if client_id is not None:
+        query = query.filter(Catalogue.client_id == client_id)
+    return query.order_by(Catalogue.id).offset(skip).limit(limit).all()
 
 
 @router.get("/{item_id}", response_model=CatalogueRead)
-def get_catalogue(item_id: int, db: Session = Depends(get_db)):
-    item = crud.get_catalogue(db, item_id)
-    if item is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Catalogue {item_id} introuvable",
-        )
-    return item
+def get_catalogue(
+    item_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return get_or_404_scoped(db, Catalogue, item_id, user)
 
 
 @router.post(
     "", response_model=CatalogueRead, status_code=status.HTTP_201_CREATED
 )
-def create_catalogue(data: CatalogueCreate, db: Session = Depends(get_db)):
-    return crud.create_catalogue(db, data)
+def create_catalogue(
+    data: CatalogueCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return crud.create_catalogue(db, data, entreprise_id=user.entreprise_id)
 
 
 @router.put("/{item_id}", response_model=CatalogueRead)
 def update_catalogue(
-    item_id: int, data: CatalogueUpdate, db: Session = Depends(get_db)
+    item_id: int,
+    data: CatalogueUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    item = crud.update_catalogue(db, item_id, data)
-    if item is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Catalogue {item_id} introuvable",
-        )
+    item = get_or_404_scoped(db, Catalogue, item_id, user)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    db.commit()
+    db.refresh(item)
     return item
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_catalogue(item_id: int, db: Session = Depends(get_db)):
-    if not crud.delete_catalogue(db, item_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Catalogue {item_id} introuvable",
-        )
+def delete_catalogue(
+    item_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    item = get_or_404_scoped(db, Catalogue, item_id, user)
+    db.delete(item)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

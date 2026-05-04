@@ -32,7 +32,7 @@ def test_create_triggers_before_insert_hook():
         source="test create",
     )
     with SessionLocal() as db:
-        created = create_charge_machine(db, payload)
+        created = create_charge_machine(db, payload, entreprise_id=1)
     assert created.cout_horaire_calcule == Decimal("120.0000")
 
 
@@ -60,4 +60,4 @@ def test_create_with_zero_hours_raises_value_error():
     )
     with SessionLocal() as db:
         with pytest.raises(ValueError, match="heures_disponibles"):
-            create_charge_machine(db, payload)
+            create_charge_machine(db, payload, entreprise_id=1)

@@ -32,11 +32,13 @@ def get_charge_machine(
 
 
 def create_charge_machine(
-    db: Session, data: ChargeMachineMensuelleCreate
+    db: Session, data: ChargeMachineMensuelleCreate, entreprise_id: int
 ) -> ChargeMachineMensuelle:
-    # cout_horaire_calcule absent volontairement : hook before_insert le calcule.
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    charge = ChargeMachineMensuelle(entreprise_id=1, **data.model_dump())
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id.
+    cout_horaire_calcule absent volontairement : hook before_insert le calcule."""
+    charge = ChargeMachineMensuelle(
+        entreprise_id=entreprise_id, **data.model_dump()
+    )
     db.add(charge)
     db.commit()
     db.refresh(charge)

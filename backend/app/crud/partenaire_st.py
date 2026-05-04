@@ -23,9 +23,11 @@ def get_partenaire(db: Session, partenaire_id: int) -> PartenaireST | None:
     )
 
 
-def create_partenaire(db: Session, data: PartenaireSTCreate) -> PartenaireST:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    p = PartenaireST(entreprise_id=1, **data.model_dump())
+def create_partenaire(
+    db: Session, data: PartenaireSTCreate, entreprise_id: int
+) -> PartenaireST:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    p = PartenaireST(entreprise_id=entreprise_id, **data.model_dump())
     db.add(p)
     db.commit()
     db.refresh(p)

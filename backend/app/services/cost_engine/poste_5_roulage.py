@@ -29,8 +29,10 @@ class CalculateurPoste5Roulage:
     POSTE_NUMERO = 5
     LIBELLE = "Roulage"
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, entreprise_id: int) -> None:
+        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
         self.db = db
+        self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
         machine = self.db.get(Machine, devis.machine_id)
@@ -42,7 +44,7 @@ class CalculateurPoste5Roulage:
                 "n'a pas de vitesse_moyenne_m_h > 0, requise pour P5"
             )
 
-        tarif = get_by_cle(self.db, "roulage_prix_horaire")
+        tarif = get_by_cle(self.db, "roulage_prix_horaire", self.entreprise_id)
         if tarif is None:
             raise CostEngineError(
                 "Tarif 'roulage_prix_horaire' introuvable — seed manquant"

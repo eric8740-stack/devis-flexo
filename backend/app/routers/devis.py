@@ -1,7 +1,7 @@
-"""Router HTTP /api/devis (Sprint 4 Lot 4b).
+"""Router HTTP /api/devis (Sprint 4 Lot 4b, S12-C scoped).
 
-6 endpoints : GET list, GET detail, POST create, PUT update, DELETE,
-POST duplicate. Le PDF arrive en Lot 4f (endpoint séparé).
+6 endpoints CRUD + 1 duplicate + 1 PDF. Chaque endpoint scope par
+`user.entreprise_id` via `Depends(get_current_user)`.
 """
 import math
 from typing import Literal
@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.crud import devis as crud
 from app.db import get_db
+from app.dependencies import get_current_user
+from app.models import Devis, User
 from app.schemas.devis_persist import (
     DevisCreate,
     DevisDetail,
@@ -18,6 +20,7 @@ from app.schemas.devis_persist import (
     DevisUpdate,
 )
 from app.services.pdf_service import generate_devis_pdf
+from app.services.scope_service import get_or_404_scoped
 
 router = APIRouter(prefix="/api/devis", tags=["devis"])
 
@@ -32,9 +35,16 @@ def list_devis(
         "date_desc"
     ),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     items, total = crud.list_devis(
-        db, page=page, per_page=per_page, search=search, statut=statut, sort=sort
+        db,
+        entreprise_id=user.entreprise_id,
+        page=page,
+        per_page=per_page,
+        search=search,
+        statut=statut,
+        sort=sort,
     )
     pages = max(1, math.ceil(total / per_page)) if total else 1
     return {
@@ -47,20 +57,23 @@ def list_devis(
 
 
 @router.get("/{devis_id}", response_model=DevisDetail)
-def get_devis(devis_id: int, db: Session = Depends(get_db)):
-    devis = crud.get_devis(db, devis_id)
-    if devis is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Devis {devis_id} introuvable",
-        )
-    return devis
+def get_devis(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_or_404_scoped(db, Devis, devis_id, user)
+    return crud.get_devis(db, devis_id)
 
 
 @router.post("", response_model=DevisDetail, status_code=status.HTTP_201_CREATED)
-def create_devis(payload: DevisCreate, db: Session = Depends(get_db)):
+def create_devis(
+    payload: DevisCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     try:
-        return crud.create_devis(db, payload)
+        return crud.create_devis(db, payload, entreprise_id=user.entreprise_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -74,30 +87,29 @@ def create_devis(payload: DevisCreate, db: Session = Depends(get_db)):
 
 @router.put("/{devis_id}", response_model=DevisDetail)
 def update_devis(
-    devis_id: int, payload: DevisUpdate, db: Session = Depends(get_db)
+    devis_id: int,
+    payload: DevisUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
+    get_or_404_scoped(db, Devis, devis_id, user)
     try:
-        devis = crud.update_devis(db, devis_id, payload)
+        return crud.update_devis(db, devis_id, payload)
     except (ValueError, KeyError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc) if isinstance(exc, ValueError) else f"Champ payload manquant : {exc.args[0]}",
         ) from exc
-    if devis is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Devis {devis_id} introuvable",
-        )
-    return devis
 
 
 @router.delete("/{devis_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_devis(devis_id: int, db: Session = Depends(get_db)):
-    if not crud.delete_devis(db, devis_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Devis {devis_id} introuvable",
-        )
+def delete_devis(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_or_404_scoped(db, Devis, devis_id, user)
+    crud.delete_devis(db, devis_id)
 
 
 @router.post(
@@ -105,30 +117,29 @@ def delete_devis(devis_id: int, db: Session = Depends(get_db)):
     response_model=DevisDetail,
     status_code=status.HTTP_201_CREATED,
 )
-def duplicate_devis(devis_id: int, db: Session = Depends(get_db)):
-    nouveau = crud.duplicate_devis(db, devis_id)
-    if nouveau is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Devis {devis_id} introuvable",
-        )
-    return nouveau
+def duplicate_devis(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_or_404_scoped(db, Devis, devis_id, user)
+    return crud.duplicate_devis(db, devis_id)
 
 
 @router.get("/{devis_id}/pdf")
-def download_devis_pdf(devis_id: int, db: Session = Depends(get_db)):
+def download_devis_pdf(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Génère le PDF du devis et le retourne en téléchargement.
 
     Lot 4f : nom de fichier = {numero}.pdf (Content-Disposition attachment).
     Le service PDF (Lot 4e) lit weasyprint en lazy import — sur Linux
     Docker prod, les libs natives sont installées via Dockerfile.
     """
+    get_or_404_scoped(db, Devis, devis_id, user)
     devis = crud.get_devis(db, devis_id)
-    if devis is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Devis {devis_id} introuvable",
-        )
     pdf_bytes = generate_devis_pdf(devis, db)
     return Response(
         content=pdf_bytes,

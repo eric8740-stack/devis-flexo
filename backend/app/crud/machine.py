@@ -26,9 +26,11 @@ def get_machine(db: Session, machine_id: int) -> Machine | None:
     return db.query(Machine).filter(Machine.id == machine_id).first()
 
 
-def create_machine(db: Session, data: MachineCreate) -> Machine:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    machine = Machine(entreprise_id=1, **data.model_dump())
+def create_machine(
+    db: Session, data: MachineCreate, entreprise_id: int
+) -> Machine:
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    machine = Machine(entreprise_id=entreprise_id, **data.model_dump())
     db.add(machine)
     db.commit()
     db.refresh(machine)

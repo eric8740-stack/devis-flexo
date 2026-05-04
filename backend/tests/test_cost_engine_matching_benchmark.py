@@ -71,7 +71,7 @@ def _devis_v1a_matching() -> DevisInput:
 def test_v7a_v1a_matching_returns_3_candidats_with_HT_v1a_preserved():
     """HT identique pour les 3 candidats = HT V1a manuel = 1449.09 €."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
     assert out.mode == "matching"
     assert len(out.candidats) == 3
     for c in out.candidats:
@@ -83,7 +83,7 @@ def test_v7a_v1a_matching_returns_3_candidats_with_HT_v1a_preserved():
 def test_v7a_v1a_matching_top_3_z_figes():
     """Top 3 cylindres figés Z=134, 121, 108 — tri intervalle croissant."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
     z_list = [c.z for c in out.candidats]
     assert z_list == [134, 121, 108], (
         f"Top 3 Z attendu [134, 121, 108], obtenu {z_list}. "
@@ -94,7 +94,7 @@ def test_v7a_v1a_matching_top_3_z_figes():
 def test_v7a_v1a_matching_nb_etiq_par_tour_figes():
     """Couples (Z, nb_etiq_par_tour) figés : (134, 10), (121, 9), (108, 8)."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
     couples = [(c.z, c.nb_etiq_par_tour) for c in out.candidats]
     assert couples == [(134, 10), (121, 9), (108, 8)]
 
@@ -102,7 +102,7 @@ def test_v7a_v1a_matching_nb_etiq_par_tour_figes():
 def test_v7a_v1a_matching_intervalles_dans_plage():
     """Intervalles dans [2.5, 15] mm + tri croissant."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
     intervalles = [c.intervalle_mm for c in out.candidats]
     assert intervalles == sorted(intervalles), "Tri intervalle croissant attendu"
     for iv in intervalles:
@@ -127,7 +127,7 @@ def test_v7a_v1a_matching_prix_au_mille_recalibre_phase2():
     mais n'est plus utilisé pour le calcul prix.
     """
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
     # Meilleur candidat (Z=134, intervalle le plus serré) = meilleur prix
     assert out.candidats[0].prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A_BEST
     # Tri prix croissant strict (pas serré → moins d'étiq par tour mais
@@ -162,7 +162,7 @@ def test_v7b_plaque_320_banane_zmini_160_returns_422():
         }
     )
     with SessionLocal() as db, pytest.raises(CostEngineError, match="Aucun cylindre"):
-        MoteurDevis(db).calculer(payload)
+        MoteurDevis(db, entreprise_id=1).calculer(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ def test_v7c_plaque_excede_laize_machine_returns_422():
         }
     )
     with SessionLocal() as db, pytest.raises(CostEngineError, match="laize"):
-        MoteurDevis(db).calculer(payload)
+        MoteurDevis(db, entreprise_id=1).calculer(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ def test_v7d_format_extreme_returns_422():
         update={"format_etiquette_hauteur_mm": 600},
     )
     with SessionLocal() as db, pytest.raises(CostEngineError, match="Aucun cylindre"):
-        MoteurDevis(db).calculer(payload)
+        MoteurDevis(db, entreprise_id=1).calculer(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ def test_v7d_format_extreme_returns_422():
 def test_v7a_writes_matching_breakdown_md():
     """Génère cost_breakdown_matching.md — détail des 3 candidats V7a."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
 
     lines = [
         "# Cost breakdown matching — V7a (S7 Lot 7g)",
@@ -288,7 +288,7 @@ def test_v8a_v1a_matching_poses_d_2_divides_prix_mille_by_2():
         update={"nb_poses_developpement": 2}
     )
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(payload)
+        out = MoteurDevis(db, entreprise_id=1).calculer(payload)
     # Z + HT préservés (postes/cylindres indépendants de poses_d)
     assert [c.z for c in out.candidats] == [134, 121, 108]
     # Meilleur candidat (Z=134) : 3.43 EXACT (= V7a_BEST 6.85 / 2 à l'arrondi près)
@@ -337,7 +337,7 @@ def test_v8b_cas_eric_ice_60x100_2x2_consistance_mode_agnostique():
     matching = base.model_copy(update={"mode_calcul": "matching"})
 
     with SessionLocal() as db:
-        moteur = MoteurDevis(db)
+        moteur = MoteurDevis(db, entreprise_id=1)
         out_m = moteur.calculer(manuel)
         out_x = moteur.calculer(matching)
 
@@ -379,7 +379,7 @@ def test_v8c_format_80x60_2_poses_l_3_poses_d_facteur_6_applique():
     poses_d_3 = base.model_copy(update={"nb_poses_developpement": 3})
 
     with SessionLocal() as db:
-        moteur = MoteurDevis(db)
+        moteur = MoteurDevis(db, entreprise_id=1)
         out_1 = moteur.calculer(poses_d_1)
         out_3 = moteur.calculer(poses_d_3)
 
@@ -425,7 +425,7 @@ def test_v8d_coherence_mode_agnostique_50x80_3_2():
     matching = base.model_copy(update={"mode_calcul": "matching"})
 
     with SessionLocal() as db:
-        moteur = MoteurDevis(db)
+        moteur = MoteurDevis(db, entreprise_id=1)
         out_m = moteur.calculer(manuel)
         out_x = moteur.calculer(matching)
 
@@ -451,7 +451,7 @@ def test_v8e_anti_regression_v7a_poses_d_1_meilleur_candidat_recalibre():
     poses_developpement + Phase 2 précision) dans le bloc V8.
     """
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_v1a_matching())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_v1a_matching())
     # Meilleur candidat (Z=134, intervalle le plus serré) figé à 6.85
     assert out.candidats[0].prix_au_mille_eur == EXPECTED_PRIX_MILLE_V7A_BEST, (
         f"REGRESSION : V7a meilleur prix_au_mille = "

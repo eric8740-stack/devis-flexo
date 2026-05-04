@@ -48,10 +48,15 @@ def test_post_cost_calculer_with_marge_override():
     assert Decimal(data["prix_vente_ht_eur"]) == expected_ht
 
 
-def test_post_cost_calculer_unknown_complexe_returns_422():
+def test_post_cost_calculer_unknown_complexe_returns_404():
+    """S12-C : ID externe inexistant → 404 (anti-enumeration scope_service).
+
+    Avant S12-C : 422 (CostEngineError remontée par P1). Depuis S12-C,
+    `validate_id_belongs_to_user` court-circuite avant l'entrée du moteur.
+    """
     payload = _payload_median() | {"complexe_id": 9999}
     response = client.post("/api/cost/calculer", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 404
     assert "complexe" in response.json()["detail"].lower()
 
 

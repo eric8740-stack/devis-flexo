@@ -36,8 +36,10 @@ class CalculateurPoste1Matiere:
     POSTE_NUMERO = 1
     LIBELLE = "Matière"
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, entreprise_id: int) -> None:
+        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
         self.db = db
+        self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
         complexe = self.db.get(Complexe, devis.complexe_id)
@@ -46,7 +48,9 @@ class CalculateurPoste1Matiere:
                 f"Complexe id={devis.complexe_id} introuvable"
             )
 
-        tarif_marge = get_by_cle(self.db, "marge_confort_roulage_mm")
+        tarif_marge = get_by_cle(
+            self.db, "marge_confort_roulage_mm", self.entreprise_id
+        )
         if tarif_marge is None:
             raise CostEngineError(
                 "Tarif 'marge_confort_roulage_mm' introuvable — seed manquant"
@@ -103,7 +107,9 @@ class CalculateurPoste1Matiere:
             )
             return prix_kg, "complexe_derived"
 
-        tarif_fallback = get_by_cle(self.db, "matiere_prix_kg_defaut")
+        tarif_fallback = get_by_cle(
+            self.db, "matiere_prix_kg_defaut", self.entreprise_id
+        )
         if tarif_fallback is None:
             raise CostEngineError(
                 "Tarif 'matiere_prix_kg_defaut' introuvable — fallback impossible"

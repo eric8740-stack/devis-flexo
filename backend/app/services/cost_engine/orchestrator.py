@@ -45,16 +45,21 @@ INTERVALLE_ETIQUETTES_MM = Decimal("3")
 
 
 class MoteurDevis:
-    def __init__(self, db: Session) -> None:
+    """Sprint 12-C : `entreprise_id` requis pour scoper les lectures
+    `tarif_poste` / `tarif_encre`. Passé par le router `/api/cost/calculer`
+    via `user.entreprise_id`."""
+
+    def __init__(self, db: Session, entreprise_id: int) -> None:
         self.db = db
+        self.entreprise_id = entreprise_id
         self._calculateurs = [
-            CalculateurPoste1Matiere(db),
-            CalculateurPoste2Encres(db),
-            CalculateurPoste3ClichesOutillage(db),
-            CalculateurPoste4Calage(db),
-            CalculateurPoste5Roulage(db),
-            CalculateurPoste6Finitions(db),
-            CalculateurPoste7MO(db),
+            CalculateurPoste1Matiere(db, entreprise_id),
+            CalculateurPoste2Encres(db, entreprise_id),
+            CalculateurPoste3ClichesOutillage(db, entreprise_id),
+            CalculateurPoste4Calage(db, entreprise_id),
+            CalculateurPoste5Roulage(db, entreprise_id),
+            CalculateurPoste6Finitions(db, entreprise_id),
+            CalculateurPoste7MO(db, entreprise_id),
         ]
 
     def calculer(self, devis: DevisInput) -> DevisOutput | DevisOutputMatching:

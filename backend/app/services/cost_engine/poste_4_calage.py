@@ -29,11 +29,13 @@ class CalculateurPoste4Calage:
     POSTE_NUMERO = 4
     LIBELLE = "Mise en route / Calage"
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, entreprise_id: int) -> None:
+        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
         self.db = db
+        self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
-        tarif = get_by_cle(self.db, "calage_forfait")
+        tarif = get_by_cle(self.db, "calage_forfait", self.entreprise_id)
         if tarif is None:
             raise CostEngineError(
                 "Tarif 'calage_forfait' introuvable — seed tarif_poste manquant"

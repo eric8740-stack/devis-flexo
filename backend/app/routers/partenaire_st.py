@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+"""Router /api/partenaires-st — Sprint 12-C scoped + soft delete."""
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.crud import partenaire_st as crud
 from app.db import get_db
+from app.dependencies import get_current_user
+from app.models import PartenaireST, User
 from app.schemas.partenaire_st import (
     PartenaireSTCreate,
     PartenaireSTRead,
     PartenaireSTUpdate,
 )
+from app.services.scope_service import get_or_404_scoped, scope_to_entreprise
 
 router = APIRouter(prefix="/api/partenaires-st", tags=["partenaires-st"])
 
@@ -18,28 +22,32 @@ def list_partenaires(
     limit: int = Query(50, ge=1, le=200),
     include_inactives: bool = Query(False),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    return crud.list_partenaires(
-        db, skip=skip, limit=limit, include_inactives=include_inactives
-    )
+    query = scope_to_entreprise(db.query(PartenaireST), PartenaireST, user)
+    if not include_inactives:
+        query = query.filter(PartenaireST.actif.is_(True))
+    return query.order_by(PartenaireST.id).offset(skip).limit(limit).all()
 
 
 @router.get("/{partenaire_id}", response_model=PartenaireSTRead)
-def get_partenaire(partenaire_id: int, db: Session = Depends(get_db)):
-    p = crud.get_partenaire(db, partenaire_id)
-    if p is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"PartenaireST {partenaire_id} introuvable",
-        )
-    return p
+def get_partenaire(
+    partenaire_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return get_or_404_scoped(db, PartenaireST, partenaire_id, user)
 
 
 @router.post(
     "", response_model=PartenaireSTRead, status_code=status.HTTP_201_CREATED
 )
-def create_partenaire(data: PartenaireSTCreate, db: Session = Depends(get_db)):
-    return crud.create_partenaire(db, data)
+def create_partenaire(
+    data: PartenaireSTCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return crud.create_partenaire(db, data, entreprise_id=user.entreprise_id)
 
 
 @router.put("/{partenaire_id}", response_model=PartenaireSTRead)
@@ -47,32 +55,37 @@ def update_partenaire(
     partenaire_id: int,
     data: PartenaireSTUpdate,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    p = crud.update_partenaire(db, partenaire_id, data)
-    if p is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"PartenaireST {partenaire_id} introuvable",
-        )
-    return p
+    item = get_or_404_scoped(db, PartenaireST, partenaire_id, user)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 @router.delete("/{partenaire_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_partenaire(partenaire_id: int, db: Session = Depends(get_db)):
-    """Sprint 9 v2 — soft delete (passe `actif=False`)."""
-    if not crud.delete_partenaire(db, partenaire_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"PartenaireST {partenaire_id} introuvable",
-        )
+def delete_partenaire(
+    partenaire_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Sprint 9 v2 — soft delete (`actif=False`). Sprint 12-C — scope user."""
+    item = get_or_404_scoped(db, PartenaireST, partenaire_id, user)
+    item.actif = False
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{partenaire_id}/reactiver", response_model=PartenaireSTRead)
-def reactiver_partenaire(partenaire_id: int, db: Session = Depends(get_db)):
-    if not crud.reactiver_partenaire(db, partenaire_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"PartenaireST {partenaire_id} introuvable",
-        )
-    return crud.get_partenaire(db, partenaire_id)
+def reactiver_partenaire(
+    partenaire_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    item = get_or_404_scoped(db, PartenaireST, partenaire_id, user)
+    item.actif = True
+    db.commit()
+    db.refresh(item)
+    return item

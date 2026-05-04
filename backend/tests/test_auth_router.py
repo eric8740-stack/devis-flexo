@@ -10,6 +10,7 @@ de conftest).
 """
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
 
@@ -21,6 +22,10 @@ from app.services.auth_service import (
     JWT_SECRET,
     create_access_token,
 )
+
+# S12-C : ce module exerce l'auth RÉELLE (login, refresh, JWT 401/403),
+# il ne doit pas hériter de l'override autouse qui injecte l'admin demo.
+pytestmark = pytest.mark.no_auth_override
 
 client = TestClient(app)
 

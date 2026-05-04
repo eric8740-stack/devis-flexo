@@ -1,17 +1,13 @@
-"""Endpoint HTTP du moteur de coût v2 (S3 Lot 3f + S7 Lot 7e).
+"""Endpoint HTTP du moteur de coût v2 — Sprint 12-C scoped.
 
 Un seul endpoint actif : POST /api/cost/calculer
 
-Sprint 7 Lot 7e : retour conditionné par devis.mode_calcul :
-  - 'manuel'   → DevisOutput (1 résultat, format Sprint 5)
-  - 'matching' → DevisOutputMatching (1-3 candidats cylindres)
+Sprint 12-C : `Depends(get_current_user)` ajouté + validation des IDs
+externes (machine_id, complexe_id, partenaire_st_id) qui doivent
+appartenir à `user.entreprise_id`. Sinon 404 (anti-enumeration).
 
-Discriminant côté Pydantic v2 = champ `mode` Literal["manuel"] / Literal["matching"]
-sur les deux schémas. FastAPI génère un OpenAPI propre via Union discriminée.
-
-Les 7 calculateurs et l'orchestrateur sont dans `app/services/cost_engine/`.
-Les erreurs métier (CostEngineError) sont converties en HTTP 422 par un
-handler global dans `app/main.py` — pas de try/except local ici.
+Le moteur `MoteurDevis(db, entreprise_id)` reçoit `user.entreprise_id`
+pour scoper les lectures `tarif_poste` / `tarif_encre`.
 """
 from typing import Annotated, Union
 
@@ -20,13 +16,15 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.dependencies import get_current_user
+from app.models import Complexe, Machine, PartenaireST, User
 from app.schemas.devis import DevisInput, DevisOutput, DevisOutputMatching
 from app.services.cost_engine import MoteurDevis
+from app.services.scope_service import validate_id_belongs_to_user
 
 router = APIRouter(prefix="/api/cost", tags=["cost"])
 
 # Union discriminée par le champ `mode` (Literal sur chaque schéma).
-# FastAPI sérialise correctement et OpenAPI distingue les 2 réponses.
 DevisResponse = Annotated[
     Union[DevisOutput, DevisOutputMatching],
     Field(discriminator="mode"),
@@ -40,6 +38,16 @@ DevisResponse = Annotated[
     summary="Calcule un devis (mode manuel = 1 résultat, mode matching = 1-3 cylindres)",
 )
 def calculer_devis(
-    payload: DevisInput, db: Session = Depends(get_db)
+    payload: DevisInput,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> DevisOutput | DevisOutputMatching:
-    return MoteurDevis(db).calculer(payload)
+    # Sprint 12-C : valide que les IDs du payload appartiennent à user.entreprise_id
+    validate_id_belongs_to_user(db, Machine, payload.machine_id, user)
+    validate_id_belongs_to_user(db, Complexe, payload.complexe_id, user)
+    for forfait in payload.forfaits_st:
+        validate_id_belongs_to_user(
+            db, PartenaireST, forfait.partenaire_st_id, user
+        )
+
+    return MoteurDevis(db, user.entreprise_id).calculer(payload)

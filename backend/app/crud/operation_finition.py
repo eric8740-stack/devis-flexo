@@ -28,10 +28,10 @@ def get_operation(db: Session, op_id: int) -> OperationFinition | None:
 
 
 def create_operation(
-    db: Session, data: OperationFinitionCreate
+    db: Session, data: OperationFinitionCreate, entreprise_id: int
 ) -> OperationFinition:
-    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
-    op = OperationFinition(entreprise_id=1, **data.model_dump())
+    """S12-C : `entreprise_id` injecté par le router via user.entreprise_id."""
+    op = OperationFinition(entreprise_id=entreprise_id, **data.model_dump())
     db.add(op)
     db.commit()
     db.refresh(op)

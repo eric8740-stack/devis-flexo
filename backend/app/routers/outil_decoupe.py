@@ -1,23 +1,17 @@
-"""Endpoints HTTP du catalogue des outils de découpe.
-
-Sprint 5 Lot 5b : lecture seule via GET /api/outils (select frontend).
-Sprint 9 v2 Lot 9d : CRUD complet (POST/PUT/DELETE/reactiver) + filtre
-`include_inactives` sur la liste pour l'UI /parametres/outils.
-
-Pattern de soft delete uniformisé sur les 4 catalogues (machine, complexe,
-outil_decoupe, partenaire_st) : DELETE = passage `actif=False`,
-POST `/{id}/reactiver` = retour `actif=True`.
-"""
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+"""Router /api/outils — Sprint 12-C scoped + soft delete (S9 v2 conservé)."""
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.crud import outil_decoupe as crud
 from app.db import get_db
+from app.dependencies import get_current_user
+from app.models import OutilDecoupe, User
 from app.schemas.outil_decoupe import (
     OutilDecoupeCreate,
     OutilDecoupeRead,
     OutilDecoupeUpdate,
 )
+from app.services.scope_service import get_or_404_scoped, scope_to_entreprise
 
 router = APIRouter(prefix="/api/outils", tags=["outils"])
 
@@ -26,67 +20,70 @@ router = APIRouter(prefix="/api/outils", tags=["outils"])
 def list_outils(
     include_inactives: bool = Query(False),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    """Renvoie les outils de découpe (actifs par défaut, tri par libellé).
-
-    `include_inactives=true` retourne aussi les outils soft-deleted pour
-    l'UI /parametres/outils (toggle "Afficher inactifs").
-    """
-    return crud.list_outils_decoupe(db, include_inactives=include_inactives)
+    query = scope_to_entreprise(db.query(OutilDecoupe), OutilDecoupe, user)
+    if not include_inactives:
+        query = query.filter(OutilDecoupe.actif.is_(True))
+    return query.order_by(OutilDecoupe.libelle).all()
 
 
 @router.get("/{outil_id}", response_model=OutilDecoupeRead)
-def get_outil(outil_id: int, db: Session = Depends(get_db)):
-    outil = crud.get_outil_decoupe(db, outil_id)
-    if outil is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"OutilDecoupe {outil_id} introuvable",
-        )
-    return outil
+def get_outil(
+    outil_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return get_or_404_scoped(db, OutilDecoupe, outil_id, user)
 
 
 @router.post(
     "", response_model=OutilDecoupeRead, status_code=status.HTTP_201_CREATED
 )
-def create_outil(data: OutilDecoupeCreate, db: Session = Depends(get_db)):
-    return crud.create_outil_decoupe(db, data)
+def create_outil(
+    data: OutilDecoupeCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return crud.create_outil_decoupe(db, data, entreprise_id=user.entreprise_id)
 
 
 @router.put("/{outil_id}", response_model=OutilDecoupeRead)
 def update_outil(
-    outil_id: int, data: OutilDecoupeUpdate, db: Session = Depends(get_db)
+    outil_id: int,
+    data: OutilDecoupeUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    outil = crud.update_outil_decoupe(db, outil_id, data)
-    if outil is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"OutilDecoupe {outil_id} introuvable",
-        )
-    return outil
+    item = get_or_404_scoped(db, OutilDecoupe, outil_id, user)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 @router.delete("/{outil_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_outil(outil_id: int, db: Session = Depends(get_db)):
-    """Soft delete : passe `actif=False` au lieu de supprimer la ligne.
-
-    Préserve l'intégrité historique des devis sauvegardés qui référencent
-    `outil_decoupe_id` (snapshot) — l'outil reste consultable individuellement.
-    """
-    if not crud.soft_delete_outil_decoupe(db, outil_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"OutilDecoupe {outil_id} introuvable",
-        )
+def delete_outil(
+    outil_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Sprint 9 v2 — soft delete (`actif=False`). Sprint 12-C — scope user."""
+    item = get_or_404_scoped(db, OutilDecoupe, outil_id, user)
+    item.actif = False
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{outil_id}/reactiver", response_model=OutilDecoupeRead)
-def reactiver_outil(outil_id: int, db: Session = Depends(get_db)):
-    """Réactive un outil soft-deleted (passe `actif=True`)."""
-    if not crud.reactiver_outil_decoupe(db, outil_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"OutilDecoupe {outil_id} introuvable",
-        )
-    return crud.get_outil_decoupe(db, outil_id)
+def reactiver_outil(
+    outil_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    item = get_or_404_scoped(db, OutilDecoupe, outil_id, user)
+    item.actif = True
+    db.commit()
+    db.refresh(item)
+    return item

@@ -54,7 +54,7 @@ def _devis_median() -> DevisInput:
 def test_benchmark_devis_median_total_HT():
     """Total HT figé sur le cas médian. Régression = à investiguer."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_median())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_median())
     assert out.cout_revient_eur == EXPECTED_COUT_REVIENT
     assert out.pct_marge_appliquee == EXPECTED_PCT_MARGE
     assert out.prix_vente_ht_eur == EXPECTED_TOTAL_HT
@@ -63,7 +63,7 @@ def test_benchmark_devis_median_total_HT():
 def test_benchmark_writes_cost_breakdown_md():
     """Génère un rapport Markdown lisible pour audit / démo."""
     with SessionLocal() as db:
-        out = MoteurDevis(db).calculer(_devis_median())
+        out = MoteurDevis(db, entreprise_id=1).calculer(_devis_median())
 
     lines = [
         "# Cost breakdown — devis médian de référence (S3 Lot 3d)",

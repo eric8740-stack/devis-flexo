@@ -8,7 +8,7 @@ from app.schemas.tarif_encre import TarifEncreCreate, TarifEncreUpdate
 
 def test_seed_loads_5_tarifs_encre():
     with SessionLocal() as db:
-        tarifs = list_tarifs_encre(db)
+        tarifs = list_tarifs_encre(db, entreprise_id=1)
     assert len(tarifs) == 5
     types = {t.type_encre for t in tarifs}
     assert types == {
@@ -27,7 +27,7 @@ def test_create_tarif_encre_persists():
         prix_kg_defaut=Decimal("32.50"),
     )
     with SessionLocal() as db:
-        created = create_tarif_encre(db, payload)
+        created = create_tarif_encre(db, payload, entreprise_id=1)
         assert created.id is not None
         assert created.ratio_g_m2_couleur == Decimal("2.000")  # défaut
 
