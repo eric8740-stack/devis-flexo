@@ -14,6 +14,7 @@ import csv
 from datetime import date, datetime
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -401,6 +402,65 @@ def seed_charge_machine_mensuelle(session: Session) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Sync séquences Postgres (mini-sprint Note 16 — 04/05/2026)
+# ---------------------------------------------------------------------------
+
+
+# Tables seedées avec un id auto-increment forcé par le CSV.
+# `devis` n'est PAS dans la liste : créée au runtime via POST /api/devis,
+# sa séquence est gérée naturellement par Postgres.
+_TABLES_WITH_SERIAL_ID = [
+    "entreprise",
+    "client",
+    "fournisseur",
+    "machine",
+    "complexe",
+    "catalogue",
+    "operation_finition",
+    "partenaire_st",
+    "charge_mensuelle",
+    "charge_machine_mensuelle",
+    "correspondance_laize_metrage",
+    "tarif_encre",
+    "tarif_poste",
+    "temps_operation_standard",
+    "outil_decoupe",
+]
+
+
+def _reset_postgres_sequences(session: Session) -> None:
+    """Synchronise les séquences Postgres après un seed avec ids forcés.
+
+    Mini-sprint Note 16 (04/05/2026) — résorption d'un bug latent depuis
+    Sprint 2/3, exposé par Sprint 9 v2 UI outils. PostgreSQL ne
+    synchronise pas la séquence auto-increment lorsqu'un INSERT spécifie
+    explicitement l'id. Conséquence : tout POST suivant sans id explicite
+    tente `nextval() = 1` et collisionne avec une ligne existante → 409.
+
+    Pour chaque table, on remet la séquence à `MAX(id)` avec `is_called`
+    selon l'état :
+      - table non vide : `setval(seq, MAX(id), TRUE)` → next nextval = MAX+1
+      - table vide     : `setval(seq, 1, FALSE)`     → next nextval = 1
+
+    No-op sur SQLite (pas de séquence explicite, ROWID est un alias d'id
+    qui se réaligne automatiquement sur MAX+1).
+    """
+    if session.bind.dialect.name != "postgresql":
+        return
+
+    for table_name in _TABLES_WITH_SERIAL_ID:
+        sequence_name = f"{table_name}_id_seq"
+        sql = (
+            f"SELECT setval("
+            f"'{sequence_name}', "
+            f"COALESCE((SELECT MAX(id) FROM {table_name}), 1), "
+            f"(SELECT COUNT(*) FROM {table_name}) > 0)"
+        )
+        session.execute(text(sql))
+    session.commit()
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -473,6 +533,8 @@ def run_seed() -> dict[str, int]:
             session.flush()
 
         session.commit()
+        # Phase 3 — sync séquences Postgres après ids forcés (Note 16)
+        _reset_postgres_sequences(session)
     return counts
 
 
