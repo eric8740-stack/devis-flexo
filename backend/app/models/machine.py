@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -13,6 +13,13 @@ class Machine(Base):
     __tablename__ = "machine"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py)
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     nom: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     largeur_max_mm: Mapped[int | None] = mapped_column(Integer)

@@ -41,6 +41,13 @@ class Devis(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py)
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
     # Format DEV-YYYY-NNNN (ex: DEV-2026-0001), séquence annuelle générée
     # par numero_devis_service.generate_next_numero (Lot 4b).
     numero: Mapped[str] = mapped_column(

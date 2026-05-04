@@ -30,7 +30,8 @@ def get_operation(db: Session, op_id: int) -> OperationFinition | None:
 def create_operation(
     db: Session, data: OperationFinitionCreate
 ) -> OperationFinition:
-    op = OperationFinition(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    op = OperationFinition(entreprise_id=1, **data.model_dump())
     db.add(op)
     db.commit()
     db.refresh(op)

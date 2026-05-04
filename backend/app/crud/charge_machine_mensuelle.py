@@ -35,7 +35,8 @@ def create_charge_machine(
     db: Session, data: ChargeMachineMensuelleCreate
 ) -> ChargeMachineMensuelle:
     # cout_horaire_calcule absent volontairement : hook before_insert le calcule.
-    charge = ChargeMachineMensuelle(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    charge = ChargeMachineMensuelle(entreprise_id=1, **data.model_dump())
     db.add(charge)
     db.commit()
     db.refresh(charge)

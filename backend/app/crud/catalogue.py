@@ -21,7 +21,8 @@ def get_catalogue(db: Session, item_id: int) -> Catalogue | None:
 
 
 def create_catalogue(db: Session, data: CatalogueCreate) -> Catalogue:
-    item = Catalogue(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    item = Catalogue(entreprise_id=1, **data.model_dump())
     db.add(item)
     db.commit()
     db.refresh(item)

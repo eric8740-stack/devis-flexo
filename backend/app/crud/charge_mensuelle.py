@@ -28,7 +28,8 @@ def get_charge(db: Session, charge_id: int) -> ChargeMensuelle | None:
 
 
 def create_charge(db: Session, data: ChargeMensuelleCreate) -> ChargeMensuelle:
-    c = ChargeMensuelle(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    c = ChargeMensuelle(entreprise_id=1, **data.model_dump())
     db.add(c)
     db.commit()
     db.refresh(c)

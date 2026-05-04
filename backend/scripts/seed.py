@@ -11,9 +11,12 @@ Usage (depuis backend/, venv activé) :
 from __future__ import annotations
 
 import csv
+import logging
+import os
 from datetime import date, datetime
 from pathlib import Path
 
+from passlib.context import CryptContext
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -35,7 +38,17 @@ from app.models import (
     TarifEncre,
     TarifPoste,
     TempsOperationStandard,
+    User,
 )
+
+# Sprint 12 multi-tenant — id de l'entreprise demo (Paysant & Fils Étiquettes).
+# Tous les records seedés sont rattachés à ce tenant.
+DEMO_ENTREPRISE_ID = 1
+
+# Sprint 12 multi-tenant — context bcrypt partagé pour le seed du compte admin.
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+logger = logging.getLogger(__name__)
 
 SEEDS_DIR = Path(__file__).resolve().parent.parent / "seeds"
 
@@ -111,9 +124,62 @@ def seed_entreprise(session: Session) -> int:
                 pct_marge_defaut=_to_float(row.get("pct_marge_defaut")),
                 heures_prod_presse_mois=_to_int(row.get("heures_prod_presse_mois")),
                 heures_prod_finition_mois=_to_int(row.get("heures_prod_finition_mois")),
+                # Sprint 12 multi-tenant — Paysant & Fils est l'entreprise demo
+                # qui hérite des 148 records seedés (Eric admin)
+                is_demo=True,
             )
         )
     return len(rows)
+
+
+def seed_user_admin(session: Session) -> int:
+    """Sprint 12 multi-tenant — crée/UPDATE le compte admin Eric (demo).
+
+    Lié à l'entreprise demo (DEMO_ENTREPRISE_ID, Paysant & Fils).
+    Password lu depuis `ADMIN_INITIAL_PASSWORD` env var (fallback "admin"
+    avec WARNING — A CHANGER EN PRODUCTION).
+
+    is_active=True (skip confirmation email pour ce compte créé via seed).
+    is_admin=True (accès aux endpoints /api/admin).
+
+    Idempotent : si un user existe déjà pour entreprise_id=1, on UPDATE
+    le hash et l'email au lieu d'INSERT (préserve l'id et les sessions
+    JWT actives entre re-seeds).
+    """
+    admin_email = os.getenv("ADMIN_INITIAL_EMAIL", "admin@devis-flexo.fr")
+    admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
+    if admin_password is None:
+        logger.warning(
+            "ADMIN_INITIAL_PASSWORD not set — using fallback 'admin'. "
+            "CHANGE IN PRODUCTION via Railway env var."
+        )
+        admin_password = "admin"
+    password_hash = _pwd_context.hash(admin_password)
+
+    existing = (
+        session.query(User)
+        .filter(User.entreprise_id == DEMO_ENTREPRISE_ID)
+        .first()
+    )
+    if existing is not None:
+        existing.email = admin_email
+        existing.password_hash = password_hash
+        existing.is_active = True
+        existing.is_admin = True
+        existing.nom_contact = "Eric Paysant"
+        return 1
+
+    session.add(
+        User(
+            email=admin_email,
+            password_hash=password_hash,
+            nom_contact="Eric Paysant",
+            entreprise_id=DEMO_ENTREPRISE_ID,
+            is_active=True,
+            is_admin=True,
+        )
+    )
+    return 1
 
 
 def seed_client(session: Session) -> int:
@@ -123,6 +189,7 @@ def seed_client(session: Session) -> int:
         session.add(
             Client(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 raison_sociale=row["raison_sociale"],
                 siret=row.get("siret"),
                 adresse_fact=row.get("adresse_fact"),
@@ -145,6 +212,7 @@ def seed_fournisseur(session: Session) -> int:
         session.add(
             Fournisseur(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 raison_sociale=row["raison_sociale"],
                 categorie=row.get("categorie"),
                 contact=row.get("contact"),
@@ -171,6 +239,7 @@ def seed_machine(session: Session) -> int:
         session.add(
             Machine(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 nom=row["nom"],
                 largeur_max_mm=_to_int(row.get("largeur_max_mm")),
                 laize_max_mm=_to_float(row.get("laize_max_mm")),
@@ -192,6 +261,7 @@ def seed_operation_finition(session: Session) -> int:
         session.add(
             OperationFinition(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 nom=row["nom"],
                 unite_facturation=row["unite_facturation"],
                 cout_unitaire_eur=_to_float(row.get("cout_unitaire_eur")),
@@ -212,6 +282,7 @@ def seed_partenaire_st(session: Session) -> int:
         session.add(
             PartenaireST(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 raison_sociale=row["raison_sociale"],
                 siret=row.get("siret"),
                 contact_nom=row.get("contact_nom"),
@@ -233,6 +304,7 @@ def seed_charge_mensuelle(session: Session) -> int:
         session.add(
             ChargeMensuelle(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 libelle=row["libelle"],
                 categorie=row["categorie"],
                 montant_eur=_to_float(row["montant_eur"]),
@@ -253,6 +325,7 @@ def seed_complexe(session: Session) -> int:
         session.add(
             Complexe(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 reference=row["reference"],
                 famille=row["famille"],
                 face_matiere=row.get("face_matiere"),
@@ -273,6 +346,7 @@ def seed_catalogue(session: Session) -> int:
         session.add(
             Catalogue(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 code_produit=row["code_produit"],
                 designation=row["designation"],
                 client_id=_to_int(row["client_id"]),
@@ -303,6 +377,7 @@ def seed_tarif_poste(session: Session) -> int:
         session.add(
             TarifPoste(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 cle=row["cle"],
                 poste_numero=_to_int(row["poste_numero"]),
                 libelle=row["libelle"],
@@ -324,6 +399,7 @@ def seed_tarif_encre(session: Session) -> int:
         session.add(
             TarifEncre(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 type_encre=row["type_encre"],
                 libelle=row["libelle"],
                 prix_kg_defaut=_to_float(row["prix_kg_defaut"]),
@@ -342,6 +418,7 @@ def seed_temps_operation_standard(session: Session) -> int:
         session.add(
             TempsOperationStandard(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 libelle_operation=row["libelle_operation"],
                 minutes_standard=_to_float(row["minutes_standard"]),
                 categorie=row.get("categorie"),
@@ -371,6 +448,7 @@ def seed_outil_decoupe(session: Session) -> int:
         session.add(
             OutilDecoupe(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 libelle=row["libelle"],
                 format_l_mm=_to_int(row["format_l_mm"]),
                 format_h_mm=_to_int(row["format_h_mm"]),
@@ -391,6 +469,7 @@ def seed_charge_machine_mensuelle(session: Session) -> int:
         session.add(
             ChargeMachineMensuelle(
                 id=_to_int(row["id"]),
+                entreprise_id=DEMO_ENTREPRISE_ID,
                 mois=_to_int(row["mois"]),
                 annee=_to_int(row["annee"]),
                 montant_total=_to_float(row["montant_total"]),
@@ -425,6 +504,8 @@ _TABLES_WITH_SERIAL_ID = [
     "tarif_poste",
     "temps_operation_standard",
     "outil_decoupe",
+    # Sprint 12 multi-tenant — table user créée via seed_user_admin
+    "user",
 ]
 
 
@@ -510,8 +591,12 @@ def run_seed() -> dict[str, int]:
         session.flush()  # commit logique des DELETE en transaction
 
         # Phase 2 — INSERT ascendant + flush entre chaque pour respecter FK
+        # Sprint 12 multi-tenant : entreprise + user_admin sont insérés en
+        # premier car les 13 autres seeds ont une FK NOT NULL entreprise_id
+        # vers entreprise.id (= DEMO_ENTREPRISE_ID = 1).
         for name, fn in (
             ("entreprise", seed_entreprise),
+            ("user_admin", seed_user_admin),  # Sprint 12 — admin Eric
             ("client", seed_client),
             ("fournisseur", seed_fournisseur),
             ("machine", seed_machine),
@@ -559,6 +644,8 @@ def main() -> None:
     print(f"ChargeMachineMois   : {counts['charge_machine_mensuelle']}")
     print("=== Sprint 5 Lot 5a ===")
     print(f"OutilDecoupe        : {counts['outil_decoupe']}")
+    print("=== Sprint 12 multi-tenant ===")
+    print(f"User admin (demo)   : {counts['user_admin']}")
     print(f"\nTotal : {sum(counts.values())} lignes insérées.")
 
 

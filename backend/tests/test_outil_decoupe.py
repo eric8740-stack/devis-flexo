@@ -43,6 +43,7 @@ def test_list_outils_decoupe_actifs_excludes_inactive():
     with SessionLocal() as db:
         db.add(
             OutilDecoupe(
+                entreprise_id=1,  # S12 — scope demo
                 libelle="outil_test_inactif",
                 format_l_mm=50,
                 format_h_mm=30,

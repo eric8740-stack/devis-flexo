@@ -22,7 +22,8 @@ def get_complexe(db: Session, complexe_id: int) -> Complexe | None:
 
 
 def create_complexe(db: Session, data: ComplexeCreate) -> Complexe:
-    c = Complexe(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    c = Complexe(entreprise_id=1, **data.model_dump())
     db.add(c)
     db.commit()
     db.refresh(c)

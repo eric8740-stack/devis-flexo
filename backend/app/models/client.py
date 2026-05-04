@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Date, Integer, String
+from sqlalchemy import Date, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -10,6 +10,15 @@ class Client(Base):
     __tablename__ = "client"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Sprint 12 multi-tenant — scope par entreprise (NOT NULL strict côté
+    # BDD, injection user.entreprise_id en S12-C). Backfill migration → 1
+    # pour tous les records existants (compte demo Eric).
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     raison_sociale: Mapped[str] = mapped_column(String(255), nullable=False)
     siret: Mapped[str | None] = mapped_column(String(14))

@@ -14,6 +14,7 @@ from app.models.partenaire_st import PartenaireST
 from app.models.tarif_encre import TarifEncre
 from app.models.tarif_poste import TarifPoste
 from app.models.temps_operation_standard import TempsOperationStandard
+from app.models.user import User
 
 __all__ = [
     "Catalogue",
@@ -32,4 +33,5 @@ __all__ = [
     "TarifEncre",
     "TarifPoste",
     "TempsOperationStandard",
+    "User",
 ]

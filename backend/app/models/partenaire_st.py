@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -12,6 +12,13 @@ class PartenaireST(Base):
     __tablename__ = "partenaire_st"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py)
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     raison_sociale: Mapped[str] = mapped_column(
         String(150), nullable=False, unique=True

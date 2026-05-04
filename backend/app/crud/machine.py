@@ -27,7 +27,8 @@ def get_machine(db: Session, machine_id: int) -> Machine | None:
 
 
 def create_machine(db: Session, data: MachineCreate) -> Machine:
-    machine = Machine(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    machine = Machine(entreprise_id=1, **data.model_dump())
     db.add(machine)
     db.commit()
     db.refresh(machine)

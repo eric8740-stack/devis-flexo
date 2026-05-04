@@ -31,6 +31,13 @@ class Catalogue(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py)
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
     code_produit: Mapped[str] = mapped_column(String(50), nullable=False)
     designation: Mapped[str] = mapped_column(String(200), nullable=False)
 

@@ -24,7 +24,8 @@ def get_partenaire(db: Session, partenaire_id: int) -> PartenaireST | None:
 
 
 def create_partenaire(db: Session, data: PartenaireSTCreate) -> PartenaireST:
-    p = PartenaireST(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    p = PartenaireST(entreprise_id=1, **data.model_dump())
     db.add(p)
     db.commit()
     db.refresh(p)

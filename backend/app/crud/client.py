@@ -19,7 +19,8 @@ def get_client(db: Session, client_id: int) -> Client | None:
 
 
 def create_client(db: Session, data: ClientCreate) -> Client:
-    client = Client(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    client = Client(entreprise_id=1, **data.model_dump())
     db.add(client)
     db.commit()
     db.refresh(client)

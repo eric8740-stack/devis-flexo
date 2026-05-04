@@ -29,7 +29,8 @@ def get_by_type_encre(db: Session, type_encre: str) -> TarifEncre | None:
 
 
 def create_tarif_encre(db: Session, data: TarifEncreCreate) -> TarifEncre:
-    tarif = TarifEncre(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    tarif = TarifEncre(entreprise_id=1, **data.model_dump())
     db.add(tarif)
     db.commit()
     db.refresh(tarif)

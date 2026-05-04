@@ -140,6 +140,8 @@ def create_devis(db: Session, data: DevisCreate) -> Devis:
     denorm = _extract_denormalised_fields(data.payload_input, data.payload_output)
     numero = generate_next_numero(db)
     devis = Devis(
+        # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+        entreprise_id=1,
         numero=numero,
         statut=data.statut,
         client_id=data.client_id,
@@ -197,6 +199,8 @@ def duplicate_devis(db: Session, devis_id: int) -> Devis | None:
         return None
     numero = generate_next_numero(db)
     nouveau = Devis(
+        # S12-A : copie l'entreprise_id du devis source (préserve le scope tenant)
+        entreprise_id=src.entreprise_id,
         numero=numero,
         statut="brouillon",
         client_id=src.client_id,

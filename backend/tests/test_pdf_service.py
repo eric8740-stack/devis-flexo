@@ -89,6 +89,8 @@ def _payload_output_v1a_matching() -> dict:
 
 def _make_devis_in_db(mode: str, **overrides) -> Devis:
     base = dict(
+        # Sprint 12 multi-tenant — entreprise_id=1 (compte demo Eric)
+        entreprise_id=1,
         numero=overrides.pop("numero", f"DEV-PDF-{mode}"),
         statut="brouillon",
         client_id=None,

@@ -39,6 +39,8 @@ def _payload_output_v1a() -> dict:
 
 def _make_devis(**overrides) -> Devis:
     base = dict(
+        # Sprint 12 multi-tenant — entreprise_id=1 (compte demo Eric)
+        entreprise_id=1,
         numero="DEV-2026-0001",
         statut="brouillon",
         client_id=None,
@@ -157,7 +159,7 @@ def test_devis_client_fk_configured_with_set_null():
 def test_devis_client_id_link_when_set():
     """Le lien client_id → client est lisible via db.get."""
     with SessionLocal() as db:
-        client = Client(raison_sociale="ClientTestLink")
+        client = Client(entreprise_id=1, raison_sociale="ClientTestLink")
         db.add(client)
         db.commit()
         db.refresh(client)

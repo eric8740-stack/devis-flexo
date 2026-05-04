@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Integer,
     Numeric,
     String,
@@ -32,6 +33,13 @@ class ChargeMachineMensuelle(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py)
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     mois: Mapped[int] = mapped_column(Integer, nullable=False)
     annee: Mapped[int] = mapped_column(Integer, nullable=False)

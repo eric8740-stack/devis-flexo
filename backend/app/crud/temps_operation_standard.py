@@ -32,7 +32,8 @@ def get_temps_operation(
 def create_temps_operation(
     db: Session, data: TempsOperationStandardCreate
 ) -> TempsOperationStandard:
-    temps = TempsOperationStandard(**data.model_dump())
+    # S12-A : entreprise_id=1 (compte demo). S12-C remplacera par user.entreprise_id
+    temps = TempsOperationStandard(entreprise_id=1, **data.model_dump())
     db.add(temps)
     db.commit()
     db.refresh(temps)

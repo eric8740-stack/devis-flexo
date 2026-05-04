@@ -42,6 +42,7 @@ def test_list_outils_excludes_inactive():
     with SessionLocal() as db:
         db.add(
             OutilDecoupe(
+                entreprise_id=1,  # S12 — scope demo
                 libelle="outil_router_test_inactif",
                 format_l_mm=40,
                 format_h_mm=30,
@@ -67,6 +68,7 @@ def test_list_outils_include_inactives_returns_all():
     with SessionLocal() as db:
         db.add(
             OutilDecoupe(
+                entreprise_id=1,  # S12 — scope demo
                 libelle="outil_router_test_inactif_v2",
                 format_l_mm=40,
                 format_h_mm=30,

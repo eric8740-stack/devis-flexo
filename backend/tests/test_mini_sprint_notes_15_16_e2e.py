@@ -30,6 +30,7 @@ def test_note_15_seed_after_devis_in_db_does_not_fail():
     # Crée un devis qui référence machine_id=1 (Mark Andy P5 seedé)
     with SessionLocal() as db:
         devis = Devis(
+            entreprise_id=1,  # S12 — scope demo
             numero="TEST-NOTE15-9999",
             payload_input={"test": True},
             payload_output={"test": True},

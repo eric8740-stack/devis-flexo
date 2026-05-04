@@ -27,6 +27,13 @@ class Complexe(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py)
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
     reference: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
 
     # bopp / pp / pe / pvc_vinyle / thermique / papier_couche /

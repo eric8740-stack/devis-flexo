@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Integer,
     Numeric,
     String,
@@ -35,6 +36,15 @@ class TarifPoste(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Sprint 12 multi-tenant — scope par entreprise (cf. client.py).
+    # `cle` UNIQUE devient cross-tenant ; à composer en (entreprise_id, cle)
+    # au S12-C si besoin (cohérent tarif_encre).
+    entreprise_id: Mapped[int] = mapped_column(
+        ForeignKey("entreprise.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     cle: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     poste_numero: Mapped[int] = mapped_column(Integer, nullable=False)
