@@ -74,10 +74,17 @@ def test_update_client_missing_returns_404():
 
 
 def test_delete_client_returns_204_then_get_404():
-    response = client.delete("/api/clients/1")
+    """Sprint 12 (FK PRAGMA on) : on ne peut plus DELETE un client seedé qui
+    a des catalogues liés (RESTRICT). On crée un client fresh (sans
+    catalogue) pour tester DELETE → 204 puis GET → 404."""
+    created = client.post(
+        "/api/clients",
+        json={"raison_sociale": "Client À Zapper SARL"},
+    ).json()
+    response = client.delete(f"/api/clients/{created['id']}")
     assert response.status_code == 204
 
-    response = client.get("/api/clients/1")
+    response = client.get(f"/api/clients/{created['id']}")
     assert response.status_code == 404
 
 

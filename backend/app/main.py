@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from app.routers import (
+    auth,
     catalogue,
     charge_mensuelle,
     client,
@@ -61,6 +62,8 @@ app.include_router(outil_decoupe.router)
 app.include_router(devis.router)
 # Sprint 9 v2 Lot 9c — paramétrabilité tarifs
 app.include_router(tarif_poste.router)
+# Sprint 12 Lot S12-B — auth multi-tenant
+app.include_router(auth.router)
 
 
 @app.exception_handler(IntegrityError)

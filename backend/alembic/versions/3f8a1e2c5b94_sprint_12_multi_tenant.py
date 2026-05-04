@@ -81,6 +81,14 @@ def upgrade() -> None:
     """Upgrade schema — Sprint 12 multi-tenant."""
     bind = op.get_bind()
 
+    # SQLite : désactiver temporairement les FK pendant les batch_alter_table
+    # (ils utilisent CREATE+COPY+RENAME qui violent les FK ON pendant la
+    # phase de copie). On réactive à la fin du upgrade. PRAGMA est par
+    # connection, donc affecte uniquement cette migration.
+    is_sqlite = bind.dialect.name == "sqlite"
+    if is_sqlite:
+        bind.execute(sa.text("PRAGMA foreign_keys=OFF"))
+
     # ------------------------------------------------------------
     # 1. Création table user
     # ------------------------------------------------------------
@@ -185,9 +193,19 @@ def upgrade() -> None:
     # `scripts/seed.py` fonction `seed_user_admin()` qui sait gérer la
     # dépendance d'ordre (entreprise existe AVANT user).
 
+    # SQLite : réactiver les FK après les batch_alter_table
+    if is_sqlite:
+        bind.execute(sa.text("PRAGMA foreign_keys=ON"))
+
 
 def downgrade() -> None:
     """Downgrade schema — symétrique."""
+    bind = op.get_bind()
+
+    is_sqlite = bind.dialect.name == "sqlite"
+    if is_sqlite:
+        bind.execute(sa.text("PRAGMA foreign_keys=OFF"))
+
     # NOTE : pas de DELETE user explicite — le drop_table de l'étape 1
     # finale supprime aussi toutes les lignes.
 
@@ -208,3 +226,6 @@ def downgrade() -> None:
     op.drop_index("ix_user_entreprise_id", table_name="user")
     op.drop_index("ix_user_email", table_name="user")
     op.drop_table("user")
+
+    if is_sqlite:
+        bind.execute(sa.text("PRAGMA foreign_keys=ON"))
