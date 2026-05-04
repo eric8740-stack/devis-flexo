@@ -24,6 +24,7 @@ from app.models import (
     Client,
     Complexe,
     CorrespondanceLaizeMetrage,
+    Devis,
     Entreprise,
     Fournisseur,
     Machine,
@@ -408,9 +409,10 @@ def run_seed() -> dict[str, int]:
     """Exécute tous les seeders dans une seule transaction.
 
     Ordre :
-    1. DELETE descendant : enfants (catalogue, complexe) AVANT parents
-       (client, fournisseur, machine) pour éviter les violations FK
-       (catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL,
+    1. DELETE descendant : enfants (devis, catalogue, complexe) AVANT
+       parents (client, fournisseur, machine) pour éviter les violations FK
+       (devis.machine_id NOT NULL FK, devis.client_id SET NULL,
+       catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL,
        catalogue.machine_id SET NULL).
     2. INSERT ascendant via les fonctions seed_xxx + `session.flush()`
        après chaque table pour rendre les parents visibles aux enfants.
@@ -418,10 +420,18 @@ def run_seed() -> dict[str, int]:
        quand les FK sont déclarées sans `relationship()` → PostgreSQL
        refuse l'INSERT enfant car le parent n'est pas encore en base
        (ForeignKeyViolation). SQLite est plus laxiste et accepte.
+
+    Mini-sprint Note 15 (04/05/2026) : `Devis.delete()` ajouté en tête
+    de la phase 1. Sans cette ligne, le re-seed en prod échoue depuis
+    Sprint 4 avec ForeignKeyViolation sur `devis_machine_id_fkey` dès
+    qu'au moins un devis a été sauvegardé. Conséquence assumée : tout
+    re-seed wipe les devis sauvegardés (acceptable en mode démo).
     """
     counts: dict[str, int] = {}
     with SessionLocal() as session:
-        # Phase 1 — DELETE descendant des tables enfants (S2 + S3 Lot 3b)
+        # Phase 1 — DELETE descendant des tables enfants
+        # Sprint 4 (devis) en TÊTE car FK NOT NULL vers machine (Note 15)
+        session.query(Devis).delete()
         session.query(Catalogue).delete()
         session.query(Complexe).delete()
         session.query(Machine).delete()
