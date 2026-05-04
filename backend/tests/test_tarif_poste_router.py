@@ -75,13 +75,25 @@ def test_put_tarif_below_min_returns_422():
 
 
 def test_put_tarif_above_max_returns_422():
-    """cliche_prix_couleur a valeur_max=60 → mettre 100 doit échouer."""
+    """cliche_prix_couleur a valeur_max=100 (mini-sprint bornes 04/05/2026)
+    → mettre 150 doit échouer."""
     response = client.put(
         "/api/tarif-poste/cliche_prix_couleur",
-        json={"valeur_defaut": "100.00"},
+        json={"valeur_defaut": "150.00"},
     )
     assert response.status_code == 422
     assert "valeur_max" in response.json()["detail"]
+
+
+def test_put_tarif_at_widened_max_passes():
+    """Bornes élargies (mini-sprint 04/05) : cliche_prix_couleur à 90 €
+    (au-dessus de l'ancien max=60) doit passer 200."""
+    response = client.put(
+        "/api/tarif-poste/cliche_prix_couleur",
+        json={"valeur_defaut": "90.00"},
+    )
+    assert response.status_code == 200
+    assert float(response.json()["valeur_defaut"]) == 90.0
 
 
 def test_put_tarif_missing_cle_returns_404():
