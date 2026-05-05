@@ -73,7 +73,10 @@ export function FeedbackModal({ open, onOpenChange }: Props) {
     try {
       const payload = {
         message: trimmed,
-        user_email: user?.email ?? "unknown",
+        // Formspree convention : champ obligatoire nommé `email` (utilisé
+        // comme reply-to + anti-spam). Renommage validé par smoke test
+        // direct contre l'endpoint pilote.
+        email: user?.email ?? "unknown",
         entreprise_id: user?.entreprise_id ?? null,
         entreprise_nom: user?.nom_entreprise ?? "unknown",
         page: pathname,
