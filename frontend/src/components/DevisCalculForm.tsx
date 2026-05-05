@@ -744,31 +744,49 @@ export function DevisCalculForm({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Overrides (optionnels)</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Sprint 12 mini-fix UX-5 : on déplace la Card "Overrides" dans un
+          bloc dépliable (<details> natif, 0 dep) pour ne pas alourdir
+          le formulaire pour 99 % des cas (= calcul auto). On clarifie
+          aussi le champ "Heures dossier" avec une description visible
+          (préféré à un tooltip survol pour l'accessibilité mobile). */}
+      <details className="group rounded-xl border bg-card text-card-foreground shadow">
+        <summary className="flex cursor-pointer list-none items-center justify-between p-6 font-semibold transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden">
+          <span>
+            Options avancées{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              (laisser vide = calcul automatique)
+            </span>
+          </span>
+          <span
+            className="text-muted-foreground transition-transform group-open:rotate-180"
+            aria-hidden="true"
+          >
+            ▼
+          </span>
+        </summary>
+        <div className="grid grid-cols-1 gap-4 px-6 pb-6 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="heures_override">
-              Heures dossier (vide = dérivé machine)
-            </Label>
+            <Label htmlFor="heures_override">Heures dossier</Label>
             <Input
               id="heures_override"
               type="number"
               min={0}
               step="0.25"
-              placeholder="ex: 2.5"
+              placeholder="ex: 2,5"
               value={data.heures_dossier_override}
               onChange={(e) =>
                 setField("heures_dossier_override", e.target.value)
               }
             />
+            <p className="text-xs text-muted-foreground">
+              Vide = l&apos;application calcule automatiquement les heures
+              à partir de la machine et des paramètres du devis. À remplir
+              uniquement en cas particulier (attente machine, maintenance
+              pendant le job, devis post-prod avec heures réelles).
+            </p>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="marge_override">
-              Marge (% — vide = défaut entreprise)
-            </Label>
+            <Label htmlFor="marge_override">Marge</Label>
             <Input
               id="marge_override"
               type="number"
@@ -781,9 +799,14 @@ export function DevisCalculForm({
                 setField("pct_marge_override_pct", e.target.value)
               }
             />
+            <p className="text-xs text-muted-foreground">
+              Vide = marge par défaut de l&apos;entreprise (configurée dans
+              <em> Paramètres &gt; Entreprise</em>). À renseigner en pourcentage
+              (ex&nbsp;: 22 pour +22 %).
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
       {error && (
         <div
