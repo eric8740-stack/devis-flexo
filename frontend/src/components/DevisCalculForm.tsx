@@ -663,8 +663,10 @@ export function DevisCalculForm({
             {machines.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.nom}
-                {m.vitesse_max_m_min
-                  ? ` · vitesse max ${m.vitesse_max_m_min} m/min`
+                {m.vitesse_moyenne_m_h
+                  ? ` · vitesse moyenne ${Math.round(
+                      m.vitesse_moyenne_m_h / 60
+                    )} m/min`
                   : ""}
                 {!m.actif ? " (inactif)" : ""}
               </option>
