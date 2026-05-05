@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 const MAX_MESSAGE_LENGTH = 2000;
+
+const FORMSPREE_URL = process.env.NEXT_PUBLIC_FEEDBACK_FORMSPREE_URL;
+const APP_VERSION =
+  process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? "dev";
 
 interface Props {
   open: boolean;
@@ -23,18 +30,24 @@ interface Props {
 /**
  * Modale de retour utilisateur (early adopters pilote vendeur de presses).
  *
- * Stade Commit 1 : UI seule. La logique d'envoi vers Formspree + la
- * capture du contexte (email, entreprise, page, app_version) arrive en
- * Commit 2. Le `FeedbackButton` flottant qui pilote `open` arrive en
- * Commit 3.
+ * Envoi vers Formspree (`NEXT_PUBLIC_FEEDBACK_FORMSPREE_URL`) avec
+ * capture automatique du contexte côté client : email du user (depuis
+ * `useAuth`), entreprise courante, page d'origine, commit SHA Vercel,
+ * timestamp ISO. Aucune saisie email/identité à la charge de l'utilisateur.
  *
  * Choix design (cf. brief feedback-pilote) :
- *   - 1 seul textarea, pas de catégorisation (10 users max → tri manuel)
- *   - Bouton "Envoyer" disabled tant que vide ou en cours d'envoi
- *   - Friction zéro : pas de captcha, pas de champs cachés, pas d'email
- *     à saisir (capturé automatiquement Commit 2 depuis useAuth())
+ *   - 1 seul textarea, pas de catégorisation (< 10 users → Eric trie à la main)
+ *   - Toast succès → reset + ferme la modale
+ *   - Toast erreur → modale reste ouverte, message préservé pour retry
+ *   - Si la variable d'env Formspree n'est pas définie : envoi silencieux
+ *     refusé (le FeedbackButton hôte est aussi conditionné, donc en
+ *     pratique on n'arrive pas ici sans config). Sécurité ceinture+bretelles.
  */
 export function FeedbackModal({ open, onOpenChange }: Props) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const pathname = usePathname() ?? "/";
+
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,15 +57,55 @@ export function FeedbackModal({ open, onOpenChange }: Props) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+    if (!FORMSPREE_URL) {
+      // Garde-fou : ne devrait pas arriver (FeedbackButton vérifie la
+      // variable d'env avant de rendre le bouton flottant). Au cas où,
+      // on affiche un toast neutre plutôt que de crasher.
+      toast({
+        title: "Configuration manquante",
+        description:
+          "Le canal de retour n'est pas configuré sur cet environnement.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
-      // TODO Commit 2 : POST vers NEXT_PUBLIC_FEEDBACK_FORMSPREE_URL
-      // avec capture contexte (user_email, entreprise_slug, page,
-      // app_version, submitted_at) + toasts succès/erreur.
-      // Pour l'instant on simule juste pour valider le rendu UI.
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      const payload = {
+        message: trimmed,
+        user_email: user?.email ?? "unknown",
+        entreprise_id: user?.entreprise_id ?? null,
+        entreprise_nom: user?.nom_entreprise ?? "unknown",
+        page: pathname,
+        app_version: APP_VERSION,
+        submitted_at: new Date().toISOString(),
+      };
+      const response = await fetch(FORMSPREE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      toast({
+        title: "Merci !",
+        description: "Retour bien envoyé. Nous y répondons rapidement.",
+      });
       setMessage("");
       onOpenChange(false);
+    } catch {
+      // Réseau down ou Formspree non-2xx : on garde la modale ouverte
+      // et le textarea intact pour un retry simple.
+      toast({
+        title: "Envoi impossible",
+        description:
+          "Vérifiez votre connexion et réessayez. Votre message est conservé.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
