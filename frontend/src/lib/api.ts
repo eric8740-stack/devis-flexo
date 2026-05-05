@@ -1,3 +1,5 @@
+import type { AdminUser, AdminUserCreate } from "@/types/admin";
+
 // URL du backend FastAPI.
 // - En dev local : http://localhost:8000 (défaut)
 // - En prod (Vercel) : NEXT_PUBLIC_API_URL définie dans les env vars Vercel,
@@ -814,3 +816,25 @@ export const deleteDevis = (id: number) =>
 
 export const duplicateDevis = (id: number) =>
   apiFetch<DevisDetail>(`/api/devis/${id}/duplicate`, { method: "POST" });
+
+// ---------------------------------------------------------------------------
+// Sprint 12 Lot S12-D : Administration (Eric only — get_current_admin)
+// ---------------------------------------------------------------------------
+
+export const listAdminUsers = () =>
+  apiFetch<AdminUser[]>("/api/admin/users");
+
+export const createAdminUser = (data: AdminUserCreate) =>
+  apiFetch<AdminUser>("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const disableAdminUser = (id: number) =>
+  apiFetch<AdminUser>(`/api/admin/users/${id}/disable`, { method: "PUT" });
+
+export const enableAdminUser = (id: number) =>
+  apiFetch<AdminUser>(`/api/admin/users/${id}/enable`, { method: "PUT" });
+
+export const deleteAdminUser = (id: number) =>
+  apiFetch<void>(`/api/admin/users/${id}`, { method: "DELETE" });
