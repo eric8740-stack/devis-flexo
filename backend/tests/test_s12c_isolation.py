@@ -114,6 +114,36 @@ def test_isolation_user_b_list_outils_decoupe_returns_empty(as_user_b):
     assert r.json() == []
 
 
+def test_isolation_user_b_list_partenaires_st_returns_empty(as_user_b):
+    r = client.get("/api/partenaires-st")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_isolation_user_b_list_fournisseurs_returns_empty(as_user_b):
+    r = client.get("/api/fournisseurs")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_isolation_user_b_list_charges_mensuelles_returns_empty(as_user_b):
+    r = client.get("/api/charges-mensuelles")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_isolation_user_b_list_operations_finition_returns_empty(as_user_b):
+    r = client.get("/api/operations-finition")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_isolation_user_b_list_catalogue_returns_empty(as_user_b):
+    r = client.get("/api/catalogue")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
 # ---------------------------------------------------------------------------
 # Détail / mutation : 404 (anti-enumeration) sur ressource d'A
 # ---------------------------------------------------------------------------
