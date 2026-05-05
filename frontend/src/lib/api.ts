@@ -218,12 +218,25 @@ export const deleteFournisseur = (id: number) =>
 // Sprint 2 : Machine (presses flexo)
 // ---------------------------------------------------------------------------
 
-// Sprint 9 v2 Lot 9d : refactor statut String → actif Boolean uniformisé
+// Sprint 9 v2 Lot 9d : refactor statut String → actif Boolean uniformisé.
+// Mini-fix vitesse-machine 05/05/2026 : exposition des 3 champs jusque-là
+// invisibles côté frontend mais utilisés par le moteur de coût
+// (vitesse_moyenne_m_h pour P5+P7, duree_calage_h pour P7,
+//  laize_max_mm NOT NULL pour matching cylindres).
 export interface Machine {
   id: number;
   nom: string;
   largeur_max_mm: number | null;
+  // Numeric(6,2) NOT NULL côté backend — required à la création.
+  laize_max_mm: number;
+  // Catalogue constructeur (m/min) — n'impacte PAS le calcul. Indicatif.
   vitesse_max_m_min: number | null;
+  // Vitesse réaliste de production en m/h (= m/min × 60). Pilote
+  // réellement P5 Roulage et P7 MO. UI saisit en m/min ; conversion ×60
+  // transparente vers ce champ pour stockage BDD.
+  vitesse_moyenne_m_h: number | null;
+  // Durée calage en h (Numeric(4,2)). Pilote l'heures_calage de P7 MO.
+  duree_calage_h: number | null;
   nb_couleurs: number | null;
   cout_horaire_eur: number | null;
   actif: boolean;
