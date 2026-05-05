@@ -121,6 +121,25 @@ export function MachinesHelp() {
           Valeur typique flexo : entre 0.50 (job répétitif simple) et 2.00 (premier passage ou
           changement complet de configuration).
         </p>
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-3 my-3 text-sm">
+          <strong>⚠️ Limitation actuelle à connaître :</strong> la durée de calage saisie ici est un{" "}
+          <strong>forfait fixe par machine</strong>, indépendant du nombre de couleurs du job en cours.
+          Concrètement : que tu fasses un job 1 couleur ou un job 8 couleurs UV multi-étapes, l&apos;app
+          facture la même durée de calage (celle saisie ici).
+          <p className="mt-2">
+            <strong>Conseil pratique</strong> : saisis une <em>durée moyenne représentative</em> de tes
+            jobs typiques sur cette machine. Exemples :
+          </p>
+          <ul className="list-disc pl-6 mt-1 space-y-0.5">
+            <li>Tu fais surtout des jobs 1-2 couleurs simples → mets <strong>0.50</strong> (30 min)</li>
+            <li>Tu fais surtout des jobs 4-6 couleurs CMJN → mets <strong>1.00</strong> (1h)</li>
+            <li>Tu fais surtout des jobs 8 couleurs UV multi-étapes → mets <strong>1.50</strong> (1h30)</li>
+          </ul>
+          <p className="mt-2">
+            <em>À venir en Phase 2</em> : durée calage variable selon le nombre de couleurs du job
+            (rejoindra la refonte du moteur temps de production).
+          </p>
+        </div>
 
         <h4 className="font-semibold mt-4 mb-1">Nb couleurs</h4>
         <p className="ml-2">
