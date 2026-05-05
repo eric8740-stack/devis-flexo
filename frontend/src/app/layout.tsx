@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { Header } from "@/components/Header";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/toaster";
@@ -34,6 +35,7 @@ export default function RootLayout({
         <AuthProvider>
           <Header />
           <ProtectedRoute>{children}</ProtectedRoute>
+          <FeedbackButton />
           <Toaster />
         </AuthProvider>
       </body>
