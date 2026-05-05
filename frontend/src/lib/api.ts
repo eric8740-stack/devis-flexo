@@ -5,17 +5,85 @@
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Sprint 12 Lot S12-E : intercepteur Bearer JWT + refresh auto sur 401.
+const ACCESS_TOKEN_KEY = "devis_flexo_access_token";
+const REFRESH_TOKEN_KEY = "devis_flexo_refresh_token";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
 }
 
+function readToken(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(key);
+}
+
+function clearTokensAndRedirect() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  // Hard redirect plutôt que router.push : on est hors d'un composant React
+  // ici, et on veut couper tout state en cours (cache RSC, fetch en vol).
+  window.location.href = "/login";
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = readToken(REFRESH_TOKEN_KEY);
+  if (!refreshToken) return null;
+  try {
+    const r = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!r.ok) return null;
+    const tokens = await r.json();
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+      window.localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+    }
+    return tokens.access_token as string;
+  } catch {
+    return null;
+  }
+}
+
+function buildHeaders(
+  init: RequestInit | undefined,
+  token: string | null
+): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(init?.headers ?? {}),
+  };
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  const url = `${API_URL}${path}`;
+  const initialToken = readToken(ACCESS_TOKEN_KEY);
+
+  let response = await fetch(url, {
     ...init,
+    headers: buildHeaders(init, initialToken),
   });
+
+  // 401 + token présent → tente UN refresh, puis retry l'appel d'origine.
+  // Si le refresh échoue, on clear et redirige vers /login.
+  if (response.status === 401 && initialToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      response = await fetch(url, {
+        ...init,
+        headers: buildHeaders(init, newToken),
+      });
+    } else {
+      clearTokensAndRedirect();
+    }
+  }
+
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
     try {

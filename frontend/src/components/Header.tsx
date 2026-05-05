@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -22,17 +24,29 @@ const NAV_ITEMS = [
   { href: "/catalogue", label: "Catalogue" },
 ];
 
+const ADMIN_NAV_ITEM = { href: "/admin", label: "Admin" };
+
 export function Header() {
   const pathname = usePathname();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+
   // Best-match : on choisit le href le PLUS LONG qui matche le pathname.
   // Évite que /devis/nouveau active à la fois /devis et /devis/nouveau.
-  const activeHref = NAV_ITEMS.filter(
-    ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
-  ).reduce<string | null>(
-    (best, { href }) =>
-      best === null || href.length > best.length ? href : best,
-    null
-  );
+  const visibleNav = isAuthenticated
+    ? user?.is_admin
+      ? [...NAV_ITEMS, ADMIN_NAV_ITEM]
+      : NAV_ITEMS
+    : [];
+  const activeHref = visibleNav
+    .filter(
+      ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
+    )
+    .reduce<string | null>(
+      (best, { href }) =>
+        best === null || href.length > best.length ? href : best,
+      null
+    );
+
   return (
     <header className="border-b bg-background">
       <nav className="container mx-auto flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
@@ -40,7 +54,7 @@ export function Header() {
           devis-flexo
         </Link>
         <div className="flex flex-wrap gap-x-4 gap-y-2">
-          {NAV_ITEMS.map(({ href, label }) => {
+          {visibleNav.map(({ href, label }) => {
             const active = href === activeHref;
             return (
               <Link
@@ -57,6 +71,40 @@ export function Header() {
               </Link>
             );
           })}
+        </div>
+
+        {/* Zone droite : auth */}
+        <div className="ml-auto flex items-center gap-3">
+          {isLoading ? null : isAuthenticated ? (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {user?.email}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                aria-label="Se déconnecter"
+              >
+                Déconnexion
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Connexion
+              </Link>
+              <Link
+                href="/register"
+                className="text-sm font-medium text-foreground transition-colors hover:underline"
+              >
+                Inscription
+              </Link>
+            </>
+          )}
         </div>
       </nav>
     </header>
