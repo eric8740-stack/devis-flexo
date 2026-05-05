@@ -564,12 +564,32 @@ export function DevisCalculForm({
                   id="outil_id"
                   className={selectClass}
                   value={data.outil_decoupe_id ?? ""}
-                  onChange={(e) =>
-                    setField(
-                      "outil_decoupe_id",
-                      e.target.value ? Number(e.target.value) : null
-                    )
-                  }
+                  onChange={(e) => {
+                    // Sprint 12 mini-fix UX-2 : à la sélection d'un outil
+                    // existant, on synchronise les champs Format avec ses
+                    // dimensions pour éviter l'incohérence (ex. choisir un
+                    // outil 50×210 alors que le format saisi est 60×40).
+                    // L'utilisateur peut toujours modifier ensuite (cas
+                    // pose multiple, ré-utilisation d'outil sur format
+                    // dérivé). Le choix "(non référencé)" ne touche à rien.
+                    const selectedId = e.target.value
+                      ? Number(e.target.value)
+                      : null;
+                    const outil =
+                      selectedId !== null
+                        ? outils.find((o) => o.id === selectedId) ?? null
+                        : null;
+                    setData((prev) => ({
+                      ...prev,
+                      outil_decoupe_id: selectedId,
+                      ...(outil
+                        ? {
+                            format_etiquette_largeur_mm: Number(outil.format_l_mm),
+                            format_etiquette_hauteur_mm: Number(outil.format_h_mm),
+                          }
+                        : {}),
+                    }));
+                  }}
                 >
                   <option value="">(non référencé)</option>
                   {outils.map((o) => (
@@ -582,7 +602,9 @@ export function DevisCalculForm({
                 </select>
                 <p className="text-xs text-muted-foreground">
                   Outil existant = déjà amorti, P3b = 0 €. L&apos;identifiant
-                  sert uniquement à tracer dans l&apos;audit.
+                  sert uniquement à tracer dans l&apos;audit. À la sélection,
+                  les champs <em>Format largeur/hauteur</em> sont préremplis
+                  depuis l&apos;outil — modifiables si pose multiple.
                 </p>
               </div>
             ) : (
