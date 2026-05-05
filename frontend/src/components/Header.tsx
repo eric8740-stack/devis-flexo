@@ -21,7 +21,11 @@ const NAV_ITEMS = [
   { href: "/partenaires-st", label: "Partenaires ST" },
   { href: "/charges-mensuelles", label: "Charges" },
   { href: "/complexes", label: "Complexes" },
-  { href: "/catalogue", label: "Catalogue" },
+  // Sprint 12 mini-fix UX-1 : "Catalogue" trop générique, créait confusion
+  // avec "Outils de découpe" (sidebar Paramètres). On précise le concept
+  // métier : ce sont les produits récurrents commandés PAR LES CLIENTS,
+  // pas les outils techniques de production.
+  { href: "/catalogue", label: "Produits clients" },
 ];
 
 const ADMIN_NAV_ITEM = { href: "/admin", label: "Admin" };
