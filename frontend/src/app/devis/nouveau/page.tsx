@@ -6,6 +6,8 @@ import { useState } from "react";
 import { DevisCalculForm } from "@/components/DevisCalculForm";
 import { DevisResult } from "@/components/DevisResult";
 import { DevisSaveBar } from "@/components/DevisSaveBar";
+import { CalculerDevisHelp } from "@/components/help/content/CalculerDevisHelp";
+import { HelpButton } from "@/components/help/HelpButton";
 import type { DevisCalculResult, DevisInput } from "@/lib/api";
 
 export default function NouveauDevisPage() {
@@ -16,7 +18,12 @@ export default function NouveauDevisPage() {
   return (
     <main className="container mx-auto max-w-5xl p-4 sm:p-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold">Calculer un devis</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold">Calculer un devis</h1>
+          <HelpButton title="Calculer un devis">
+            <CalculerDevisHelp />
+          </HelpButton>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Moteur de coût v2 — 7 postes calculés à partir des seeds
           (tarifs, complexes, machines). Le formulaire est pré-rempli sur le

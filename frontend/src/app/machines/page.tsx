@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { DataTable, type Column } from "@/components/DataTable";
+import { MachinesHelp } from "@/components/help/content/MachinesHelp";
+import { HelpButton } from "@/components/help/HelpButton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -101,7 +103,12 @@ export default function MachinesPage() {
   return (
     <main className="container mx-auto max-w-5xl p-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Machines</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Machines</h1>
+          <HelpButton title="Machines">
+            <MachinesHelp />
+          </HelpButton>
+        </div>
         <Button asChild>
           <Link href="/machines/nouveau">+ Nouvelle machine</Link>
         </Button>

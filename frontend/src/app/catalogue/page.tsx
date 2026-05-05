@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DataTable, type Column } from "@/components/DataTable";
+import { ProduitsClientsHelp } from "@/components/help/content/ProduitsClientsHelp";
+import { HelpButton } from "@/components/help/HelpButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,9 +80,14 @@ export default function CataloguePage() {
   return (
     <main className="container mx-auto max-w-6xl p-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Catalogue produits
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Catalogue produits
+          </h1>
+          <HelpButton title="Produits clients">
+            <ProduitsClientsHelp />
+          </HelpButton>
+        </div>
         <Button asChild>
           <Link href="/catalogue/nouveau">+ Nouveau produit</Link>
         </Button>

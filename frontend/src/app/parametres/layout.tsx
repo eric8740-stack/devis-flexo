@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ParametresHelp } from "@/components/help/content/ParametresHelp";
+import { HelpButton } from "@/components/help/HelpButton";
 import { cn } from "@/lib/utils";
 
 const PARAMETRES_NAV = [
@@ -26,7 +28,12 @@ export default function ParametresLayout({
   const pathname = usePathname();
   return (
     <main className="container mx-auto p-8">
-      <h1 className="mb-6 text-2xl font-semibold">Paramètres</h1>
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="text-2xl font-semibold">Paramètres</h1>
+        <HelpButton title="Paramètres">
+          <ParametresHelp />
+        </HelpButton>
+      </div>
       <div className="flex flex-col gap-8 md:flex-row md:gap-12">
         <aside className="md:w-56 md:shrink-0">
           <nav className="flex flex-col gap-1 text-sm">
