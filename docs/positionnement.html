@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Positionnement stratégique — FlexoCompare + FlexoCheck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:wght@600;800&display=swap');
+
+  :root {
+    --bg: #fef8ea;
+    --paper: #ffffff;
+    --ink: #1a2238;
+    --ink-soft: #3a4458;
+    --accent: #1a52a3;
+    --accent-soft: #d8e4f5;
+    --gold: #c79a3a;
+    --gold-soft: #f5e9c8;
+    --green: #2d7a4f;
+    --green-soft: #d8efdf;
+    --red: #b53838;
+    --red-soft: #f5d8d8;
+    --purple: #6b4a9e;
+    --purple-soft: #e8dff5;
+    --border: #d6cba0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Atkinson Hyperlegible', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    padding: 0;
+    font-size: 16px;
+  }
+
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 50px 60px;
+    background: var(--paper);
+    box-shadow: 0 0 30px rgba(0,0,0,0.08);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Fraunces', serif;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-bottom: 36px;
+  }
+
+  h2 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 40px;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-top: 22px;
+    margin-bottom: 12px;
+  }
+
+  h4 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 16px;
+    margin-bottom: 6px;
+  }
+
+  p {
+    margin-bottom: 14px;
+    font-size: 1rem;
+  }
+
+  strong { color: var(--accent); font-weight: 700; }
+
+  ul, ol { margin-left: 24px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; font-size: 1rem; }
+
+  .pivot-callout {
+    background: var(--purple-soft);
+    border: 2px solid var(--purple);
+    border-radius: 8px;
+    padding: 22px 26px;
+    margin-bottom: 30px;
+  }
+  .pivot-callout h3 {
+    margin: 0 0 8px 0;
+    color: var(--purple);
+    font-size: 1.2rem;
+  }
+
+  .products-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin: 24px 0;
+  }
+
+  .product-card {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 24px;
+    border-top: 5px solid var(--accent);
+  }
+  .product-card.check { border-top-color: var(--purple); }
+  .product-card h3 {
+    font-size: 1.4rem;
+    color: var(--accent);
+    margin-top: 0;
+    margin-bottom: 4px;
+  }
+  .product-card.check h3 { color: var(--purple); }
+  .product-card .pitch {
+    font-style: italic;
+    color: var(--ink-soft);
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+  }
+  .product-card h4 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin-top: 14px;
+    margin-bottom: 6px;
+  }
+  .product-card ul {
+    margin-left: 18px;
+  }
+  .product-card li {
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+
+  .box {
+    background: var(--bg);
+    border-left: 5px solid var(--accent);
+    padding: 16px 22px;
+    margin: 18px 0;
+    border-radius: 4px;
+  }
+  .box-green { background: var(--green-soft); border-left-color: var(--green); }
+  .box-green strong { color: var(--green); }
+  .box-gold { background: var(--gold-soft); border-left-color: var(--gold); }
+  .box-gold strong { color: var(--gold); }
+  .box-purple { background: var(--purple-soft); border-left-color: var(--purple); }
+  .box-purple strong { color: var(--purple); }
+
+  .box-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.95rem;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--ink);
+    color: white;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .price {
+    font-family: 'Fraunces', serif;
+    font-weight: 800;
+    color: var(--accent);
+    font-size: 1.1rem;
+  }
+
+  .timeline {
+    margin: 20px 0;
+  }
+  .timeline-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 18px;
+    gap: 16px;
+  }
+  .timeline-marker {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-family: 'Fraunces', serif;
+    font-size: 1.1rem;
+  }
+  .timeline-item.check .timeline-marker { background: var(--purple); }
+  .timeline-content {
+    flex: 1;
+    padding-top: 4px;
+  }
+  .timeline-content h4 {
+    margin: 0 0 4px 0;
+    font-family: 'Fraunces', serif;
+    color: var(--ink);
+    font-size: 1.05rem;
+  }
+  .timeline-content p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; padding: 30px; max-width: 100%; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Positionnement stratégique</h1>
+  <p class="subtitle">FlexoCompare + FlexoCheck — concept dual, deux produits complémentaires</p>
+
+  <div class="pivot-callout">
+    <h3>🎯 Pivot stratégique</h3>
+    <p style="margin: 0">Plutôt que de mêler le devis et l'IA qualité dans un seul produit, on les sépare en <strong>deux offres distinctes mais complémentaires</strong>. Chacune répond à un besoin business différent et peut se vendre seule. Le bundle des deux séduit les imprimeurs qui veulent l'écosystème intégré.</p>
+  </div>
+
+  <h2>Les 2 produits côte à côte</h2>
+
+  <div class="products-grid">
+    <div class="product-card">
+      <h3>🎯 FlexoCompare</h3>
+      <p class="pitch">"L'outil de devis flexo intelligent"</p>
+
+      <h4>Promesse</h4>
+      <p style="font-size: 0.95rem; margin-bottom: 12px">Devis optimisé en 5 secondes au lieu de 30 minutes. Le commercial saisit la demande client, le moteur propose la meilleure configuration de production sur le parc machine.</p>
+
+      <h4>Modules clés</h4>
+      <ul>
+        <li>Moteur d'optimisation de pose (7 règles métier)</li>
+        <li>Catalogue de 20 options de fabrication</li>
+        <li>Rebobinage + arbitrage mandrins intelligent</li>
+        <li>Onboarding express 10 minutes (catalogues pré-remplis)</li>
+        <li>Import tarifs fournisseurs par PDF (IA)</li>
+      </ul>
+
+      <h4>Cible primaire</h4>
+      <ul>
+        <li>Imprimeurs petits / moyens (3-50 employés)</li>
+        <li>Qui font des devis Excel ou à la main</li>
+        <li>Qui ne veulent pas d'ERP lourd type CERM</li>
+      </ul>
+
+      <h4>Modèle économique</h4>
+      <p style="font-size: 0.95rem; margin-bottom: 0"><span class="price">200 à 500 €/mois</span> en SaaS selon taille du parc machine.</p>
+    </div>
+
+    <div class="product-card check">
+      <h3>✅ FlexoCheck</h3>
+      <p class="pitch">"L'IA qualité flexo qui sort du lot"</p>
+
+      <h4>Promesse</h4>
+      <p style="font-size: 0.95rem; margin-bottom: 12px">Zéro démarrage défectueux. L'IA contrôle automatiquement chaque 1er tirage vs BAT validé et détecte tous les écarts avant lancement en cadence.</p>
+
+      <h4>Modules clés</h4>
+      <ul>
+        <li>Contrôle BAT 1er tirage + détection sens sortie</li>
+        <li>Analyse photo étiquette (estimation couleurs/techniques)</li>
+        <li>Contrôle qualité continu (toutes les 1 000 ex)</li>
+        <li>Détection défauts impression en temps réel</li>
+        <li>Audit qualité aléatoire + traçabilité probante</li>
+        <li>Coach IA opérateurs juniors</li>
+        <li>Dashboard analytique défauts par machine/opérateur</li>
+      </ul>
+
+      <h4>Cible primaire</h4>
+      <ul>
+        <li>Tous imprimeurs flexo (même équipés d'un ERP)</li>
+        <li>Sensibles à la qualité (pharma, alimentaire, cosmétique)</li>
+        <li>Soucieux de réduire la gâche / former leurs juniors</li>
+      </ul>
+
+      <h4>Modèle économique</h4>
+      <p style="font-size: 0.95rem; margin-bottom: 0"><span class="price">150 à 400 €/mois</span> par atelier + <span class="price">0,05 €/analyse</span> au-delà du quota inclus.</p>
+    </div>
+  </div>
+
+  <h3>Bundle des 2 produits</h3>
+
+  <div class="box box-gold">
+    <div class="box-label">— Offre intégrée FlexoSuite</div>
+    <p style="margin-bottom: 8px"><strong>FlexoCompare + FlexoCheck à tarif préférentiel</strong> (−20 % sur le total). Le devis alimente directement le contrôle BAT : quand une commande est confirmée, le BAT y est rattaché et apparaît automatiquement sur le poste de production le jour J.</p>
+    <p style="margin: 0">Argument commercial : <em>"Le devis et la qualité parlent la même langue — fini les ressaisies et les erreurs de transcription entre les services."</em></p>
+  </div>
+
+  <h2>Segmentation client et stratégie commerciale</h2>
+
+  <table>
+    <thead>
+      <tr><th>Segment</th><th>Profil</th><th>Produit recommandé</th><th>Argumentaire principal</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Petite imprimerie</strong></td>
+        <td>3-15 employés, 1-2 presses, devis Excel manuel</td>
+        <td>FlexoCompare</td>
+        <td>Gain de temps devis, accessibilité (pas d'ERP)</td>
+      </tr>
+      <tr>
+        <td><strong>Imprimerie moyenne</strong></td>
+        <td>15-50 employés, 2-5 presses, clientèle exigeante</td>
+        <td>FlexoSuite (bundle)</td>
+        <td>Outil intégré devis + qualité, écosystème cohérent</td>
+      </tr>
+      <tr>
+        <td><strong>Grande imprimerie</strong></td>
+        <td>50+ employés, ERP en place (CERM, Label Traxx)</td>
+        <td>FlexoCheck seul</td>
+        <td>Couche IA qualité sur ERP existant, ROI visible</td>
+      </tr>
+      <tr>
+        <td><strong>Imprimerie pharma / agro</strong></td>
+        <td>Spécialisée régulé (FMD, contact alim.)</td>
+        <td>FlexoCheck premium</td>
+        <td>Traçabilité probante, audit qualité, compliance</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Avantage stratégique : 2 portes d'entrée</h2>
+
+  <div class="products-grid">
+    <div class="box box-green">
+      <div class="box-label">— Pourquoi FlexoCheck est plus facile à vendre</div>
+      <ul style="margin: 0">
+        <li><strong>Pas de concurrence directe</strong> (les ERP ne font pas de l'IA qualité)</li>
+        <li><strong>ROI ultra visible</strong> : 1 démarrage raté évité = 200-2 000 €</li>
+        <li><strong>Pas de bouleversement workflow</strong> : se branche sur l'existant</li>
+        <li>Pas besoin de changer d'ERP, pas de migration de données</li>
+        <li>Test possible en quelques jours sur 1 machine</li>
+      </ul>
+    </div>
+    <div class="box box-purple">
+      <div class="box-label">— Pourquoi FlexoCompare reste pertinent</div>
+      <ul style="margin: 0">
+        <li>Outil simple pour ceux qui n'ont pas d'ERP</li>
+        <li>Devis 10x plus rapide qu'à la main</li>
+        <li>Onboarding 10 min vs 3 mois pour CERM</li>
+        <li>Tarif <strong>significativement inférieur</strong> aux ERP du marché</li>
+        <li>Compatible avec petits volumes / TPE / création récente</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Plan d'action en 4 étapes</h2>
+
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="timeline-marker">1</div>
+      <div class="timeline-content">
+        <h4>Court terme (1-2 mois) — Lancer FlexoCompare V1 avec ton pote pilote</h4>
+        <p>Continuer le dev de FlexoCompare comme prévu, sur ton repo existant. Test pilote avec ton pote imprimeur. Les 3 modules IA (analyse photo, contrôle BAT, import PDF) sont intégrés à FlexoCompare V1 — ce sont les briques qui constitueront FlexoCheck.</p>
+      </div>
+    </div>
+
+    <div class="timeline-item check">
+      <div class="timeline-marker">2</div>
+      <div class="timeline-content">
+        <h4>Moyen terme (3-6 mois) — Extraire FlexoCheck comme produit standalone</h4>
+        <p>Une fois FlexoCompare stabilisé, créer FlexoCheck comme version "IA qualité seulement" : un site web/app indépendant qui ne fait que les contrôles IA. Cible immédiate : les imprimeurs qui ont déjà CERM ou un autre ERP.</p>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-marker">3</div>
+      <div class="timeline-content">
+        <h4>Moyen terme (6-9 mois) — Ajouter les modules IA avancés à FlexoCheck</h4>
+        <p>Enrichir progressivement FlexoCheck : contrôle qualité continu, détection usure cliché, coach IA opérateurs, dashboard analytique. Chaque nouveau module = nouvelle raison d'acheter pour un segment client spécifique.</p>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-marker">4</div>
+      <div class="timeline-content">
+        <h4>Long terme (9-18 mois) — Lancer le bundle FlexoSuite + commercialisation large</h4>
+        <p>Quand les 2 produits sont matures, lancer le bundle commercial avec tarif préférentiel et intégration native devis ↔ qualité. Commercialisation via le syndicat UNIIC, salons (Drupa, Labelexpo), démarchage direct des grandes imprimeries pharma/agro.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Communications à adapter au double positionnement</h2>
+
+  <h3>Pour ton pote imprimeur (test pilote actuel)</h3>
+  <p>La synthèse exécutive doit être <strong>légèrement ajustée</strong> pour mentionner que les modules IA de FlexoCompare V1 deviendront aussi disponibles comme produit standalone (FlexoCheck) pour des cas d'usage différents. Ton pote test FlexoCompare complet, mais sait que la valeur peut être déclinée différemment plus tard.</p>
+
+  <h3>Site web / présentation publique</h3>
+  <p>Site avec <strong>2 entrées claires</strong> : "Je veux un outil de devis" → FlexoCompare. "Je veux contrôler ma qualité" → FlexoCheck. "Je veux les deux" → FlexoSuite. Chaque parcours raconte sa propre histoire, sans diluer l'argument.</p>
+
+  <h3>Pricing affichage</h3>
+  <p>Les 3 tarifs sont visibles dès la page d'accueil. Transparence totale. Pas de "contactez-nous pour un devis" qui braque les imprimeurs (ils ont déjà ça avec CERM).</p>
+
+  <h2>Différenciateur stratégique consolidé</h2>
+
+  <div class="box box-gold">
+    <div class="box-label">— Ce que personne ne fait aujourd'hui</div>
+    <ol style="margin: 0">
+      <li><strong>Aucun ERP flexo français</strong> n'embarque de l'IA visuelle pour le contrôle qualité</li>
+      <li><strong>Aucun outil dédié</strong> à l'IA qualité flexo n'existe sur le marché à notre connaissance</li>
+      <li>La <strong>combinaison devis intelligent + qualité IA</strong> en un écosystème cohérent est inédite</li>
+      <li>Le <strong>positionnement "outil léger, accessible, ROI rapide"</strong> contraste avec les ERP de 800 €/jour-consultant</li>
+    </ol>
+  </div>
+
+  <p style="margin-top: 30px; padding: 20px; background: var(--accent-soft); border-radius: 6px; text-align: center; font-size: 1.05rem;">
+    <strong>FlexoCompare</strong> répond au présent (devis quotidien)<br>
+    <strong>FlexoCheck</strong> ouvre l'avenir (IA qualité différenciante)<br>
+    Ensemble, ils définissent une nouvelle catégorie d'outils pour l'imprimerie flexo française.
+  </p>
+
+</div>
+</body>
+</html>

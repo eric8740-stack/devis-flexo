@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brief Claude Code — Sprint 13 FlexoSuite</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:wght@600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #fef8ea;
+    --paper: #ffffff;
+    --ink: #1a2238;
+    --ink-soft: #3a4458;
+    --accent: #1a52a3;
+    --accent-soft: #d8e4f5;
+    --gold: #c79a3a;
+    --gold-soft: #f5e9c8;
+    --green: #2d7a4f;
+    --green-soft: #d8efdf;
+    --red: #b53838;
+    --red-soft: #f5d8d8;
+    --purple: #6b4a9e;
+    --purple-soft: #e8dff5;
+    --code-bg: #1a2238;
+    --code-text: #e8e4d0;
+    --border: #d6cba0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Atkinson Hyperlegible', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    padding: 0;
+    font-size: 15px;
+  }
+
+  .page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 50px;
+    background: var(--paper);
+    box-shadow: 0 0 30px rgba(0,0,0,0.08);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Fraunces', serif;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  h1 { font-size: 2.4rem; font-weight: 800; margin-bottom: 4px; }
+  .subtitle {
+    font-size: 1.05rem; color: var(--ink-soft); font-style: italic; margin-bottom: 30px;
+  }
+
+  h2 {
+    font-size: 1.55rem; font-weight: 700; color: var(--accent);
+    margin-top: 40px; margin-bottom: 16px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--border);
+  }
+
+  h3 {
+    font-size: 1.2rem; font-weight: 700; color: var(--ink);
+    margin-top: 24px; margin-bottom: 10px;
+  }
+
+  h4 {
+    font-size: 1.05rem; font-weight: 700; color: var(--accent);
+    margin-top: 18px; margin-bottom: 6px;
+  }
+
+  p { margin-bottom: 12px; font-size: 0.98rem; }
+
+  strong { color: var(--accent); font-weight: 700; }
+
+  ul, ol { margin-left: 22px; margin-bottom: 12px; }
+  li { margin-bottom: 5px; font-size: 0.98rem; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 14px 18px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-size: 1em;
+  }
+
+  .header-block {
+    background: var(--accent-soft);
+    border-radius: 8px;
+    padding: 22px 26px;
+    margin-bottom: 30px;
+    border-left: 5px solid var(--accent);
+  }
+
+  .header-block strong { color: var(--accent); }
+
+  .box {
+    background: var(--bg);
+    border-left: 5px solid var(--accent);
+    padding: 16px 22px;
+    margin: 16px 0;
+    border-radius: 4px;
+  }
+  .box-green { background: var(--green-soft); border-left-color: var(--green); }
+  .box-green strong { color: var(--green); }
+  .box-red { background: var(--red-soft); border-left-color: var(--red); }
+  .box-red strong { color: var(--red); }
+  .box-gold { background: var(--gold-soft); border-left-color: var(--gold); }
+  .box-gold strong { color: var(--gold); }
+  .box-purple { background: var(--purple-soft); border-left-color: var(--purple); }
+
+  .box-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--ink);
+    color: white;
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .task-list {
+    counter-reset: task-counter;
+    list-style: none;
+    margin-left: 0;
+  }
+  .task-list li {
+    counter-increment: task-counter;
+    padding-left: 50px;
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .task-list li::before {
+    content: counter(task-counter);
+    position: absolute;
+    left: 0; top: 0;
+    width: 32px; height: 32px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: 'Fraunces', serif;
+    font-size: 0.9rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 6px;
+  }
+  .badge-new { background: var(--green); color: white; }
+  .badge-edit { background: var(--accent); color: white; }
+  .badge-refactor { background: var(--gold); color: white; }
+  .badge-test { background: var(--purple); color: white; }
+  .badge-priority { background: var(--red); color: white; }
+
+  .file-tree {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    background: var(--bg);
+    padding: 14px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    margin: 12px 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  .sacred {
+    background: var(--red-soft);
+    border: 2px solid var(--red);
+    border-radius: 8px;
+    padding: 16px 22px;
+    margin: 16px 0;
+  }
+  .sacred-label {
+    font-family: 'Fraunces', serif;
+    color: var(--red);
+    font-weight: 800;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; padding: 30px; max-width: 100%; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Sprint 13 — FlexoSuite</h1>
+  <p class="subtitle">Brief Claude Code · Architecture modulaire + Moteur d'optimisation + Module IA POC</p>
+
+  <div class="header-block">
+    <p style="margin-bottom: 8px"><strong>📦 Repo</strong> : <code>github.com/eric8740-stack/devis-flexo</code> (à renommer en <code>flexosuite</code> dans un sprint ultérieur, pas maintenant)</p>
+    <p style="margin-bottom: 8px"><strong>🌳 Branche</strong> : <code>sprint-13-flexosuite</code> (à créer depuis <code>main</code>)</p>
+    <p style="margin-bottom: 8px"><strong>📋 Documents de référence</strong> : <code>CahierDesCharges_FlexoCompare_Sprint13.html</code> + <code>Positionnement_FlexoCompare_FlexoCheck.html</code> (à intégrer dans <code>docs/</code> au démarrage)</p>
+    <p style="margin: 0"><strong>🎯 Objectif</strong> : poser les fondations techniques de FlexoSuite avec activation modulaire (FlexoCompare / FlexoCheck / Bundle), implémenter le cœur du moteur d'optimisation et un module IA en proof of concept.</p>
+  </div>
+
+  <h2>1. Contexte stratégique</h2>
+
+  <p>Le projet pivote d'un produit unique (Devis-Flexo) vers un <strong>concept dual</strong> :</p>
+
+  <ul>
+    <li><strong>FlexoCompare</strong> : outil de devis intelligent (cœur historique du projet)</li>
+    <li><strong>FlexoCheck</strong> : IA qualité standalone (modules d'analyse photo + contrôle BAT, vendables séparément)</li>
+    <li><strong>FlexoSuite</strong> : bundle des deux à tarif préférentiel</li>
+  </ul>
+
+  <p>Techniquement, c'est <strong>une seule application</strong> avec <strong>activation modulaire</strong> par utilisateur. L'utilisateur ne voit que les modules de son abonnement.</p>
+
+  <h2>2. Périmètre Sprint 13</h2>
+
+  <p>6 livrables à produire dans ce sprint (priorité décroissante) :</p>
+
+  <ol class="task-list">
+    <li>
+      <strong>Système d'activation modulaire</strong> <span class="badge badge-new">NEW</span>
+      <p style="margin: 4px 0 0 0">Refactoring du modèle User pour gérer les modules activés (flexocompare, flexocheck, bundle). Middleware d'accès qui filtre routes/UI selon les modules de l'utilisateur connecté.</p>
+    </li>
+    <li>
+      <strong>Onboarding express avec catalogues pré-remplis</strong> <span class="badge badge-new">NEW</span>
+      <p style="margin: 4px 0 0 0">Page d'onboarding qui crée automatiquement les cylindres standard (19), 3 machines types, 30 matières communes et 20 options de fabrication. L'utilisateur décoche ce qu'il n'a pas et ajuste 2-3 paramètres clés.</p>
+    </li>
+    <li>
+      <strong>Moteur d'optimisation de pose v1</strong> <span class="badge badge-new">NEW</span> <span class="badge badge-priority">CŒUR</span>
+      <p style="margin: 4px 0 0 0">Implémentation des 7 règles métier : contrainte client, effet banane, échenillage, compensation laize/dev, confort de roulage, capacité groupes couleurs, souveraineté commerciale.</p>
+    </li>
+    <li>
+      <strong>Catalogues paramétrables</strong> <span class="badge badge-new">NEW</span>
+      <p style="margin: 4px 0 0 0">CRUD complets pour cylindres, machines, matières, options de fabrication, barèmes (échenillage, effet banane, confort, compensation). Tables paramétrables par tenant.</p>
+    </li>
+    <li>
+      <strong>Module IA POC — Analyse photo d'étiquette</strong> <span class="badge badge-new">NEW</span>
+      <p style="margin: 4px 0 0 0">Upload photo → appel Claude API multimodal → extraction couleurs/techniques/matière → pré-remplissage devis. POC pour valider l'architecture IA avant d'attaquer le contrôle BAT au Sprint 14.</p>
+    </li>
+    <li>
+      <strong>Fondations DB pour traçabilité production</strong> <span class="badge badge-new">NEW</span>
+      <p style="margin: 4px 0 0 0">Tables <code>photos_production</code> (générique, multi-étapes) et <code>rapports_qualite_production</code> (avec timestamps par étape) créées avec leurs migrations, mais SANS implémenter encore les workflows complets (contrôle BAT, photos palettes…). Préparation propre pour Sprint 14-15.</p>
+    </li>
+  </ol>
+
+  <h2>3. Choix techniques par défaut</h2>
+
+  <h3>Stack confirmée (rappel)</h3>
+  <table>
+    <tbody>
+      <tr><td><strong>Backend</strong></td><td>FastAPI + SQLAlchemy + Alembic, Python 3.11, Railway PostgreSQL</td></tr>
+      <tr><td><strong>Frontend</strong></td><td>Next.js 14 (App Router) + Tailwind + shadcn/ui, Vercel</td></tr>
+      <tr><td><strong>Auth</strong></td><td>JWT existant (préserver), middleware FastAPI</td></tr>
+      <tr><td><strong>IA</strong></td><td>Anthropic SDK Python (claude-opus-4 ou claude-sonnet-4 selon coût/qualité — à arbitrer)</td></tr>
+      <tr><td><strong>Stockage images</strong></td><td>Vercel Blob (intégration native Next.js, plus simple que S3 au début)</td></tr>
+      <tr><td><strong>Tests</strong></td><td>pytest backend (objectif &gt; 80 % cover sur le moteur d'optimisation)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Modèle modules activés</h3>
+  <pre><code># app/models/user.py — extension du modèle User existant
+
+class User(Base):
+    # ... champs existants
+    
+    # NOUVEAU : modules activés
+    has_flexocompare = Column(Boolean, default=False, nullable=False)
+    has_flexocheck = Column(Boolean, default=False, nullable=False)
+    
+    @property
+    def has_bundle(self):
+        return self.has_flexocompare and self.has_flexocheck
+    
+    @property
+    def active_modules(self):
+        modules = []
+        if self.has_flexocompare: modules.append("flexocompare")
+        if self.has_flexocheck: modules.append("flexocheck")
+        return modules</code></pre>
+
+  <h3>Middleware d'accès modulaire</h3>
+  <pre><code># app/api/dependencies.py — décorateur de protection de route
+
+from fastapi import Depends, HTTPException
+from app.models.user import User
+
+def require_module(module_name: str):
+    """Décorateur qui vérifie que l'utilisateur a accès au module."""
+    def dependency(current_user: User = Depends(get_current_user)):
+        if not getattr(current_user, f"has_{module_name}", False):
+            raise HTTPException(403, f"Module {module_name} non activé")
+        return current_user
+    return dependency
+
+# Usage dans les routes :
+@router.post("/optimisation/calculer")
+async def calculer(
+    devis: DevisIn,
+    user: User = Depends(require_module("flexocompare"))
+):
+    ...
+
+@router.post("/ia/analyser-photo")
+async def analyser_photo(
+    file: UploadFile,
+    user: User = Depends(require_module("flexocheck"))  # ou flexocompare selon strat
+):
+    ...</code></pre>
+
+  <h3>Architecture des modules IA</h3>
+  <pre><code># app/services/ia/ — module dédié à l'IA
+
+app/services/ia/
+├── __init__.py
+├── client.py           # Wrapper Anthropic SDK (réutilisable par tous les modules IA)
+├── analyse_photo.py    # Module 1 : analyse photo étiquette
+├── controle_bat.py     # Module 2 : contrôle BAT (Sprint 14)
+└── prompts/
+    ├── analyse_photo.txt
+    └── controle_bat.txt
+
+# Le wrapper client gère :
+# - Auth API key (variable d'env ANTHROPIC_API_KEY)
+# - Encodage base64 des images
+# - Parsing JSON strict des réponses
+# - Logging des coûts (tokens utilisés × tarif modèle)
+# - Retry automatique sur erreurs réseau</code></pre>
+
+  <h2>4. Tâches détaillées</h2>
+
+  <h3>Tâche A — Migration DB + modèles modules</h3>
+
+  <ul>
+    <li><span class="badge badge-edit">EDIT</span> <code>app/models/user.py</code> : ajouter <code>has_flexocompare</code> et <code>has_flexocheck</code></li>
+    <li><span class="badge badge-new">NEW</span> Migration Alembic : <code>add_user_modules</code></li>
+    <li><span class="badge badge-edit">EDIT</span> <code>seed.py</code> : utilisateurs de test avec différents modules (Eric a FlexoSuite, autre user FlexoCompare seul, autre FlexoCheck seul)</li>
+  </ul>
+
+  <h3>Tâche B — Modèles métier</h3>
+
+  <ul>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/cylindre_magnetique.py</code> : modèle + relations</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/machine_imprimerie.py</code> : avec champs <code>vitesse_pratique_m_min</code> NOT NULL, <code>nb_groupes_couleurs</code>, <code>nb_postes_decoupe</code>, <code>options</code> JSONB</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/matiere.py</code> : avec <code>est_transparent</code>, <code>opacite_pct</code>, <code>certifications_env</code></li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/option_fabrication.py</code> : avec coefs vitesse/gâche, groupes_couleurs_requis, modules_speciaux_requis</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/bareme.py</code> : table générique pour barèmes (échenillage, effet banane, confort, compensation)</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/configuration_pose.py</code> : résultats du moteur d'optimisation</li>
+    <li><span class="badge badge-new">NEW</span> Migration Alembic correspondante</li>
+  </ul>
+
+  <h3>Tâche C — Onboarding express + catalogues pré-remplis</h3>
+
+  <ul>
+    <li><span class="badge badge-new">NEW</span> <code>app/data/catalogue_defaults.py</code> : données seed pour 19 cylindres standard (72 à 144 mm), 3 machines types (Mark Andy 2200, OMET XFlex 330, Nilpeter FA-22), 30 matières communes, 20 options de fabrication, tous les barèmes</li>
+    <li><span class="badge badge-new">NEW</span> Endpoint <code>POST /onboarding/initialiser-catalogues</code> : copie le catalogue par défaut dans le tenant de l'utilisateur</li>
+    <li><span class="badge badge-new">NEW</span> Page Next.js <code>/onboarding</code> : tunnel 4 écrans (machines / cylindres / matières / options) avec cases à cocher</li>
+    <li><span class="badge badge-new">NEW</span> Validation finale + redirection vers dashboard</li>
+  </ul>
+
+  <h3>Tâche D — Moteur d'optimisation v1</h3>
+
+  <ul>
+    <li><span class="badge badge-new">NEW</span> <code>app/services/optimisation/moteur.py</code> : fonction principale <code>optimiser_pose()</code></li>
+    <li><span class="badge badge-new">NEW</span> <code>app/services/optimisation/regles/</code> : un fichier par règle métier
+      <ul>
+        <li><code>effet_banane.py</code> (filtre dur)</li>
+        <li><code>echenillage.py</code> (scoring + coefs)</li>
+        <li><code>compensation_laize_dev.py</code> (bonus)</li>
+        <li><code>confort_roulage.py</code> (coefs rayon + quinconce)</li>
+        <li><code>capacite_couleurs.py</code> (filtre dur)</li>
+        <li><code>contrainte_client.py</code> (plancher intervalle pose)</li>
+      </ul>
+    </li>
+    <li><span class="badge badge-new">NEW</span> Endpoint <code>POST /optimisation/calculer</code> : reçoit la demande, retourne top 3 configs + propositions négociation</li>
+    <li><span class="badge badge-new">NEW</span> Page Next.js <code>/devis/[id]/optimisation</code> : affichage des résultats avec cards de configurations</li>
+    <li><span class="badge badge-test">TESTS</span> <code>tests/services/test_optimisation.py</code> : cases de test exhaustives sur chaque règle métier (au moins 20 tests)</li>
+  </ul>
+
+  <h3>Tâche E — Module IA analyse photo étiquette</h3>
+
+  <ul>
+    <li><span class="badge badge-new">NEW</span> <code>app/services/ia/client.py</code> : wrapper Anthropic SDK <strong>réutilisable pour tous les modules IA futurs</strong> (contrôle BAT, dossier production, etc.)</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/services/ia/analyse_photo.py</code> : fonction <code>analyser_photo_etiquette(image_bytes)</code></li>
+    <li><span class="badge badge-new">NEW</span> <code>app/services/ia/prompts/analyse_photo.txt</code> : prompt structuré (voir CdC section 03e)</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/analyse_photo_etiquette.py</code> : modèle de stockage des résultats</li>
+    <li><span class="badge badge-new">NEW</span> Endpoint <code>POST /ia/analyser-photo</code> : reçoit l'image, retourne le JSON Claude</li>
+    <li><span class="badge badge-new">NEW</span> Intégration Vercel Blob pour stockage images</li>
+    <li><span class="badge badge-new">NEW</span> Page Next.js avec bouton "📸 Analyser une photo" sur la saisie devis</li>
+    <li><span class="badge badge-test">TESTS</span> Tests mocked sur l'API Claude (ne pas appeler la vraie API en CI)</li>
+  </ul>
+
+  <h3>Tâche F — Fondations DB traçabilité production (préparation Sprint 14-15)</h3>
+
+  <div class="box box-purple">
+    <div class="box-label">— Objectif : poser les fondations propres</div>
+    <p style="margin: 0">Cette tâche crée les <strong>tables et structures</strong> qui seront utilisées par les modules de Sprint 14-15 (contrôle BAT, photos palettes, rapport qualité PDF). On ne code PAS encore les workflows complets, juste les schémas DB et les modèles SQLAlchemy. Ça permet de figer l'architecture maintenant sans accumuler de dette technique.</p>
+  </div>
+
+  <ul>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/photo_production.py</code> : table générique avec champ <code>type_etape</code> (1er_tirage, controle_continu, finition, bobine_finie, palette_face, palette_dessus, etiquette_palette)</li>
+    <li><span class="badge badge-new">NEW</span> <code>app/models/rapport_qualite_production.py</code> : table avec tous les timestamps (impression, finition, rebobinage, conditionnement) + durées calculées + nb palettes</li>
+    <li><span class="badge badge-new">NEW</span> Migration Alembic <code>add_traceability_tables</code></li>
+    <li><span class="badge badge-new">NEW</span> Endpoint stub <code>POST /photos-production/upload</code> qui stocke une photo + métadonnées dans Vercel Blob + DB (utilisé immédiatement par l'analyse photo, étendu en Sprint 14)</li>
+    <li><span class="badge badge-test">TESTS</span> Tests unitaires basiques sur les modèles (création, contraintes, relations)</li>
+  </ul>
+
+  <p><strong>Important pour Claude Code</strong> : ne PAS implémenter les routes du contrôle BAT, du rapport PDF, ni les écrans atelier dédiés (postes presse/finition/rebobineuse/conditionnement). C'est le scope du Sprint 14-15. Le Sprint 13 pose UNIQUEMENT les structures DB et le wrapper IA réutilisable.</p>
+
+  <h2>5. Critères d'acceptation Sprint 13</h2>
+
+  <div class="box box-green">
+    <div class="box-label">— Sprint 13 considéré comme terminé quand :</div>
+    <ol style="margin: 0">
+      <li>Un user FlexoCompare peut faire l'onboarding express en moins de 10 min et arriver sur son dashboard avec ses catalogues paramétrés</li>
+      <li>Un user FlexoCompare peut saisir un devis et obtenir les 3 meilleures configurations de pose en moins de 5 secondes</li>
+      <li>Les 7 règles métier du moteur d'optimisation sont implémentées et testées (chaque règle a au moins 2 tests unitaires)</li>
+      <li>Un user FlexoCheck (mais pas FlexoCompare) accède à <code>/ia/analyser-photo</code> mais pas à <code>/optimisation/calculer</code></li>
+      <li>L'analyse photo d'étiquette retourne un JSON exploitable depuis Claude API</li>
+      <li>Les tables <code>photos_production</code> et <code>rapports_qualite_production</code> sont créées en DB avec leurs migrations et modèles SQLAlchemy</li>
+      <li>Le wrapper Anthropic SDK (<code>app/services/ia/client.py</code>) est réutilisable et bien isolé pour les futurs modules IA</li>
+      <li>Tous les tests passent (objectif 80 % de coverage sur le moteur d'optimisation)</li>
+      <li>L'app déploie sans erreur sur Vercel + Railway</li>
+      <li>Eric peut paramétrer son parc ICE en moins de 30 min et lancer son premier devis test</li>
+    </ol>
+  </div>
+
+  <h2>6. Sacred Invariants (à NE PAS casser)</h2>
+
+  <div class="sacred">
+    <div class="sacred-label">⚠️ Règles intouchables du projet</div>
+    <ul style="margin: 0">
+      <li>L'auth JWT existante doit continuer à fonctionner — pas de breaking change sur le flow de login/signup</li>
+      <li>Le multi-tenancy doit être préservé : chaque user voit UNIQUEMENT les données de son <code>company_id</code></li>
+      <li>Les invariants de pricing existants (s'il y en a dans le code Devis-Flexo actuel) doivent rester valides</li>
+      <li>Pas de régression sur les fonctionnalités Sprint 1-12 déjà en production</li>
+      <li>Migrations Alembic OBLIGATOIRES pour tout changement de schéma (jamais de modification directe en DB)</li>
+      <li>Pas de hardcoding de secrets/clés API (toujours via variables d'environnement)</li>
+      <li>La séquence Postgres (Note 16 technique debt) reste à régler en quick fix dans ce sprint OU à reporter explicitement</li>
+    </ul>
+  </div>
+
+  <h2>7. Notes pour Claude Code</h2>
+
+  <ul>
+    <li><strong>Travailler en TDD</strong> sur le moteur d'optimisation : écrire les tests d'abord pour chaque règle métier, puis implémenter</li>
+    <li><strong>Documenter les choix par défaut</strong> dans les commits Git avec des messages détaillés (Eric reviewera ensuite)</li>
+    <li><strong>Demander confirmation</strong> uniquement si une décision change l'architecture (ex: choix entre Vercel Blob vs Cloudinary). Pour le reste, tu tranches et tu documentes.</li>
+    <li><strong>Préserver la stack actuelle</strong> : pas d'ajout de dépendances inutiles, pas de refactoring qui sort du scope</li>
+    <li><strong>Tester sur Mark Andy 2200</strong> comme machine type dans les seeds (correspond au parc d'Eric chez ICE)</li>
+    <li><strong>Internationalisation</strong> : tout en français (UI, messages d'erreur, commentaires si Eric review)</li>
+    <li><strong>Mobile-friendly</strong> : Eric utilise beaucoup mobile, les écrans clés (devis, optimisation, photo IA) doivent être responsive</li>
+  </ul>
+
+  <h2>8. Branchement marketing futur (info, pas à dev maintenant)</h2>
+
+  <p>Pour info, le frontend futur aura 2 sous-domaines :</p>
+  <ul>
+    <li><code>flexocompare.fr</code> → landing devis → bouton "Essayer" pointe vers <code>app.flexosuite.com/signup?module=flexocompare</code></li>
+    <li><code>flexocheck.fr</code> → landing IA qualité → bouton "Essayer" pointe vers <code>app.flexosuite.com/signup?module=flexocheck</code></li>
+  </ul>
+  <p>Le paramètre URL <code>?module=...</code> pré-coche le bon module à l'inscription. À implémenter au sprint suivant avec les landing pages — pas le scope du Sprint 13.</p>
+
+  <h2>9. Post-Sprint 13 — ce qui suit</h2>
+
+  <table>
+    <thead><tr><th>Sprint</th><th>Focus principal</th><th>Estimation</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>14</strong></td>
+        <td>Module IA <strong>contrôle BAT</strong> au démarrage prod + détection sens sortie + workflow re-tirage + écran atelier poste presse</td>
+        <td>40-50h</td>
+      </tr>
+      <tr>
+        <td><strong>15</strong></td>
+        <td><strong>Génération PDF rapport qualité</strong> (interne, envoi client, lien temps réel) + écrans atelier postes finition / rebobinage / conditionnement + photos palettes</td>
+        <td>40-50h</td>
+      </tr>
+      <tr>
+        <td><strong>16</strong></td>
+        <td>Module <strong>rebobinage complet</strong> (bobines clients, mandrins, arbitrage dynamique pré-coupé vs découpe interne) + paramètres profil client étendu</td>
+        <td>30-40h</td>
+      </tr>
+      <tr>
+        <td><strong>17</strong></td>
+        <td>Génération PDF devis professionnel + workflow envoi client + signature électronique + module <strong>import tarifs PDF fournisseurs</strong> via Claude API</td>
+        <td>30-40h</td>
+      </tr>
+      <tr>
+        <td><strong>18</strong></td>
+        <td>Landing pages publiques <strong>flexocompare.fr</strong> + <strong>flexocheck.fr</strong> + tunnel d'inscription avec paramètre <code>?module=</code> + Stripe Checkout</td>
+        <td>30-40h</td>
+      </tr>
+      <tr>
+        <td><strong>19+</strong></td>
+        <td>Modules IA avancés FlexoCheck (contrôle qualité continu toutes les N étiq., coach IA juniors, dashboard analytique défauts, apprentissage automatique des coefs machine)</td>
+        <td>en continu</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>10. Démarrage immédiat</h2>
+
+  <div class="box box-gold">
+    <div class="box-label">— Première commande Claude Code à exécuter</div>
+    <pre style="margin: 0">cd ~/projets/devis-flexo
+git checkout main
+git pull
+git checkout -b sprint-13-flexosuite
+cp ../CahierDesCharges_FlexoCompare_Sprint13.html docs/cdc-sprint13.html
+cp ../Positionnement_FlexoCompare_FlexoCheck.html docs/positionnement.html
+git add docs/
+git commit -m "Sprint 13 : ajout documentation cible (CdC + positionnement)"
+
+# Ensuite, dans Claude Code :
+# 1. Lis les 2 docs dans docs/
+# 2. Commence par la tâche A (migration users + modules)
+# 3. Suis l'ordre A → B → C → D → E
+# 4. Demande confirmation à Eric uniquement si pivot architectural</pre>
+  </div>
+
+  <p style="margin-top: 30px; padding: 18px; background: var(--accent-soft); border-radius: 6px; text-align: center; font-size: 1rem;">
+    <strong>Sprint 13 ouvert</strong> · estimation effort : 70-90h dev solo · livraison cible : 4-5 semaines<br>
+    Tu codes, je teste, Eric review.
+  </p>
+
+</div>
+</body>
+</html>
