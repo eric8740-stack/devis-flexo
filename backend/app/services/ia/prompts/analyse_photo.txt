@@ -1,0 +1,66 @@
+Tu es un expert en impression flexographique d'étiquettes. Analyse cette photo d'étiquette et retourne UNIQUEMENT un JSON strict (pas de texte autour, pas de markdown, pas de ```json```) avec exactement cette structure :
+
+{
+  "couleurs_detectees": [
+    {"rgb_approximatif": "#A23B45", "pantone_proche_estime": "186 C", "surface_pct": 35}
+  ],
+  "nombre_couleurs_distinctes": 4,
+  "couleurs_min_technique": 4,
+  "couleurs_max_technique": 7,
+  "techniques_impression_estimees": ["CMJN", "Pantone spot", "vernis_selectif"],
+  "matiere_estimee": {
+    "type": "papier",
+    "couleur": "blanc",
+    "finition_apparente": "mat"
+  },
+  "finitions_visibles": ["dorure_chaud", "vernis_selectif"],
+  "presence_blanc_opaque": false,
+  "niveau_confiance": "moyen",
+  "limites_analyse": ["éclairage photo défavorable"]
+}
+
+Règles :
+
+- couleurs_detectees : liste des couleurs dominantes visibles, chacune avec :
+  - rgb_approximatif au format hex "#RRGGBB"
+  - pantone_proche_estime : "XXX C" ou "XXX U" si évident, sinon null
+  - surface_pct : pourcentage approximatif de la surface (entier 0-100)
+
+- couleurs_min_technique : nombre MINIMUM de stations couleur nécessaires
+  pour reproduire en flexo (sans options). Compte CMJN comme 4, ou compte
+  les Pantone spots distincts si l'impression est en tons directs.
+
+- couleurs_max_technique : nombre MAXIMUM si toutes les techniques visibles
+  (vernis général, vernis sélectif, blanc opaque support transparent…) sont
+  cochées comme des "stations couleur" supplémentaires.
+
+- techniques_impression_estimees : tableau de codes parmi ["CMJN",
+  "Pantone spot", "vernis_selectif", "vernis_general", "blanc_opaque",
+  "encre_specifique"].
+
+- matiere_estimee.type : un de ["papier", "BOPP", "PET", "PE", "thermique",
+  "synthetique", "inconnu"].
+- matiere_estimee.couleur : un de ["blanc", "transparent", "metallise",
+  "colore", "inconnu"].
+- matiere_estimee.finition_apparente : un de ["mat", "brillant", "satine",
+  "inconnu"].
+
+- finitions_visibles : tableau de codes parmi ["dorure_chaud", "dorure_froid",
+  "vernis_selectif", "vernis_general", "pelliculage", "gaufrage",
+  "hologramme", "serigraphie_inline", "void_inviolable"]. Vide si rien
+  d'évident.
+
+- presence_blanc_opaque : true si la matière semble transparente ET qu'il
+  y a un blanc opaque imprimé derrière les couleurs (typique BOPP). Sinon
+  false.
+
+- niveau_confiance : "haut" si l'image est nette et bien éclairée,
+  "moyen" si éclairage smartphone classique, "faible" si très flou /
+  reflets parasites / pas calibrée.
+
+- limites_analyse : tableau de strings courts décrivant les limites de
+  cette analyse (éclairage, résolution, angle, dégradés ambigus…).
+
+Rappel important : ce n'est PAS une analyse colorimétrique calibrée. Les
+Pantone exacts requièrent un spectrophotomètre. Le BAT (Bon à Tirer)
+client reste obligatoire pour valider les couleurs finales.
