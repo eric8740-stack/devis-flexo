@@ -16,6 +16,7 @@ from app.routers import (
     devis,
     entreprise,
     fournisseur,
+    ia,
     machine,
     onboarding,
     operation_finition,
@@ -73,6 +74,8 @@ app.include_router(admin.router)
 app.include_router(onboarding.router)
 # Sprint 13 Lot S13.D — moteur d'optimisation (7 règles + endpoint /calculer)
 app.include_router(optimisation.router)
+# Sprint 13 Lot S13.E — POC IA analyse photo étiquette (FlexoCheck)
+app.include_router(ia.router)
 
 
 @app.exception_handler(IntegrityError)
