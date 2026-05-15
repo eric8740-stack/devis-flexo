@@ -30,6 +30,7 @@ from app.services.ia.client import (
     lire_prompt,
     parse_json_strict,
 )
+from app.services.ia.support_reserve import appliquer_support_reserve
 
 
 # Champs obligatoires dans la réponse Claude — si l'un manque on lève une
@@ -81,5 +82,11 @@ def analyser_photo_etiquette(
             f"niveau_confiance invalide : {niveau!r}. "
             f"Attendu : {sorted(NIVEAUX_CONFIANCE_AUTORISES)}"
         )
+
+    # Fix analyseur photo : flag support_reserve par couleur + recalcul des
+    # compteurs de stations en excluant les réserves papier. Évite la
+    # surfacturation systématique d'une station sur les défonces blanches
+    # imprimées sur papier blanc (cas typique des étiquettes alimentaires).
+    appliquer_support_reserve(payload)
 
     return payload

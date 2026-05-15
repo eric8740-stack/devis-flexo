@@ -1021,6 +1021,15 @@ export interface IACouleurDetectee {
   rgb_approximatif: string;
   pantone_proche_estime: string | null;
   surface_pct: number;
+  /**
+   * Fix analyseur photo : true si la teinte correspond à la réserve papier
+   * (défonce sur support opaque clair) plutôt qu'à une encre blanche
+   * imprimée. Calculé côté backend par appliquer_support_reserve().
+   * L'UI affiche un badge "Réserve papier" et permet à l'utilisateur
+   * d'override (toggle "Considérer comme encre blanche") avec recalcul
+   * dynamique des min/max stations sans rappel API.
+   */
+  support_reserve?: boolean;
 }
 
 export interface IAMatiereEstimee {

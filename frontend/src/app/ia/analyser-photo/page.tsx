@@ -178,6 +178,22 @@ function ResultatsSection({
     faible: "bg-red-100 text-red-900",
   };
 
+  // Fix analyseur photo : overrides locaux par teinte hex.
+  // Backend pose support_reserve=true sur les blancs "défonce papier".
+  // L'utilisateur peut toggle "Considérer comme encre blanche" → la teinte
+  // est ré-intégrée dans le calcul stations sans rappel API.
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const toggleOverride = (hex: string) =>
+    setOverrides((prev) => ({ ...prev, [hex]: !prev[hex] }));
+
+  // Stations recalculées : le backend a DÉJÀ retiré les réserves identifiées.
+  // On ré-ajoute celles que l'utilisateur a forcées en encre via override.
+  const nbOverridesEncre = r.couleurs_detectees.filter(
+    (c) => Boolean(c.support_reserve) && overrides[c.rgb_approximatif],
+  ).length;
+  const minStations = r.couleurs_min_technique + nbOverridesEncre;
+  const maxStations = r.couleurs_max_technique + nbOverridesEncre;
+
   return (
     <section className="space-y-4">
       <header className="flex items-baseline justify-between">
@@ -193,19 +209,31 @@ function ResultatsSection({
       <Card>
         <CardHeader>
           <CardTitle>
-            Couleurs détectées ({r.nombre_couleurs_distinctes})
+            Couleurs détectées ({r.couleurs_detectees.length})
           </CardTitle>
           <CardDescription>
-            Min technique flexo : <strong>{r.couleurs_min_technique}</strong>{" "}
+            Min technique flexo : <strong>{minStations}</strong>{" "}
             stations · Max si toutes finitions visibles :{" "}
-            <strong>{r.couleurs_max_technique}</strong>
+            <strong>{maxStations}</strong>
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-            {r.couleurs_detectees.map((c, i) => (
-              <CouleurCard key={i} couleur={c} />
-            ))}
+            {r.couleurs_detectees.map((c, i) => {
+              const isReserve = Boolean(c.support_reserve);
+              const isOverridden = isReserve && Boolean(overrides[c.rgb_approximatif]);
+              return (
+                <CouleurCard
+                  key={i}
+                  couleur={c}
+                  isReserve={isReserve}
+                  isOverridden={isOverridden}
+                  onToggle={
+                    isReserve ? () => toggleOverride(c.rgb_approximatif) : undefined
+                  }
+                />
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -309,7 +337,23 @@ function ResultatsSection({
   );
 }
 
-function CouleurCard({ couleur }: { couleur: IACouleurDetectee }) {
+function CouleurCard({
+  couleur,
+  isReserve = false,
+  isOverridden = false,
+  onToggle,
+}: {
+  couleur: IACouleurDetectee;
+  isReserve?: boolean;
+  isOverridden?: boolean;
+  onToggle?: () => void;
+}) {
+  // Comportement badge :
+  //   - support_reserve=true + pas overridé → badge gris "Réserve papier"
+  //   - support_reserve=true + overridé    → badge bleu "Encre blanche d'opacité"
+  //   - support_reserve=false              → pas de badge
+  const showBadgeReserve = isReserve && !isOverridden;
+  const showBadgeEncre = isReserve && isOverridden;
   return (
     <div className="flex items-center gap-3 rounded-md border border-border p-3">
       <div
@@ -319,6 +363,16 @@ function CouleurCard({ couleur }: { couleur: IACouleurDetectee }) {
       />
       <div className="flex-1 space-y-0.5 text-sm">
         <div className="font-mono">{couleur.rgb_approximatif}</div>
+        {showBadgeReserve && (
+          <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+            Réserve papier
+          </span>
+        )}
+        {showBadgeEncre && (
+          <span className="inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-900">
+            Encre blanche d&apos;opacité
+          </span>
+        )}
         {couleur.pantone_proche_estime && (
           <div className="text-xs text-muted-foreground">
             ≈ {couleur.pantone_proche_estime}
@@ -327,6 +381,17 @@ function CouleurCard({ couleur }: { couleur: IACouleurDetectee }) {
         <div className="text-xs text-muted-foreground">
           {couleur.surface_pct}% de la surface
         </div>
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="mt-1 text-xs text-blue-600 hover:underline"
+          >
+            {isOverridden
+              ? "Considérer comme réserve papier"
+              : "Considérer comme encre blanche"}
+          </button>
+        )}
       </div>
     </div>
   );
