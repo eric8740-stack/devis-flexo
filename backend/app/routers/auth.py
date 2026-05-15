@@ -94,6 +94,11 @@ def _build_user_me(user: User, entreprise: Entreprise) -> UserMe:
         nom_entreprise=entreprise.raison_sociale,
         is_admin=user.is_admin,
         is_active=user.is_active,
+        # Sprint 13 Lot S13.A — flags d'activation modulaire FlexoSuite.
+        # Le frontend (AuthContext) les utilise pour filtrer l'UI selon
+        # les modules actifs du user connecté.
+        has_flexocompare=user.has_flexocompare,
+        has_flexocheck=user.has_flexocheck,
         date_creation=user.date_creation,
         date_derniere_connexion=user.date_derniere_connexion,
     )

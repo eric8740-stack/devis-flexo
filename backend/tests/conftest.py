@@ -28,6 +28,16 @@ DEMO_ADMIN_EMAIL = "admin@devis-flexo.fr"
 USER_B_ENTREPRISE_ID = 2
 USER_B_EMAIL = "user.b@isolation-test.fr"
 
+# Sprint 13 Lot S13.A — users avec un seul module actif, utilisés par les
+# tests d'isolation modules dans test_user_modules.py. user_b est admin
+# (bundle), donc on a besoin de comptes non-admin pour exercer la vraie
+# logique du middleware require_module sans bypass admin.
+USER_COMPARE_ONLY_ENTREPRISE_ID = 3
+USER_COMPARE_ONLY_EMAIL = "user.flexocompare@modules-test.fr"
+
+USER_CHECK_ONLY_ENTREPRISE_ID = 4
+USER_CHECK_ONLY_EMAIL = "user.flexocheck@modules-test.fr"
+
 
 def _get_demo_admin() -> User:
     """Retourne le User admin demo (entreprise_id=1) en BDD."""
@@ -158,3 +168,118 @@ def _get_user_b_fresh() -> User:
         return user
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Sprint 13 Lot S13.A — fixtures users multi-modules
+# ---------------------------------------------------------------------------
+
+
+def _ensure_user_single_module(
+    email: str,
+    entreprise_id: int,
+    raison_sociale: str,
+    has_flexocompare: bool,
+    has_flexocheck: bool,
+) -> User:
+    """Crée (idempotent) une entreprise + un user non-admin avec un seul module
+    activé, pour exercer la logique réelle de `require_module` sans bypass admin.
+    """
+    db: Session = SessionLocal()
+    try:
+        ent = db.query(Entreprise).filter(Entreprise.id == entreprise_id).first()
+        if ent is None:
+            ent = Entreprise(
+                id=entreprise_id,
+                raison_sociale=raison_sociale,
+                siret=f"{entreprise_id:014d}",
+                email=f"contact-{entreprise_id}@modules-test.fr",
+                is_demo=False,
+            )
+            db.add(ent)
+            db.flush()
+
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            user = User(
+                email=email,
+                password_hash=hash_password("test_module_pw"),
+                nom_contact=raison_sociale,
+                entreprise_id=entreprise_id,
+                is_active=True,
+                is_admin=False,  # non-admin pour exercer le vrai check module
+                has_flexocompare=has_flexocompare,
+                has_flexocheck=has_flexocheck,
+            )
+            db.add(user)
+        else:
+            # Idempotence : si le user existe déjà, on resynchronise les flags
+            # (utile si un test précédent les a modifiés).
+            user.has_flexocompare = has_flexocompare
+            user.has_flexocheck = has_flexocheck
+            user.is_admin = False
+        db.commit()
+        db.refresh(user)
+        return user
+    finally:
+        db.close()
+
+
+def _get_user_compare_only_fresh() -> User:
+    db: Session = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == USER_COMPARE_ONLY_EMAIL).first()
+        if user is None:
+            raise RuntimeError("User compare-only introuvable — fixture mal appelée ?")
+        return user
+    finally:
+        db.close()
+
+
+def _get_user_check_only_fresh() -> User:
+    db: Session = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == USER_CHECK_ONLY_EMAIL).first()
+        if user is None:
+            raise RuntimeError("User check-only introuvable — fixture mal appelée ?")
+        return user
+    finally:
+        db.close()
+
+
+@pytest.fixture
+def as_user_flexocompare_only():
+    """Bascule l'override `get_current_user` sur un user FlexoCompare seul
+    (non-admin, has_flexocompare=True, has_flexocheck=False).
+
+    Usage :
+
+        def test_route_flexocheck_refusee(as_user_flexocompare_only):
+            r = client.get("/api/ia/analyser-photo")
+            assert r.status_code == 403
+    """
+    user = _ensure_user_single_module(
+        email=USER_COMPARE_ONLY_EMAIL,
+        entreprise_id=USER_COMPARE_ONLY_ENTREPRISE_ID,
+        raison_sociale="Imprim FlexoCompare Only",
+        has_flexocompare=True,
+        has_flexocheck=False,
+    )
+    app.dependency_overrides[get_current_user] = _get_user_compare_only_fresh
+    yield user
+
+
+@pytest.fixture
+def as_user_flexocheck_only():
+    """Bascule l'override `get_current_user` sur un user FlexoCheck seul
+    (non-admin, has_flexocompare=False, has_flexocheck=True).
+    """
+    user = _ensure_user_single_module(
+        email=USER_CHECK_ONLY_EMAIL,
+        entreprise_id=USER_CHECK_ONLY_ENTREPRISE_ID,
+        raison_sociale="Imprim FlexoCheck Only",
+        has_flexocompare=False,
+        has_flexocheck=True,
+    )
+    app.dependency_overrides[get_current_user] = _get_user_check_only_fresh
+    yield user

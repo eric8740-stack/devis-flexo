@@ -167,6 +167,12 @@ def seed_user_admin(session: Session) -> int:
         existing.is_active = True
         existing.is_admin = True
         existing.nom_contact = "Eric Paysant"
+        # Sprint 13 Lot S13.A — Eric admin = bundle FlexoSuite complet.
+        # Explicité ici (en plus du default modèle) pour que le re-seed
+        # remette les flags à True si jamais ils ont été désactivés en
+        # debug. Garantit l'accès Eric à tous les modules pour le support.
+        existing.has_flexocompare = True
+        existing.has_flexocheck = True
         return 1
 
     session.add(
@@ -177,6 +183,9 @@ def seed_user_admin(session: Session) -> int:
             entreprise_id=DEMO_ENTREPRISE_ID,
             is_active=True,
             is_admin=True,
+            # Sprint 13 Lot S13.A — bundle FlexoSuite à la création.
+            has_flexocompare=True,
+            has_flexocheck=True,
         )
     )
     return 1

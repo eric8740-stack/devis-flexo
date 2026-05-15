@@ -80,7 +80,14 @@ class TokenResponse(BaseModel):
 
 
 class UserMe(BaseModel):
-    """Sortie GET /api/auth/me — info user connecté pour AuthContext."""
+    """Sortie GET /api/auth/me — info user connecté pour AuthContext.
+
+    Sprint 13 Lot S13.A : exposition des flags `has_flexocompare` /
+    `has_flexocheck` pour que le frontend (AuthContext) puisse filtrer
+    les éléments d'UI (Header, routes admin, dashboard) selon les modules
+    actifs de l'utilisateur connecté. Le middleware backend reste la source
+    de vérité pour l'autorisation effective des endpoints.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +98,8 @@ class UserMe(BaseModel):
     nom_entreprise: str
     is_admin: bool
     is_active: bool
+    has_flexocompare: bool
+    has_flexocheck: bool
     date_creation: datetime
     date_derniere_connexion: datetime | None
 

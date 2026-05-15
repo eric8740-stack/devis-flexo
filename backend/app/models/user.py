@@ -51,6 +51,18 @@ class User(Base):
         Boolean, nullable=False, default=False
     )
 
+    # Sprint 13 Lot S13.A — Activation modulaire FlexoSuite.
+    # has_flexocompare : module devis intelligent (cœur historique)
+    # has_flexocheck   : module IA qualité standalone (BAT, photo, rapport)
+    # Default True à la création = bundle FlexoSuite (révisable Sprint 18
+    # lors de l'ouverture commerciale Stripe avec ?module=... à l'inscription).
+    has_flexocompare: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    has_flexocheck: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+
     # Tokens email
     email_confirmation_token: Mapped[str | None] = mapped_column(String(255))
     email_confirmation_expires: Mapped[datetime | None] = mapped_column(
@@ -68,3 +80,22 @@ class User(Base):
     date_derniere_connexion: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+
+    # ------------------------------------------------------------------
+    # Propriétés dérivées Sprint 13 — pratiques pour UI / debug / logs
+    # ------------------------------------------------------------------
+
+    @property
+    def has_bundle(self) -> bool:
+        """True si l'utilisateur dispose des deux modules (= bundle FlexoSuite)."""
+        return self.has_flexocompare and self.has_flexocheck
+
+    @property
+    def active_modules(self) -> list[str]:
+        """Liste sérialisable des modules actifs — utile pour /api/auth/me."""
+        modules: list[str] = []
+        if self.has_flexocompare:
+            modules.append("flexocompare")
+        if self.has_flexocheck:
+            modules.append("flexocheck")
+        return modules
