@@ -14,6 +14,8 @@ const NAV_ITEMS = [
   { href: "/optimisation", label: "Optimisation" },
   // Sprint 13 S13.E — POC IA analyse photo (FlexoCheck)
   { href: "/ia/analyser-photo", label: "Analyser photo" },
+  // Feat historique analyses — liste paginée des analyses passées
+  { href: "/ia/analyses", label: "Analyses" },
   // Sprint 4 — devis sauvegardés
   { href: "/devis", label: "Devis" },
   { href: "/parametres", label: "Paramètres" },

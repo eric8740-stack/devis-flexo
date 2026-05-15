@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ChangeEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ export default function AnalyserPhotoPage() {
       const res = await postIAAnalyserPhoto({
         image_base64: dataUrl,
         mime_type: file.type,
+        image_filename: file.name,
       });
       setResultat(res);
       toast({
@@ -327,6 +329,15 @@ function ResultatsSection({
         <strong>Rappel :</strong> ce n&apos;est PAS une analyse colorimétrique
         calibrée. Les valeurs Pantone exactes requièrent un spectrophotomètre.
         Le BAT (Bon à Tirer) client reste obligatoire avant production.
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <Link href={`/ia/analyses/${resultat.id}`}>
+          <Button variant="outline">Voir dans l&apos;historique →</Button>
+        </Link>
+        <Link href="/ia/analyses" className="text-sm text-blue-600 hover:underline">
+          Toutes les analyses
+        </Link>
       </div>
 
       <footer className="text-xs text-muted-foreground">

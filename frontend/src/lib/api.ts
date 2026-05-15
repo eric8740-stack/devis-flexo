@@ -1055,6 +1055,8 @@ export interface IAAnalysePhotoRequest {
   image_base64: string;
   mime_type: string;
   devis_id?: number | null;
+  /** Nom du fichier d'origine (feat historique analyses). */
+  image_filename?: string | null;
 }
 
 export interface IAAnalysePhotoResponse {
@@ -1071,3 +1073,79 @@ export const postIAAnalyserPhoto = (data: IAAnalysePhotoRequest) =>
     method: "POST",
     body: JSON.stringify(data),
   });
+
+// ---------------------------------------------------------------------------
+// Feat historique analyses — list / get / delete / serve photo
+// ---------------------------------------------------------------------------
+
+export interface IAAnalyseListItem {
+  id: number;
+  image_filename: string | null;
+  image_key: string | null;
+  photo_mime_type: string | null;
+  image_size_bytes: number | null;
+  niveau_confiance: string | null;
+  nombre_couleurs_distinctes: number | null;
+  erreur: string | null;
+  created_at: string;
+}
+
+export interface IAAnalyseListResponse {
+  items: IAAnalyseListItem[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface IAAnalyseDetail {
+  id: number;
+  image_filename: string | null;
+  image_key: string | null;
+  photo_mime_type: string | null;
+  image_size_bytes: number | null;
+  resultats_ia: IAResultatsAnalyse;
+  niveau_confiance: string | null;
+  nombre_couleurs_distinctes: number | null;
+  model_utilise: string | null;
+  erreur: string | null;
+  devis_id: number | null;
+  created_at: string;
+}
+
+export const listIAAnalyses = (page = 1, limit = 20) =>
+  apiFetch<IAAnalyseListResponse>(
+    `/api/ia/analyses?page=${page}&limit=${limit}`
+  );
+
+export const getIAAnalyse = (id: number) =>
+  apiFetch<IAAnalyseDetail>(`/api/ia/analyses/${id}`);
+
+export const deleteIAAnalyse = (id: number) =>
+  apiFetch<void>(`/api/ia/analyses/${id}`, { method: "DELETE" });
+
+/**
+ * Récupère le blob de la photo authentifiée et retourne un object URL
+ * utilisable en src d'<img>. `<img src="/api/ia/photos/...">` standard
+ * ne passe pas le Bearer JWT — d'où ce helper qui fait un fetch + revoke
+ * géré par le composant appelant via URL.revokeObjectURL.
+ */
+export async function fetchIAPhotoBlob(image_key: string): Promise<string> {
+  const token =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("devis_flexo_access_token")
+      : null;
+  const r = await fetch(
+    `${API_URL}/api/ia/photos/${encodeURIComponent(image_key)}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }
+  );
+  if (!r.ok) {
+    throw new ApiError(
+      r.status,
+      `GET /api/ia/photos/${image_key} → ${r.status} ${r.statusText}`
+    );
+  }
+  const blob = await r.blob();
+  return URL.createObjectURL(blob);
+}
