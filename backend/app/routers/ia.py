@@ -34,12 +34,19 @@ from app.dependencies import require_module
 from app.models import AnalysePhotoEtiquette, User
 from app.schemas.ia import (
     MIME_TYPES_AUTORISES,
+    AnalysePhotoDetail,
+    AnalysePhotoListItem,
+    AnalysePhotoListResponse,
     AnalysePhotoRequest,
     AnalysePhotoResponse,
 )
 from app.services.ia.analyse_photo import analyser_photo_etiquette
 from app.services.ia.client import DEFAULT_MODEL, IAClientError
-from app.services.ia.photo_storage import save_photo
+from app.services.ia.photo_storage import (
+    delete_photo,
+    get_photo_path,
+    save_photo,
+)
 
 
 router = APIRouter(prefix="/api/ia", tags=["ia"])
@@ -158,4 +165,183 @@ def post_analyser_photo(
         nombre_couleurs_distinctes=analyse.nombre_couleurs_distinctes,
         model_utilise=analyse.model_utilise,
         created_at=analyse.created_at.isoformat(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Historique des analyses photo (feat-historique-analyses)
+# ---------------------------------------------------------------------------
+
+
+def _to_list_item(row: AnalysePhotoEtiquette) -> AnalysePhotoListItem:
+    return AnalysePhotoListItem(
+        id=row.id,
+        image_filename=row.image_filename,
+        image_key=row.image_key,
+        photo_mime_type=row.photo_mime_type,
+        image_size_bytes=row.image_size_bytes,
+        niveau_confiance=row.niveau_confiance,
+        nombre_couleurs_distinctes=row.nombre_couleurs_distinctes,
+        erreur=row.erreur,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+def _to_detail(row: AnalysePhotoEtiquette) -> AnalysePhotoDetail:
+    return AnalysePhotoDetail(
+        id=row.id,
+        image_filename=row.image_filename,
+        image_key=row.image_key,
+        photo_mime_type=row.photo_mime_type,
+        image_size_bytes=row.image_size_bytes,
+        resultats_ia=row.resultats_ia or {},
+        niveau_confiance=row.niveau_confiance,
+        nombre_couleurs_distinctes=row.nombre_couleurs_distinctes,
+        model_utilise=row.model_utilise,
+        erreur=row.erreur,
+        devis_id=row.devis_id,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+@router.get("/analyses", response_model=AnalysePhotoListResponse)
+def list_analyses(
+    page: int = 1,
+    limit: int = 20,
+    user: User = Depends(require_module("flexocheck")),
+    db: Session = Depends(get_db),
+) -> AnalysePhotoListResponse:
+    """Liste paginée des analyses photo du tenant courant.
+
+    Scope strict sur user.entreprise_id, tri created_at DESC.
+    Pagination 1-indexée : `?page=1&limit=20` par défaut.
+    """
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 100:
+        # Borne pour éviter `?limit=10000` qui mettrait le serveur à plat
+        limit = 20
+
+    base_q = db.query(AnalysePhotoEtiquette).filter_by(
+        entreprise_id=user.entreprise_id
+    )
+    total = base_q.count()
+    rows = (
+        # Tie-break par id desc : deux analyses créées dans la même ms
+        # (cas réaliste en tests, possible aussi en prod) → la plus
+        # récente sort en premier de façon déterministe.
+        base_q.order_by(
+            AnalysePhotoEtiquette.created_at.desc(),
+            AnalysePhotoEtiquette.id.desc(),
+        )
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+    return AnalysePhotoListResponse(
+        items=[_to_list_item(r) for r in rows],
+        page=page,
+        limit=limit,
+        total=total,
+    )
+
+
+@router.get("/analyses/{analyse_id}", response_model=AnalysePhotoDetail)
+def get_analyse(
+    analyse_id: int,
+    user: User = Depends(require_module("flexocheck")),
+    db: Session = Depends(get_db),
+) -> AnalysePhotoDetail:
+    """Détail complet d'une analyse passée.
+
+    Multi-tenant : 404 si la row appartient à un autre tenant (PAS 403,
+    pour ne pas leak l'existence des ids cross-tenant).
+    """
+    row = (
+        db.query(AnalysePhotoEtiquette)
+        .filter_by(id=analyse_id, entreprise_id=user.entreprise_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse introuvable",
+        )
+    return _to_detail(row)
+
+
+@router.delete(
+    "/analyses/{analyse_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_analyse(
+    analyse_id: int,
+    user: User = Depends(require_module("flexocheck")),
+    db: Session = Depends(get_db),
+) -> None:
+    """Suppression définitive (hard delete, conforme RGPD).
+
+    Supprime la row DB ET le fichier disque associé. Idempotent côté
+    fichier (delete_photo ne lève jamais). 404 si row inexistante ou
+    appartenant à un autre tenant.
+    """
+    row = (
+        db.query(AnalysePhotoEtiquette)
+        .filter_by(id=analyse_id, entreprise_id=user.entreprise_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse introuvable",
+        )
+    # Capture image_key avant suppression DB pour cleanup disque post-commit
+    image_key = row.image_key
+    db.delete(row)
+    db.commit()
+    if image_key:
+        delete_photo(image_key)
+
+
+@router.get("/photos/{image_key}")
+def serve_photo(
+    image_key: str,
+    user: User = Depends(require_module("flexocheck")),
+    db: Session = Depends(get_db),
+):
+    """Sert le fichier image d'une analyse via FileResponse.
+
+    Multi-tenant strict : on vérifie d'abord qu'il existe une row
+    analyse_photo_etiquette avec ce image_key ET entreprise_id du user.
+    Sinon 404 — pas 403, pour ne pas leak la liste des keys cross-tenant.
+
+    Content-Type basé sur photo_mime_type stocké en BDD (pas inferé
+    de l'extension fichier — évite le content sniffing).
+    """
+    row = (
+        db.query(AnalysePhotoEtiquette)
+        .filter_by(image_key=image_key, entreprise_id=user.entreprise_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Photo introuvable",
+        )
+    path = get_photo_path(image_key)
+    if path is None:
+        # Row existe mais fichier disque absent (Volume non monte, ou
+        # ancienne analyse pre-feat). 404 pour cohérence cote client.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fichier photo non disponible sur disque",
+        )
+    # Import local pour éviter d'alourdir le head du module avec un
+    # symbole rarement utilisé hors de cet endpoint.
+    from fastapi.responses import FileResponse
+
+    return FileResponse(
+        path,
+        media_type=row.photo_mime_type or "application/octet-stream",
+        filename=row.image_filename or image_key,
     )

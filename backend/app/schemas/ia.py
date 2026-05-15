@@ -61,3 +61,57 @@ class AnalysePhotoResponse(BaseModel):
     nombre_couleurs_distinctes: int | None
     model_utilise: str | None
     created_at: str
+
+
+# ---------------------------------------------------------------------------
+# Historique des analyses photo (feat-historique-analyses)
+# ---------------------------------------------------------------------------
+
+
+class AnalysePhotoListItem(BaseModel):
+    """Une row dans la liste paginée /api/ia/analyses (vue resumé).
+
+    Pas de resultats_ia (lourd, 5-10 KB chacun) — uniquement les
+    metadonnees affichees dans la liste. Pour le detail complet,
+    GET /api/ia/analyses/{id}.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    image_filename: str | None
+    image_key: str | None
+    photo_mime_type: str | None
+    image_size_bytes: int | None
+    niveau_confiance: str | None
+    nombre_couleurs_distinctes: int | None
+    erreur: str | None
+    created_at: str
+
+
+class AnalysePhotoListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AnalysePhotoListItem]
+    page: int
+    limit: int
+    total: int
+
+
+class AnalysePhotoDetail(BaseModel):
+    """Vue détaillée /api/ia/analyses/{id} : tous les champs + payload IA."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    image_filename: str | None
+    image_key: str | None
+    photo_mime_type: str | None
+    image_size_bytes: int | None
+    resultats_ia: dict[str, Any]
+    niveau_confiance: str | None
+    nombre_couleurs_distinctes: int | None
+    model_utilise: str | None
+    erreur: str | None
+    devis_id: int | None
+    created_at: str
