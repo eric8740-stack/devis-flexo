@@ -38,6 +38,14 @@ class AnalysePhotoRequest(BaseModel):
         default=None,
         description="Devis a rattacher (optionnel - analyse exploratoire OK)",
     )
+    image_filename: str | None = Field(
+        default=None,
+        max_length=255,
+        description=(
+            "Nom de fichier d'origine cote client (ex 'etiquette-bio.jpg')."
+            " Stocke pour affichage UI dans l'historique."
+        ),
+    )
 
 
 class AnalysePhotoResponse(BaseModel):

@@ -20,6 +20,9 @@ venv/
 backend/*.db
 backend/*.db-journal
 
+# Uploads photos analyses (storage local dev, prod = Railway Volume)
+backend/.uploads/
+
 # Rapports moteur de coût (générés par pytest, régénérables à la demande)
 backend/cost_breakdown.md
 backend/cost_breakdown_5cas.md

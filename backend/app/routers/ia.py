@@ -39,6 +39,7 @@ from app.schemas.ia import (
 )
 from app.services.ia.analyse_photo import analyser_photo_etiquette
 from app.services.ia.client import DEFAULT_MODEL, IAClientError
+from app.services.ia.photo_storage import save_photo
 
 
 router = APIRouter(prefix="/api/ia", tags=["ia"])
@@ -99,6 +100,12 @@ def post_analyser_photo(
             detail="image_base64 vide apres decodage",
         )
 
+    # Persistance physique de la photo AVANT l'appel IA — comme ça si Claude
+    # échoue, on garde quand même la photo pour audit / re-essai éventuel.
+    # En mode degrade (Volume Railway non monte), image_key=None et l'analyse
+    # continue sans photo physique (cf. photo_storage.save_photo docstring).
+    image_key, image_size = save_photo(image_bytes, payload.mime_type)
+
     try:
         resultats = analyser_photo_etiquette(image_bytes, payload.mime_type)
     except IAClientError as exc:
@@ -110,6 +117,10 @@ def post_analyser_photo(
             user_id=user.id,
             devis_id=payload.devis_id,
             photo_mime_type=payload.mime_type,
+            photo_url=None,
+            image_filename=payload.image_filename,
+            image_key=image_key,
+            image_size_bytes=image_size,
             resultats_ia={},  # JSON vide mais NOT NULL
             erreur=str(exc),
             model_utilise=DEFAULT_MODEL,
@@ -127,6 +138,10 @@ def post_analyser_photo(
         user_id=user.id,
         devis_id=payload.devis_id,
         photo_mime_type=payload.mime_type,
+        photo_url=None,
+        image_filename=payload.image_filename,
+        image_key=image_key,
+        image_size_bytes=image_size,
         resultats_ia=resultats,
         niveau_confiance=resultats.get("niveau_confiance"),
         nombre_couleurs_distinctes=resultats.get("nombre_couleurs_distinctes"),

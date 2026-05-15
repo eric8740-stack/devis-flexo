@@ -59,11 +59,25 @@ class AnalysePhotoEtiquette(Base):
     )
 
     # Métadonnées photo
-    # photo_url nullable car en MVP on peut ne pas stocker la photo
-    # (l'image est envoyée en base64 dans le body et n'est pas archivée).
-    # Vercel Blob arrivera Sprint 14 quand FlexoCheck BAT exigera l'archivage.
+    # photo_url : URL externe (Vercel Blob / R2 / ...) — vide en V1, gardé
+    # nullable pour compat ascendante. Si un jour on migre vers un storage
+    # externe (cf. notes Phase 2 prompt historique), cette colonne accueillera
+    # l'URL signée.
     photo_url: Mapped[str | None] = mapped_column(String(500))
     photo_mime_type: Mapped[str | None] = mapped_column(String(30))
+
+    # --- Feat historique analyses : stockage local Railway Volume ---------
+    # image_filename : nom d'origine côté client (ex: "etiquette-bio.jpg"),
+    #                  utile pour affichage UI et téléchargement.
+    # image_key      : nom du fichier sur disque, format "{uuid}.{ext}".
+    #                  UNIQUE car généré par UUID, sert de clé d'accès dans
+    #                  GET /api/photos/{key}.
+    # image_size_bytes : taille brute du fichier sauvé (pré-Claude). 0 si
+    #                  upload disque a échoué (volume non monté, par ex.) —
+    #                  l'analyse reste persistée, juste sans photo physique.
+    image_filename: Mapped[str | None] = mapped_column(String(255))
+    image_key: Mapped[str | None] = mapped_column(String(80), unique=True)
+    image_size_bytes: Mapped[int | None] = mapped_column(Integer)
 
     # Résultats Claude : JSON complet (les 10 champs CHAMPS_REQUIS du service)
     resultats_ia: Mapped[Any] = mapped_column(JSON, nullable=False)
