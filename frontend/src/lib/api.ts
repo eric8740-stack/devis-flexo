@@ -1012,3 +1012,53 @@ export const postOptimisationCalculer = (
     method: "POST",
     body: JSON.stringify(data),
   });
+
+// ---------------------------------------------------------------------------
+// Sprint 13 Lot S13.E : POC IA analyse photo etiquette (FlexoCheck)
+// ---------------------------------------------------------------------------
+
+export interface IACouleurDetectee {
+  rgb_approximatif: string;
+  pantone_proche_estime: string | null;
+  surface_pct: number;
+}
+
+export interface IAMatiereEstimee {
+  type: string;
+  couleur: string;
+  finition_apparente: string;
+}
+
+export interface IAResultatsAnalyse {
+  couleurs_detectees: IACouleurDetectee[];
+  nombre_couleurs_distinctes: number;
+  couleurs_min_technique: number;
+  couleurs_max_technique: number;
+  techniques_impression_estimees: string[];
+  matiere_estimee: IAMatiereEstimee;
+  finitions_visibles: string[];
+  presence_blanc_opaque: boolean;
+  niveau_confiance: "haut" | "moyen" | "faible";
+  limites_analyse: string[];
+}
+
+export interface IAAnalysePhotoRequest {
+  image_base64: string;
+  mime_type: string;
+  devis_id?: number | null;
+}
+
+export interface IAAnalysePhotoResponse {
+  id: number;
+  resultats_ia: IAResultatsAnalyse;
+  niveau_confiance: string;
+  nombre_couleurs_distinctes: number | null;
+  model_utilise: string | null;
+  created_at: string;
+}
+
+export const postIAAnalyserPhoto = (data: IAAnalysePhotoRequest) =>
+  apiFetch<IAAnalysePhotoResponse>("/api/ia/analyser-photo", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });

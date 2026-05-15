@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { href: "/devis/nouveau", label: "Calculer un devis" },
   // Sprint 13 S13.D — simulateur d'optimisation
   { href: "/optimisation", label: "Optimisation" },
+  // Sprint 13 S13.E — POC IA analyse photo (FlexoCheck)
+  { href: "/ia/analyser-photo", label: "Analyser photo" },
   // Sprint 4 — devis sauvegardés
   { href: "/devis", label: "Devis" },
   { href: "/parametres", label: "Paramètres" },
