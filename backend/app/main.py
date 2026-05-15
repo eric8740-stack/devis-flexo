@@ -19,6 +19,7 @@ from app.routers import (
     machine,
     onboarding,
     operation_finition,
+    optimisation,
     outil_decoupe,
     partenaire_st,
     tarif_poste,
@@ -70,6 +71,8 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 # Sprint 13 Lot S13.C — onboarding express (catalogues pré-remplis)
 app.include_router(onboarding.router)
+# Sprint 13 Lot S13.D — moteur d'optimisation (7 règles + endpoint /calculer)
+app.include_router(optimisation.router)
 
 
 @app.exception_handler(IntegrityError)
