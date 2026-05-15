@@ -851,3 +851,97 @@ export const enableAdminUser = (id: number) =>
 
 export const deleteAdminUser = (id: number) =>
   apiFetch<void>(`/api/admin/users/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Sprint 13 Lot S13.C : Onboarding express (catalogues pré-remplis)
+// ---------------------------------------------------------------------------
+
+export interface OnboardingMachineDefault {
+  code: string;
+  nom: string;
+  marque?: string | null;
+  modele?: string | null;
+  repere_court?: string | null;
+  laize_totale_mm: number;
+  laize_utile_mm: number;
+  nb_groupes_couleurs?: number | null;
+  nb_postes_decoupe?: number | null;
+  vitesse_nominale_constructeur_m_min?: number | null;
+  vitesse_pratique_m_min: number;
+  cout_horaire_eur?: number | null;
+  options?: string[] | null;
+  type_encre_supportee?: string[] | null;
+  notes?: string | null;
+}
+
+export interface OnboardingMatiereDefault {
+  code: string;
+  libelle: string;
+  categorie?: string | null;
+  sous_type?: string | null;
+  grammage_gm2?: number | null;
+  epaisseur_microns?: number | null;
+  adhesifs_compatibles?: string[] | null;
+  est_transparent?: boolean | null;
+  opacite_pct?: number | null;
+  certifications_sanitaires?: string[] | null;
+  certifications_env?: string[] | null;
+  notes_techniques?: string | null;
+}
+
+export interface OnboardingOptionDefault {
+  code: string;
+  libelle: string;
+  categorie?: string | null;
+  description?: string | null;
+  coef_vitesse_impact?: number | null;
+  coef_gache_impact?: number | null;
+  ajoute_temps_calage_min?: number | null;
+  groupes_couleurs_requis?: number | null;
+  modules_speciaux_requis?: string[] | null;
+}
+
+export interface OnboardingBaremeDefault {
+  code: string;
+  type: string;
+  nom: string;
+  notes?: string | null;
+}
+
+export interface OnboardingCatalogueDefaults {
+  cylindres_developpes_mm: number[];
+  machines: OnboardingMachineDefault[];
+  matieres: OnboardingMatiereDefault[];
+  options: OnboardingOptionDefault[];
+  baremes: OnboardingBaremeDefault[];
+}
+
+export interface OnboardingInitRequest {
+  cylindres_developpes_mm: number[];
+  machines_codes: string[];
+  matieres_codes: string[];
+  options_codes: string[];
+}
+
+export interface OnboardingInitResponse {
+  cylindres: number;
+  machines: number;
+  matieres: number;
+  options: number;
+  baremes: number;
+  total: number;
+}
+
+export const getOnboardingCatalogueDefaults = () =>
+  apiFetch<OnboardingCatalogueDefaults>(
+    "/api/onboarding/catalogue-defaults"
+  );
+
+export const getOnboardingStatus = () =>
+  apiFetch<{ catalogue_initialise: boolean }>("/api/onboarding/status");
+
+export const postOnboardingInitialiser = (data: OnboardingInitRequest) =>
+  apiFetch<OnboardingInitResponse>("/api/onboarding/initialiser-catalogues", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
