@@ -1,3 +1,4 @@
+from app.models.analyse_photo_etiquette import AnalysePhotoEtiquette
 from app.models.bareme import BAREME_TYPES, Bareme
 from app.models.catalogue import Catalogue
 from app.models.charge_machine_mensuelle import ChargeMachineMensuelle
@@ -25,6 +26,8 @@ from app.models.temps_operation_standard import TempsOperationStandard
 from app.models.user import User
 
 __all__ = [
+    # Sprint 13 Lot S13.E — POC IA analyse photo étiquette (FlexoCheck)
+    "AnalysePhotoEtiquette",
     # Sprint 13 Lot S13.B — 6 modèles métier pour le moteur d'optimisation
     "BAREME_TYPES",
     "Bareme",
