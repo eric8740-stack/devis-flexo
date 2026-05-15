@@ -17,6 +17,7 @@ from app.routers import (
     entreprise,
     fournisseur,
     machine,
+    onboarding,
     operation_finition,
     outil_decoupe,
     partenaire_st,
@@ -67,6 +68,8 @@ app.include_router(tarif_poste.router)
 app.include_router(auth.router)
 # Sprint 12 Lot S12-D — admin endpoints (Eric only)
 app.include_router(admin.router)
+# Sprint 13 Lot S13.C — onboarding express (catalogues pré-remplis)
+app.include_router(onboarding.router)
 
 
 @app.exception_handler(IntegrityError)
