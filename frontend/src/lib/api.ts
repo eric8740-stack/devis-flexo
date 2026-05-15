@@ -945,3 +945,70 @@ export const postOnboardingInitialiser = (data: OnboardingInitRequest) =>
     method: "POST",
     body: JSON.stringify(data),
   });
+
+// ---------------------------------------------------------------------------
+// Sprint 13 Lot S13.D : Moteur d'optimisation (POST /api/optimisation/calculer)
+// ---------------------------------------------------------------------------
+
+export interface OptimisationFormat {
+  hauteur_mm: number;
+  largeur_mm: number;
+  rayon_angles_mm: number;
+  forme_courbe: boolean;
+}
+
+export interface OptimisationContrainteClient {
+  intervalle_dev_min_mm: number;
+}
+
+export interface OptimisationCalculerRequest {
+  format: OptimisationFormat;
+  intervalle_dev_min_mm: number;
+  nb_couleurs_impression: number;
+  quantite: number;
+  matiere_est_transparente?: boolean;
+  options_codes: string[];
+  contrainte_client: OptimisationContrainteClient;
+}
+
+export interface OptimisationConfigOut {
+  cylindre_id: number;
+  machine_id: number;
+  nb_poses_dev: number;
+  nb_poses_laize: number;
+  nb_poses_total: number;
+  intervalle_dev_reel_mm: number;
+  intervalle_laize_reel_mm: number;
+  largeur_plaque_mm: number;
+  z_mini_effet_banane: number;
+  qualite_echenillage: string;
+  consolidation_atteinte: boolean;
+  intervalle_laize_souhaitable_mm: number | null;
+  disposition_poses: string;
+  coef_vitesse_echenillage: number;
+  coef_gache_echenillage: number;
+  coef_confort_rayon: number;
+  coef_quinconce: number;
+  coef_consolidation: number;
+  coef_vitesse_options: number;
+  coef_gache_options: number;
+  coef_vitesse_final: number;
+  coef_gache_final: number;
+  score: number;
+}
+
+export interface OptimisationCalculerResponse {
+  configurations: OptimisationConfigOut[];
+  nb_candidats: number;
+  message_filtrage: string | null;
+  intervalle_dev_min_applique_mm: number;
+  message_contrainte_client: string | null;
+}
+
+export const postOptimisationCalculer = (
+  data: OptimisationCalculerRequest
+) =>
+  apiFetch<OptimisationCalculerResponse>("/api/optimisation/calculer", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });

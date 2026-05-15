@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   // Sprint 3 — fonctionnalité phare en tête
   { href: "/devis/nouveau", label: "Calculer un devis" },
+  // Sprint 13 S13.D — simulateur d'optimisation
+  { href: "/optimisation", label: "Optimisation" },
   // Sprint 4 — devis sauvegardés
   { href: "/devis", label: "Devis" },
   { href: "/parametres", label: "Paramètres" },
