@@ -129,6 +129,8 @@ class OptimisationConfigOut(BaseModel):
     sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4"]
     # Machines équivalentes (dédoublonnage). Au moins l'élément `machine_id`.
     machines_compatibles: list[int]
+    # Noms machines équivalentes — facilité d'affichage UI (au lieu d'IDs).
+    noms_machines_compatibles: list[str]
 
 
 class OptimisationCalculerResponse(BaseModel):
