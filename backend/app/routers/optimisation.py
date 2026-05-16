@@ -13,11 +13,12 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import require_module
-from app.models import User
+from app.models import OptionFabrication, User
 from app.schemas.optimisation import (
     OptimisationCalculerRequest,
     OptimisationCalculerResponse,
     OptimisationConfigOut,
+    OptionDisponiblePublic,
 )
 from app.services.optimisation.moteur import optimiser_pose
 from app.services.optimisation.types import (
@@ -35,6 +36,56 @@ from app.services.optimisation_loader import (
 
 
 router = APIRouter(prefix="/api/optimisation", tags=["optimisation"])
+
+
+@router.get(
+    "/options-disponibles",
+    response_model=list[OptionDisponiblePublic],
+)
+def get_options_disponibles(
+    user: User = Depends(require_module("flexocompare")),
+    db: Session = Depends(get_db),
+) -> list[OptionDisponiblePublic]:
+    """Liste les options de fabrication réellement disponibles pour ce tenant.
+
+    Renvoie l'union (options tenant + catalogue global) en privilégiant la
+    version tenant si elle override un code global (cohérent avec
+    `charger_options_par_codes`). Filtre `actif=True`. Trié par catégorie
+    puis libellé pour un rendu UI stable.
+    """
+    rows = (
+        db.query(OptionFabrication)
+        .filter(OptionFabrication.actif.is_(True))
+        .filter(
+            (OptionFabrication.entreprise_id == user.entreprise_id)
+            | (OptionFabrication.entreprise_id.is_(None))
+        )
+        .all()
+    )
+
+    by_code: dict[str, OptionFabrication] = {}
+    for r in rows:
+        existing = by_code.get(r.code)
+        if existing is None or (
+            existing.entreprise_id is None and r.entreprise_id is not None
+        ):
+            by_code[r.code] = r
+
+    options = sorted(
+        by_code.values(),
+        key=lambda o: ((o.categorie or "").lower(), o.libelle.lower()),
+    )
+    return [
+        OptionDisponiblePublic(
+            id=o.id,
+            code=o.code,
+            libelle=o.libelle,
+            categorie=o.categorie,
+            coef_vitesse_impact=float(o.coef_vitesse_impact),
+            coef_gache_impact=float(o.coef_gache_impact),
+        )
+        for o in options
+    ]
 
 
 @router.post("/calculer", response_model=OptimisationCalculerResponse)

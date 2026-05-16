@@ -14,11 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getOnboardingCatalogueDefaults,
+  getOptionsDisponibles,
   postOptimisationCalculer,
-  type OnboardingOptionDefault,
   type OptimisationCalculerResponse,
   type OptimisationConfigOut,
+  type OptionDisponible,
 } from "@/lib/api";
 
 /**
@@ -37,8 +37,11 @@ import {
 export default function OptimisationPage() {
   const { toast } = useToast();
 
-  // Catalogue options pour les checkboxes
-  const [options, setOptions] = useState<OnboardingOptionDefault[] | null>(null);
+  // Options réellement disponibles pour le tenant (table option_fabrication,
+  // scope tenant + catalogue global). Évite le 422 "Option inconnue" qui
+  // arrivait quand on listait le catalogue master mais que l'onboarding du
+  // tenant n'en avait seedé qu'une partie.
+  const [options, setOptions] = useState<OptionDisponible[] | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(
     new Set()
   );
@@ -63,8 +66,8 @@ export default function OptimisationPage() {
     let cancelled = false;
     (async () => {
       try {
-        const cat = await getOnboardingCatalogueDefaults();
-        if (!cancelled) setOptions(cat.options);
+        const list = await getOptionsDisponibles();
+        if (!cancelled) setOptions(list);
       } catch (err) {
         toast({
           title: "Chargement options impossible",
@@ -81,7 +84,7 @@ export default function OptimisationPage() {
 
   const optionsByCategorie = useMemo(() => {
     if (!options) return {};
-    const out: Record<string, OnboardingOptionDefault[]> = {};
+    const out: Record<string, OptionDisponible[]> = {};
     for (const o of options) {
       const cat = o.categorie ?? "Autres";
       if (!out[cat]) out[cat] = [];
@@ -313,7 +316,14 @@ export default function OptimisationPage() {
                 Chargement…
               </p>
             )}
+            {options !== null && options.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Aucune option configurée. Lance l&apos;onboarding express
+                depuis Paramètres pour activer ton catalogue.
+              </p>
+            )}
             {options !== null &&
+              options.length > 0 &&
               Object.entries(optionsByCategorie).map(([cat, opts]) => (
                 <section key={cat}>
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

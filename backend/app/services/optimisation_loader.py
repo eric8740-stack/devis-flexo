@@ -102,7 +102,8 @@ def charger_options_par_codes(
     manquants = [c for c in codes if c not in by_code]
     if manquants:
         raise OptimisationLoaderError(
-            f"Options inconnues pour ce tenant : {manquants}"
+            f"Option(s) non disponible(s) pour votre entreprise : {manquants}. "
+            "Vérifiez votre catalogue dans Paramètres > Onboarding express."
         )
 
     return [

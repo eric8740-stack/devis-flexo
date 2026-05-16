@@ -225,3 +225,85 @@ def test_isolation_tenant_user_b_voit_pas_catalogue_de_a(
         },
     )
     assert r.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# GET /options-disponibles
+# ---------------------------------------------------------------------------
+
+
+def test_get_options_disponibles_renvoie_options_du_tenant(cleanup_and_onboard):
+    """Après onboarding avec 2 options seedées, l'endpoint les expose
+    avec leurs coefs réels. Trié pour rendu UI stable."""
+    _onboard_tenant_minimal()  # seed vernis_selectif + dorure_chaud sur tenant 1
+    r = client.get("/api/optimisation/options-disponibles")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    codes = {o["code"] for o in body}
+    assert "vernis_selectif" in codes
+    assert "dorure_chaud" in codes
+    # Chaque entrée porte les champs attendus
+    for o in body:
+        assert "id" in o
+        assert "libelle" in o
+        assert isinstance(o["coef_vitesse_impact"], (int, float))
+        assert isinstance(o["coef_gache_impact"], (int, float))
+
+
+def test_get_options_disponibles_ne_fuit_pas_entre_tenants(
+    cleanup_and_onboard, switch_to_user_b
+):
+    """Une option scopée tenant 1 uniquement (entreprise_id=1, pas de
+    pendant global) ne doit JAMAIS apparaître côté tenant 2. Les options
+    du catalogue global (entreprise_id=NULL) restent visibles pour les
+    deux — c'est le pattern voulu, pas une fuite."""
+    _onboard_tenant_minimal()
+    db: Session = SessionLocal()
+    try:
+        opt_privee = OptionFabrication(
+            entreprise_id=1,
+            code="option_privee_tenant_1",
+            libelle="Option privée tenant 1",
+            categorie="Test",
+            actif=True,
+        )
+        db.add(opt_privee)
+        db.commit()
+    finally:
+        db.close()
+
+    switch_to_user_b()
+    r = client.get("/api/optimisation/options-disponibles")
+    assert r.status_code == 200, r.text
+    codes = {o["code"] for o in r.json()}
+    assert "option_privee_tenant_1" not in codes
+
+
+def test_get_options_disponibles_403_si_pas_module_flexocompare(
+    cleanup_and_onboard, as_user_flexocheck_only
+):
+    """User check-only (sans flexocompare) → 403, comme l'endpoint
+    calculer."""
+    r = client.get("/api/optimisation/options-disponibles")
+    assert r.status_code == 403
+    assert "flexocompare" in r.json()["detail"].lower()
+
+
+def test_post_calculer_422_message_actionnable(cleanup_and_onboard):
+    """Le message 422 doit guider l'utilisateur vers l'onboarding express
+    plutôt que de juste lister un code technique."""
+    _onboard_tenant_minimal()
+    r = client.post(
+        "/api/optimisation/calculer",
+        json={
+            "format": {"hauteur_mm": 30, "largeur_mm": 30},
+            "intervalle_dev_min_mm": 2.0,
+            "nb_couleurs_impression": 4,
+            "quantite": 10_000,
+            "options_codes": ["option_qui_nexiste_pas"],
+        },
+    )
+    assert r.status_code == 422
+    detail = r.json()["detail"].lower()
+    assert "onboarding" in detail
+    assert "option_qui_nexiste_pas" in r.json()["detail"]

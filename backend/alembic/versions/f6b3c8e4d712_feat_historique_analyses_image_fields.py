@@ -32,31 +32,28 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "analyse_photo_etiquette",
-        sa.Column("image_filename", sa.String(length=255), nullable=True),
-    )
-    op.add_column(
-        "analyse_photo_etiquette",
-        sa.Column("image_key", sa.String(length=80), nullable=True),
-    )
-    op.add_column(
-        "analyse_photo_etiquette",
-        sa.Column("image_size_bytes", sa.Integer(), nullable=True),
-    )
-    op.create_unique_constraint(
-        "uq_analyse_photo_etiquette_image_key",
-        "analyse_photo_etiquette",
-        ["image_key"],
-    )
+    with op.batch_alter_table("analyse_photo_etiquette") as batch_op:
+        batch_op.add_column(
+            sa.Column("image_filename", sa.String(length=255), nullable=True)
+        )
+        batch_op.add_column(
+            sa.Column("image_key", sa.String(length=80), nullable=True)
+        )
+        batch_op.add_column(
+            sa.Column("image_size_bytes", sa.Integer(), nullable=True)
+        )
+        batch_op.create_unique_constraint(
+            "uq_analyse_photo_etiquette_image_key",
+            ["image_key"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_analyse_photo_etiquette_image_key",
-        "analyse_photo_etiquette",
-        type_="unique",
-    )
-    op.drop_column("analyse_photo_etiquette", "image_size_bytes")
-    op.drop_column("analyse_photo_etiquette", "image_key")
-    op.drop_column("analyse_photo_etiquette", "image_filename")
+    with op.batch_alter_table("analyse_photo_etiquette") as batch_op:
+        batch_op.drop_constraint(
+            "uq_analyse_photo_etiquette_image_key",
+            type_="unique",
+        )
+        batch_op.drop_column("image_size_bytes")
+        batch_op.drop_column("image_key")
+        batch_op.drop_column("image_filename")
