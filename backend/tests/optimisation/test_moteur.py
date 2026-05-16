@@ -85,10 +85,10 @@ def _machine_xflex() -> Machine:
 
 
 def test_cas_simple_un_cylindre_une_machine_donne_au_moins_une_config():
-    """Cylindre 96 mm + Mark Andy 2200 (laize 320) + format 70×50 CMJN
+    """Cyl 304.8 mm (96 dents) + Mark Andy 2200 (laize 320) + format 70×50 CMJN
     → au moins 1 config viable."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],
         machines=[_machine_2200()],
         format=Format(hauteur_mm=70, largeur_mm=50),
     )
@@ -105,28 +105,29 @@ def test_cas_simple_un_cylindre_une_machine_donne_au_moins_une_config():
 
 
 def test_intervalle_dev_reel_coherent_avec_format():
-    """Cyl 96 mm, format hauteur 30 mm, intervalle min 2 :
-    nb_poses_dev = floor(96 / 32) = 3, intervalle_reel = 96/3 - 30 = 2 mm pile."""
+    """Cyl 254 mm (80 dents), format hauteur 40 mm, intervalle min 2 :
+    nb_poses_dev = floor(254 / 42) = 6, intervalle_réel = 254/6 − 40 ≈ 2.33 mm
+    → palier 'parfait' du barème échenillage ICE (≤ 3 mm)."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=254.0)],
         machines=[_machine_2200()],
-        format=Format(hauteur_mm=30, largeur_mm=30),
+        format=Format(hauteur_mm=40, largeur_mm=30),
     )
     out = optimiser_pose(inp)
     c = out.configurations[0]
-    assert c.nb_poses_dev == 3
-    assert c.intervalle_dev_reel_mm == pytest.approx(2.0, abs=0.01)
-    # 2 mm → qualité "parfait" du barème échenillage ICE
+    assert c.nb_poses_dev == 6
+    assert c.intervalle_dev_reel_mm == pytest.approx(2.33, abs=0.01)
     assert c.qualite_echenillage == "parfait"
 
 
 def test_top_3_max_meme_si_beaucoup_candidats():
     """6 cylindres × 1 machine × 3 variantes possibles = potentiellement 18
-    candidats, on retourne max 3 (pas de triche)."""
+    candidats, on retourne max 3 (pas de triche). Cyls ICE en mm réels
+    (dents × 3.175) : [228.6, 254.0, 279.4, 304.8, 330.2, 355.6]."""
     cyls = [
         Cylindre(id=i, developpe_mm=dev)
         for i, dev in enumerate(
-            [72, 80, 88, 96, 104, 112], start=1
+            [228.6, 254.0, 279.4, 304.8, 330.2, 355.6], start=1
         )
     ]
     inp = _input_base(
@@ -147,17 +148,16 @@ def test_top_3_max_meme_si_beaucoup_candidats():
 
 
 def test_effet_banane_exclut_cyl_trop_petit():
-    """Cyl 72 mm + format laize très large → effet banane exclut.
-    Avec un format 200 mm largeur, plaque ≈ 300 mm → Z mini ICE = 120.
-    Cyl 72 < 120 → exclu."""
+    """Cyl 228.6 mm (72 dents) + format laize 200 → effet banane exclut.
+    Avec largeur 200 et laize_utile 330, variante max = 1 ; plaque = 200 mm
+    → Z mini ICE = 304.8 mm. Cyl 228.6 < 304.8 → exclu."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=72)],
+        cylindres=[Cylindre(id=1, developpe_mm=228.6)],
         machines=[_machine_xflex()],  # laize 330
         format=Format(hauteur_mm=50, largeur_mm=200),
     )
     out = optimiser_pose(inp)
-    # 0 configs viables — toutes les variantes laize produisent une plaque
-    # dont la largeur impose un Z mini supérieur à 72.
+    # 0 configs viables — l'unique variante laize impose un Z mini > 228.6.
     assert out.nb_candidats == 0
     assert out.message_filtrage is not None
     assert "éliminé" in out.message_filtrage
@@ -167,7 +167,7 @@ def test_capacite_couleurs_filtre_machine():
     """10 couleurs CMJN+spot demandées, machine 8 groupes → exclue.
     Machine xflex (10 groupes) → OK."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],  # 96 dents
         machines=[_machine_2200(), _machine_xflex()],
         format=Format(hauteur_mm=70, largeur_mm=50),
         nb_couleurs=10,
@@ -190,7 +190,7 @@ def test_module_manquant_exclut_machine_pour_option():
         modules_speciaux_requis=["hot_stamping"],
     )
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],  # 96 dents
         machines=[_machine_2200(), _machine_xflex()],
         format=Format(hauteur_mm=70, largeur_mm=50),
         options=[dorure],
@@ -207,10 +207,10 @@ def test_module_manquant_exclut_machine_pour_option():
 
 
 def test_contrainte_client_force_intervalle_dev_min():
-    """Client impose 4 mm. Cyl 96, format 30×30. Sans contrainte client,
-    nb_poses_dev_max ≈ 3 (96/32). Avec 4 mm imposés : 96/34 = 2 poses."""
+    """Client impose 4 mm. Cyl 304.8 (96 dents), format 30×30.
+    nb_poses_dev = floor(304.8 / 34) = 8. intervalle réel = 304.8/8 − 30 = 8.1 mm."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],
         machines=[_machine_2200()],
         format=Format(hauteur_mm=30, largeur_mm=30),
         intervalle_min_imp=2.0,
@@ -220,9 +220,8 @@ def test_contrainte_client_force_intervalle_dev_min():
     assert out.intervalle_dev_min_applique_mm == 4.0
     assert out.message_contrainte_client is not None
     c = out.configurations[0]
-    assert c.nb_poses_dev == 2
-    # 96/2 - 30 = 18 mm intervalle dev (très grand → palier "critique")
-    assert c.intervalle_dev_reel_mm == pytest.approx(18.0, abs=0.01)
+    assert c.nb_poses_dev == 8
+    assert c.intervalle_dev_reel_mm == pytest.approx(8.1, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +245,7 @@ def test_options_cumulent_coefs_multiplicativement():
         coef_gache_impact=1.05,
     )
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],  # 96 dents
         machines=[_machine_2200()],
         format=Format(hauteur_mm=30, largeur_mm=30),
         options=[vernis, num],
@@ -260,7 +259,7 @@ def test_options_cumulent_coefs_multiplicativement():
 def test_format_rayon_5mm_donne_coef_confort_108():
     """Format avec rayon 5 mm → coef confort_rayon = 1.08 (barème ICE)."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],  # 96 dents
         machines=[_machine_2200()],
         format=Format(hauteur_mm=30, largeur_mm=30, rayon_angles_mm=5.0),
     )
@@ -271,7 +270,7 @@ def test_format_rayon_5mm_donne_coef_confort_108():
 
 def test_forme_courbe_donne_coef_115():
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=96)],
+        cylindres=[Cylindre(id=1, developpe_mm=304.8)],  # 96 dents
         machines=[_machine_2200()],
         format=Format(
             hauteur_mm=30, largeur_mm=30, rayon_angles_mm=0.0, forme_courbe=True

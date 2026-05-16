@@ -18,19 +18,41 @@ Conventions :
 """
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 # ============================================================================
-# 1. CYLINDRES MAGNÉTIQUES — 19 développés standard flexo (CdC ligne 948)
+# 1. CYLINDRES MAGNÉTIQUES — 19 standards ICE (CdC ligne 948)
 # ============================================================================
-# Parc ICE Étiquettes (Eric, 28 ans). Couvre les tailles courantes
-# 72 → 144 mm pour étiquettes standard.
+# Parc ICE Étiquettes (Eric, 28 ans). Couvre 72 → 144 dents (≈ 229 → 457 mm
+# développé physique) pour étiquettes standard.
 # `nb_pc_*` (poses de chaque format PC) = 0 par défaut : l'imprimerie
 # saisit son inventaire après. Le développé seul suffit au moteur
 # d'optimisation pour scorer.
-CYLINDRES_STANDARD_MM: list[float] = [
+# Nomenclature ICE : les imprimeurs désignent un cylindre par son **nombre
+# de dents** (pas son développé physique). La conversion vers le développé
+# circonférentiel utilise un pas de 3.175 mm/dent (standard flexo).
+#
+# Les valeurs ci-dessous (72, 80, ..., 144) sont des DENTS. Le moteur
+# d'optimisation, lui, travaille en mm (Z = circonférence physique du
+# cylindre). On expose donc deux constantes :
+#   - CYLINDRES_STANDARD_DENTS : nomenclature métier (source de vérité)
+#   - CYLINDRES_STANDARD_MM     : valeurs converties pour la BDD et le moteur
+#
+# Cas réel 100×80 mm : avec cyl 104 dents = 330.2 mm, dev étiquette = 80,
+# intervalle = 2 mm → N = floor(330.2 / 82) = 4 poses dev, intervalle
+# réel = 330.2/4 − 80 = 2.55 mm (cohérent avec l'Excel métier d'Eric).
+DENTS_TO_MM_FACTOR: Decimal = Decimal("3.175")
+
+CYLINDRES_STANDARD_DENTS: list[int] = [
     72, 80, 82, 84, 86, 88, 90, 92, 96, 98,
     103, 104, 112, 116, 128, 132, 134, 136, 144,
+]
+
+# Développés physiques en mm, dérivés des dents. Source de vérité pour la
+# BDD (colonne `cylindre_magnetique.developpe_mm`) et le moteur.
+CYLINDRES_STANDARD_MM: list[float] = [
+    float(Decimal(str(d)) * DENTS_TO_MM_FACTOR) for d in CYLINDRES_STANDARD_DENTS
 ]
 
 
@@ -421,13 +443,17 @@ BAREMES_DEFAULT: list[dict[str, Any]] = [
         "code": "effet_banane_ice",
         "type": "effet_banane",
         "nom": "Effet banane ICE",
+        # Cas B du 2026-05-16 : `developpe_mini_mm` était auparavant exprimé
+        # en dents (80, 96, ..., 160), comme CYLINDRES_STANDARD_MM. Converti
+        # en mm réels via ×3.175 pour rester homogène avec
+        # `cylindre_magnetique.developpe_mm` (vraies mm).
         "bareme_data": [
-            {"largeur_max_mm": 150, "developpe_mini_mm": 80},
-            {"largeur_max_mm": 200, "developpe_mini_mm": 96},
-            {"largeur_max_mm": 250, "developpe_mini_mm": 104},
-            {"largeur_max_mm": 300, "developpe_mini_mm": 120},
-            {"largeur_max_mm": 350, "developpe_mini_mm": 160},
-            {"largeur_max_mm": 9999, "developpe_mini_mm": 160},
+            {"largeur_max_mm": 150, "developpe_mini_mm": 254.0},   # 80 dents
+            {"largeur_max_mm": 200, "developpe_mini_mm": 304.8},   # 96 dents
+            {"largeur_max_mm": 250, "developpe_mini_mm": 330.2},   # 104 dents
+            {"largeur_max_mm": 300, "developpe_mini_mm": 381.0},   # 120 dents
+            {"largeur_max_mm": 350, "developpe_mini_mm": 508.0},   # 160 dents
+            {"largeur_max_mm": 9999, "developpe_mini_mm": 508.0},  # idem
         ],
         "notes": "Saut non-linéaire 250-300 vs 300-350 mm (seuil rigidité physique).",
     },
@@ -515,8 +541,15 @@ def get_bareme_by_code(code: str) -> dict[str, Any] | None:
 
 
 # Sanity checks au chargement (fail fast si désynchro)
+assert len(CYLINDRES_STANDARD_DENTS) == 19, (
+    f"19 cylindres attendus, {len(CYLINDRES_STANDARD_DENTS)} trouvés"
+)
 assert len(CYLINDRES_STANDARD_MM) == 19, (
-    f"19 cylindres attendus, {len(CYLINDRES_STANDARD_MM)} trouvés"
+    "CYLINDRES_STANDARD_MM doit être dérivé des dents — incohérence."
+)
+assert all(c > 200 for c in CYLINDRES_STANDARD_MM), (
+    "Les développés en mm doivent être > 200 — sinon ce sont des dents, "
+    "pas des mm (cf. fix Cas B du 2026-05-16)."
 )
 assert len(MACHINES_DEFAULT) == 3, (
     f"3 machines attendues, {len(MACHINES_DEFAULT)} trouvées"
