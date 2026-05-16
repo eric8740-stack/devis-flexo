@@ -138,6 +138,42 @@ def _calcul_score(config: ConfigurationPose, palier_score: float) -> float:
     return palier_score * config.coef_vitesse_final / config.coef_gache_final
 
 
+def _dedoublonner_configs(
+    candidats: list[ConfigurationPose],
+) -> list[ConfigurationPose]:
+    """Fusionne les configs ne différant que par la machine.
+
+    PR #9.1 : deux configs avec mêmes (cylindre, nb_poses_dev,
+    nb_poses_laize, intervalles dev/laize) mais des machines différentes
+    sont métier-équivalentes — c'est juste un choix machine. On garde la
+    config avec le meilleur score (déjà en tête après tri) et on agrège
+    les machine_id alternatifs dans `machines_compatibles`.
+
+    L'entrée DOIT être triée par score DESC (pour que la première config
+    rencontrée pour chaque clé soit la meilleure).
+    """
+    def cle(c: ConfigurationPose) -> tuple:
+        return (
+            c.cylindre_id,
+            c.nb_poses_dev,
+            c.nb_poses_laize,
+            round(c.intervalle_dev_reel_mm, 3),
+            round(c.intervalle_laize_reel_mm, 3),
+        )
+
+    fusionne: dict[tuple, ConfigurationPose] = {}
+    for c in candidats:
+        k = cle(c)
+        if k in fusionne:
+            # Ajout du machine_id de la config dupliquée à la représentative.
+            for mid in c.machines_compatibles:
+                if mid not in fusionne[k].machines_compatibles:
+                    fusionne[k].machines_compatibles.append(mid)
+        else:
+            fusionne[k] = c
+    return list(fusionne.values())
+
+
 def _filtre_machines_par_capacite(
     machines: list[Machine],
     nb_couleurs: int,
@@ -302,11 +338,13 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
                 )
 
                 config.score = _calcul_score(config, palier_echen["score"])
+                config.machines_compatibles = [machine.id]
 
                 candidats.append(config)
 
-    # 4. Tri + top 3
+    # 4. Tri + dédoublonnage + top 3
     candidats.sort(key=lambda c: c.score, reverse=True)
+    candidats = _dedoublonner_configs(candidats)
     top = candidats[:3]
     nb = len(top)
 

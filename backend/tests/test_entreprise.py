@@ -72,3 +72,62 @@ def test_put_entreprise_updates_numeric_fields():
     data = response.json()
     assert data["pct_fg"] == 0.10
     assert data["heures_prod_presse_mois"] == 150
+
+
+# ---------------------------------------------------------------------------
+# PR #9.1 — paramètres BAT (Bon À Tirer)
+# ---------------------------------------------------------------------------
+
+
+def test_get_entreprise_expose_defaults_bat():
+    """Tout tenant freshly seedé porte les 4 defaults BAT ICE."""
+    response = client.get("/api/entreprise")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["chute_laterale_min_mm"] == "10.00"
+    assert data["palier_laize_papier_mm"] == 10
+    assert data["refilage_systematique"] is False
+    assert data["marge_liner_mm"] == "2.50"
+
+
+def test_put_entreprise_modifie_params_bat():
+    """Le tenant peut ajuster ses 4 paramètres BAT via PUT."""
+    response = client.put(
+        "/api/entreprise",
+        json={
+            "raison_sociale": "Paysant & Fils Étiquettes",
+            "chute_laterale_min_mm": "12.50",
+            "palier_laize_papier_mm": 5,
+            "refilage_systematique": True,
+            "marge_liner_mm": "3.00",
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["chute_laterale_min_mm"] == "12.50"
+    assert data["palier_laize_papier_mm"] == 5
+    assert data["refilage_systematique"] is True
+    assert data["marge_liner_mm"] == "3.00"
+
+
+def test_put_entreprise_borne_chute_laterale_rejette_negative():
+    response = client.put(
+        "/api/entreprise",
+        json={
+            "raison_sociale": "Paysant & Fils Étiquettes",
+            "chute_laterale_min_mm": "-1.00",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_put_entreprise_borne_palier_rejette_zero():
+    """palier_laize_papier_mm doit être >= 1 (0 = division par zéro côté calcul)."""
+    response = client.put(
+        "/api/entreprise",
+        json={
+            "raison_sociale": "Paysant & Fils Étiquettes",
+            "palier_laize_papier_mm": 0,
+        },
+    )
+    assert response.status_code == 422

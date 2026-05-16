@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { useToast } from "@/hooks/use-toast";
 import {
   getOptionsDisponibles,
@@ -19,36 +20,35 @@ import {
   type OptimisationCalculerResponse,
   type OptimisationConfigOut,
   type OptionDisponible,
+  type SensEnroulement,
 } from "@/lib/api";
 
 /**
- * Simulateur d'optimisation Sprint 13 S13.D (frontend).
+ * Simulateur d'optimisation FlexoCompare — PR #9.1 BAT MVP.
  *
- * Page standalone /optimisation : saisie format/couleurs/options + appel
- * POST /api/optimisation/calculer + affichage top 3.
+ * Convention métier flexo : on parle TOUJOURS d'une étiquette en laize × dev
+ * (largeur × hauteur dans l'orientation presse). Donc l'UI saisit la laize
+ * en PREMIER puis le développé, et les libellés résultats sont "poses
+ * laize × dev". Avant PR #9.1 c'était inversé — contre-métier.
  *
- * Note : le brief mentionne /devis/[id]/optimisation, mais le modèle
- * Devis actuel ne porte pas tous les champs requis (rayon_angles_mm,
- * forme_courbe, contrainte_client). Le rattachement à un devis sauvé
- * arrivera Sprint 14 quand le modèle Devis sera étendu. Pour l'instant
- * cette page est un OUTIL DE SIMULATION standalone : l'utilisateur
- * obtient le top 3 sans devoir d'abord sauver un devis.
+ * Côté API, on garde les noms historiques `largeur_mm` (= laize) et
+ * `hauteur_mm` (= dev) pour ne pas casser la DB / cost_engine. C'est juste
+ * un mapping UI : laize→largeur, dev→hauteur.
  */
+const MANDRIN_OPTIONS = [25, 38, 76, 152] as const;
+const SE_OPTIONS: SensEnroulement[] = ["SE1", "SE2", "SE3", "SE4"];
+
 export default function OptimisationPage() {
   const { toast } = useToast();
 
-  // Options réellement disponibles pour le tenant (table option_fabrication,
-  // scope tenant + catalogue global). Évite le 422 "Option inconnue" qui
-  // arrivait quand on listait le catalogue master mais que l'onboarding du
-  // tenant n'en avait seedé qu'une partie.
   const [options, setOptions] = useState<OptionDisponible[] | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(
     new Set()
   );
 
-  // Form state
-  const [hauteur, setHauteur] = useState<string>("30");
-  const [largeur, setLargeur] = useState<string>("30");
+  // Format étiquette : laize d'abord, dev ensuite (convention métier)
+  const [laize, setLaize] = useState<string>("100");
+  const [dev, setDev] = useState<string>("80");
   const [rayonAngles, setRayonAngles] = useState<string>("2");
   const [formeCourbe, setFormeCourbe] = useState(false);
   const [intervalleDevMin, setIntervalleDevMin] = useState<string>("2");
@@ -56,6 +56,11 @@ export default function OptimisationPage() {
   const [quantite, setQuantite] = useState<string>("10000");
   const [contrainteClientMm, setContrainteClientMm] = useState<string>("0");
   const [matiereTransparente, setMatiereTransparente] = useState(false);
+
+  // BAT — params volatile MVP 9.1
+  const [mandrin, setMandrin] = useState<number>(76);
+  const [sensEnroulement, setSensEnroulement] = useState<SensEnroulement>("SE1");
+  const [epaisseurMatiere, setEpaisseurMatiere] = useState<string>("150");
 
   const [submitting, setSubmitting] = useState(false);
   const [response, setResponse] = useState<OptimisationCalculerResponse | null>(
@@ -109,8 +114,9 @@ export default function OptimisationPage() {
     try {
       const r = await postOptimisationCalculer({
         format: {
-          hauteur_mm: parseFloat(hauteur),
-          largeur_mm: parseFloat(largeur),
+          // API : laize = largeur_mm, dev = hauteur_mm (compat historique)
+          largeur_mm: parseFloat(laize),
+          hauteur_mm: parseFloat(dev),
           rayon_angles_mm: parseFloat(rayonAngles),
           forme_courbe: formeCourbe,
         },
@@ -122,6 +128,9 @@ export default function OptimisationPage() {
         contrainte_client: {
           intervalle_dev_min_mm: parseFloat(contrainteClientMm),
         },
+        mandrin_mm: mandrin,
+        sens_enroulement: sensEnroulement,
+        epaisseur_matiere_um: parseFloat(epaisseurMatiere),
       });
       setResponse(r);
       if (r.nb_candidats === 0) {
@@ -149,9 +158,11 @@ export default function OptimisationPage() {
       <header>
         <h1 className="text-2xl font-bold">Optimisation de pose</h1>
         <p className="text-sm text-muted-foreground">
-          Saisissez le contexte du devis et lancez le moteur. Le top 3
-          configurations (cylindre × machine × variante) ressort en quelques
-          secondes, scoré selon les 6 règles métier ICE.
+          Saisissez l&apos;étiquette en <strong>laize × développé</strong>{" "}
+          (convention métier flexo) et le contexte de production. Le top 3
+          configurations cylindre × machine ressort scoré sur les 6 règles
+          métier ICE et enrichi des valeurs BAT (laize papier, ml total,
+          rendement, ø bobine).
         </p>
       </header>
 
@@ -161,32 +172,32 @@ export default function OptimisationPage() {
           <CardHeader>
             <CardTitle>Format & impression</CardTitle>
             <CardDescription>
-              Dimensions étiquette, rayon des angles, couleurs.
+              Dimensions étiquette (laize × dev), rayon des angles, couleurs.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="hauteur">Hauteur (dev) — mm</Label>
+                <Label htmlFor="laize">Laize (largeur étiquette) — mm</Label>
                 <Input
-                  id="hauteur"
+                  id="laize"
                   type="number"
                   step="0.1"
                   min={1}
-                  value={hauteur}
-                  onChange={(e) => setHauteur(e.target.value)}
+                  value={laize}
+                  onChange={(e) => setLaize(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="largeur">Largeur (laize) — mm</Label>
+                <Label htmlFor="dev">Développé (hauteur étiquette) — mm</Label>
                 <Input
-                  id="largeur"
+                  id="dev"
                   type="number"
                   step="0.1"
                   min={1}
-                  value={largeur}
-                  onChange={(e) => setLargeur(e.target.value)}
+                  value={dev}
+                  onChange={(e) => setDev(e.target.value)}
                   required
                 />
               </div>
@@ -255,12 +266,13 @@ export default function OptimisationPage() {
           </CardContent>
         </Card>
 
-        {/* --- Colonne 2 : Contraintes --- */}
+        {/* --- Colonne 2 : Contraintes + BAT --- */}
         <Card>
           <CardHeader>
-            <CardTitle>Contraintes</CardTitle>
+            <CardTitle>Contraintes & bobine</CardTitle>
             <CardDescription>
-              Intervalles minimum imprimerie et client final.
+              Intervalles imprimeur/client, mandrin, sens enroulement,
+              épaisseur matière (pour estimer ø bobine).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -298,6 +310,65 @@ export default function OptimisationPage() {
                 des deux comme minimum effectif.
               </p>
             </div>
+            <div className="space-y-2">
+              <Label>Mandrin bobine fille (mm)</Label>
+              <div className="flex flex-wrap gap-3 text-sm">
+                {MANDRIN_OPTIONS.map((m) => (
+                  <label
+                    key={m}
+                    className="flex cursor-pointer items-center gap-1"
+                  >
+                    <input
+                      type="radio"
+                      name="mandrin"
+                      checked={mandrin === m}
+                      onChange={() => setMandrin(m)}
+                      className="accent-foreground"
+                    />
+                    {m}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Sens enroulement</Label>
+              <div className="flex flex-wrap gap-3 text-sm">
+                {SE_OPTIONS.map((se) => (
+                  <label
+                    key={se}
+                    className="flex cursor-pointer items-center gap-1"
+                  >
+                    <input
+                      type="radio"
+                      name="sens-enroulement"
+                      checked={sensEnroulement === se}
+                      onChange={() => setSensEnroulement(se)}
+                      className="accent-foreground"
+                    />
+                    {se}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Rendu visuel détaillé du A (rotation/miroir) à venir en PR 9.2.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="epaisseur">Épaisseur matière totale (µm)</Label>
+              <Input
+                id="epaisseur"
+                type="number"
+                step="1"
+                min={10}
+                max={1000}
+                value={epaisseurMatiere}
+                onChange={(e) => setEpaisseurMatiere(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Étiquette + liner adhésif. Default 150 µm (papier vélin
+                standard). Utilisé pour estimer le ø bobine.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -312,9 +383,7 @@ export default function OptimisationPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {options === null && (
-              <p className="text-sm text-muted-foreground">
-                Chargement…
-              </p>
+              <p className="text-sm text-muted-foreground">Chargement…</p>
             )}
             {options !== null && options.length === 0 && (
               <p className="text-sm text-muted-foreground">
@@ -369,7 +438,13 @@ export default function OptimisationPage() {
         </div>
       </form>
 
-      {response && <ResultsSection response={response} />}
+      {response && (
+        <ResultsSection
+          response={response}
+          laizeEtiq={parseFloat(laize)}
+          devEtiq={parseFloat(dev)}
+        />
+      )}
     </main>
   );
 }
@@ -380,8 +455,12 @@ export default function OptimisationPage() {
 
 function ResultsSection({
   response,
+  laizeEtiq,
+  devEtiq,
 }: {
   response: OptimisationCalculerResponse;
+  laizeEtiq: number;
+  devEtiq: number;
 }) {
   return (
     <section className="space-y-4">
@@ -413,9 +492,15 @@ function ResultsSection({
           ou retirez des options qui exigent des modules absents.
         </p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4">
           {response.configurations.map((c, idx) => (
-            <ConfigCard key={`${c.cylindre_id}-${c.machine_id}-${idx}`} config={c} rank={idx + 1} />
+            <ConfigCard
+              key={`${c.cylindre_id}-${c.nb_poses_dev}-${c.nb_poses_laize}-${idx}`}
+              config={c}
+              rank={idx + 1}
+              laizeEtiq={laizeEtiq}
+              devEtiq={devEtiq}
+            />
           ))}
         </div>
       )}
@@ -426,9 +511,13 @@ function ResultsSection({
 function ConfigCard({
   config,
   rank,
+  laizeEtiq,
+  devEtiq,
 }: {
   config: OptimisationConfigOut;
   rank: number;
+  laizeEtiq: number;
+  devEtiq: number;
 }) {
   const qualiteColor: Record<string, string> = {
     parfait: "bg-emerald-100 text-emerald-900",
@@ -443,63 +532,106 @@ function ConfigCard({
   return (
     <Card className={rank === 1 ? "border-2 border-foreground" : ""}>
       <CardHeader>
-        <div className="flex items-baseline justify-between">
-          <CardTitle className="text-lg">#{rank}</CardTitle>
-          <span
-            className={`rounded px-2 py-0.5 text-xs font-medium ${color}`}
-          >
-            {config.qualite_echenillage}
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-3">
+            <CardTitle className="text-lg">#{rank}</CardTitle>
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${color}`}
+            >
+              {config.qualite_echenillage}
+            </span>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            Score : <strong>{config.score.toFixed(1)}</strong>
           </span>
         </div>
         <CardDescription>
-          Score : <strong>{config.score.toFixed(1)}</strong>
+          Cylindre Z={config.z_cylindre_mm} mm · Compatible avec{" "}
+          <strong>
+            {config.noms_machines_compatibles.length > 0
+              ? config.noms_machines_compatibles.join(", ")
+              : `machine #${config.machine_id}`}
+          </strong>
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <Line label="Cylindre" value={`#${config.cylindre_id}`} />
-        <Line label="Machine" value={`#${config.machine_id}`} />
-        <Line
-          label="Poses"
-          value={`${config.nb_poses_dev} × ${config.nb_poses_laize} = ${config.nb_poses_total}`}
-        />
-        <Line
-          label="Intervalle dev"
-          value={`${config.intervalle_dev_reel_mm} mm`}
-        />
-        <Line
-          label="Intervalle laize"
-          value={`${config.intervalle_laize_reel_mm} mm`}
-        />
-        <Line
-          label="Largeur plaque"
-          value={`${config.largeur_plaque_mm} mm (Z mini ${config.z_mini_effet_banane} mm)`}
-        />
-        {config.consolidation_atteinte && (
-          <div className="rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-900">
-            ✓ Consolidation atteinte
-          </div>
-        )}
-        <hr className="border-border" />
-        <div className="space-y-1 text-xs text-muted-foreground">
+      <CardContent className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-2 text-sm">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Pose
+          </h4>
           <Line
-            label="Coef vitesse final"
-            value={config.coef_vitesse_final.toFixed(3)}
-            muted
+            label="Poses laize × dev"
+            value={`${config.nb_poses_laize} × ${config.nb_poses_dev} = ${config.nb_poses_total} étiquettes / tour`}
+            strong
           />
           <Line
-            label="Coef gâche final"
-            value={config.coef_gache_final.toFixed(3)}
-            muted
+            label="Intervalle dev"
+            value={`${config.intervalle_dev_reel_mm} mm`}
           />
           <Line
-            label="…dont confort rayon"
-            value={`×${config.coef_confort_rayon.toFixed(2)}`}
-            muted
+            label="Intervalle laize"
+            value={`${config.intervalle_laize_reel_mm} mm`}
           />
           <Line
-            label="…dont options"
-            value={`vit ×${config.coef_vitesse_options.toFixed(2)} / gâche ×${config.coef_gache_options.toFixed(2)}`}
-            muted
+            label="Laize plaque"
+            value={`${config.laize_plaque_mm} mm`}
+          />
+          {config.consolidation_atteinte && (
+            <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-900">
+              ✓ Consolidation atteinte
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2 text-sm">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Matière & bobine
+          </h4>
+          <Line
+            label="Laize papier"
+            value={`${config.laize_papier_mm} mm`}
+            strong
+          />
+          <Line
+            label="Chute latérale (chaque côté)"
+            value={`${config.chute_laterale_reelle_mm} mm`}
+          />
+          <Line
+            label="Mètres linéaires total"
+            value={`${config.ml_total_m} m`}
+          />
+          <Line label="m² consommé" value={`${config.m2_consomme} m²`} />
+          <Line
+            label="Rendement matière"
+            value={`${config.rendement_pct}%`}
+            strong
+          />
+          <Line
+            label="ø bobine estimé"
+            value={`${config.diametre_bobine_mm} mm`}
+          />
+          <Line
+            label="Laize liner (vue client)"
+            value={`${config.laize_liner_mm} mm`}
+          />
+          <Line label="Sens enroulement" value={config.sens_enroulement} />
+        </div>
+
+        <div className="lg:col-span-2 text-xs text-muted-foreground">
+          <span className="font-semibold">Coefs cumulés —</span> vitesse ×
+          {config.coef_vitesse_final.toFixed(3)} / gâche ×
+          {config.coef_gache_final.toFixed(3)} · confort rayon ×
+          {config.coef_confort_rayon.toFixed(2)} · options vit ×
+          {config.coef_vitesse_options.toFixed(2)} / gâche ×
+          {config.coef_gache_options.toFixed(2)}
+        </div>
+
+        {/* Schéma BAT — 3 vues (plaque + bobine + bobine fille) */}
+        <div className="lg:col-span-2">
+          <SchemaImplantation
+            config={config}
+            laizeEtiqMm={laizeEtiq}
+            devEtiqMm={devEtiq}
           />
         </div>
       </CardContent>
@@ -510,16 +642,16 @@ function ConfigCard({
 function Line({
   label,
   value,
-  muted = false,
+  strong = false,
 }: {
   label: string;
   value: string;
-  muted?: boolean;
+  strong?: boolean;
 }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className={muted ? "" : "text-muted-foreground"}>{label}</span>
-      <span className={muted ? "" : "font-medium"}>{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className={strong ? "font-semibold" : "font-medium"}>{value}</span>
     </div>
   );
 }

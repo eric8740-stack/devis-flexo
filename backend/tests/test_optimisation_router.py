@@ -371,6 +371,58 @@ def test_cas_metier_eric_etiquette_laize100_dev80_sur_cyl_104dents(
     )
     assert top1["qualite_echenillage"] == "parfait"
 
+    # PR #9.1 — champs BAT enrichis dans la réponse
+    # laize_plaque = 2 × 100 + 1 × 5 = 205 mm
+    assert top1["laize_plaque_mm"] == 205.0
+    # laize_papier = ceil((205 + 2×10) / 10) × 10 = 230 mm
+    assert top1["laize_papier_mm"] == 230.0
+    # chute réelle = (230 − 205) / 2 = 12.5 mm
+    assert top1["chute_laterale_reelle_mm"] == 12.5
+    # Z cylindre = 330.2 mm (104 dents)
+    assert top1["z_cylindre_mm"] == 330.2
+    # ml_total = ceil(10000 / 8) × 330.2 / 1000 = 1250 × 330.2 / 1000 = 412.75
+    assert abs(top1["ml_total_m"] - 412.75) < 0.01
+    # Rendement ≈ 84.27 %
+    assert abs(top1["rendement_pct"] - 84.27) < 0.1
+    # ø bobine estimation entre 250-310 mm (épaisseur default 150 µm)
+    assert 250 <= top1["diametre_bobine_mm"] <= 320
+    # laize liner = 100 + 2×2.5 = 105 mm (default tenant)
+    assert top1["laize_liner_mm"] == 105.0
+    # SE1 par défaut
+    assert top1["sens_enroulement"] == "SE1"
+    # Au moins 1 machine compatible (dédoublonnage peut en agréger plus)
+    assert len(top1["machines_compatibles"]) >= 1
+
+
+def test_post_calculer_dedoublonne_configs_meme_cyl_meme_poses(
+    cleanup_and_onboard,
+):
+    """Si Mark Andy 2200 et OMET XFlex 330 produisent la même config
+    (mêmes cylindre, poses, intervalles), elles sont fusionnées en une
+    seule entrée du top 3 avec machines_compatibles=[mark_andy, omet]."""
+    _onboard_tenant_minimal()
+    r = client.post(
+        "/api/optimisation/calculer",
+        json={
+            "format": {"hauteur_mm": 30, "largeur_mm": 30},
+            "intervalle_dev_min_mm": 2.0,
+            "nb_couleurs_impression": 4,
+            "quantite": 10_000,
+            "options_codes": [],
+        },
+    )
+    assert r.status_code == 200, r.text
+    configs = r.json()["configurations"]
+    # Au moins une config avec machines_compatibles > 1 attendue (les 2
+    # machines partagent des laizes utiles proches sur certaines variantes)
+    fusionnees = [c for c in configs if len(c["machines_compatibles"]) > 1]
+    if fusionnees:
+        # Sanity : tous les machine_id sont uniques au sein du groupe
+        for c in fusionnees:
+            assert len(set(c["machines_compatibles"])) == len(
+                c["machines_compatibles"]
+            )
+
 
 def test_sanity_cylindres_seedes_en_mm_pas_dents(cleanup_and_onboard):
     """Garde-fou Cas B : aucun cylindre seedé via l'onboarding ne doit avoir

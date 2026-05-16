@@ -201,6 +201,85 @@ export function EntrepriseForm({ initial }: EntrepriseFormProps) {
             </div>
           </div>
 
+          <div className="border-t pt-4">
+            <h3 className="mb-1 text-sm font-semibold">
+              Paramètres implantation BAT
+            </h3>
+            <p className="mb-4 text-xs text-muted-foreground">
+              Valeurs métier appliquées par défaut au moteur d&apos;optimisation
+              pour calculer la laize papier commandée, la chute latérale et la
+              vue bobine fille. Surchargeables ponctuellement au devis dans une
+              prochaine version.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="chute_laterale_min_mm">
+                  Chute latérale mini (mm, chaque côté)
+                </Label>
+                <Input
+                  id="chute_laterale_min_mm"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="50"
+                  value={data.chute_laterale_min_mm}
+                  onChange={(e) =>
+                    setField("chute_laterale_min_mm", e.target.value)
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="palier_laize_papier_mm">
+                  Palier laize papier (mm, arrondi commande)
+                </Label>
+                <Input
+                  id="palier_laize_papier_mm"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={data.palier_laize_papier_mm}
+                  onChange={(e) =>
+                    setField(
+                      "palier_laize_papier_mm",
+                      Number(e.target.value) || 1
+                    )
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="marge_liner_mm">
+                  Marge liner client (mm, chaque côté)
+                </Label>
+                <Input
+                  id="marge_liner_mm"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="50"
+                  value={data.marge_liner_mm}
+                  onChange={(e) => setField("marge_liner_mm", e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  id="refilage_systematique"
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={data.refilage_systematique}
+                  onChange={(e) =>
+                    setField("refilage_systematique", e.target.checked)
+                  }
+                />
+                <Label
+                  htmlFor="refilage_systematique"
+                  className="cursor-pointer"
+                >
+                  Refilage systématique par défaut
+                </Label>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Enregistrement…" : "Enregistrer"}

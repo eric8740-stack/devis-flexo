@@ -120,6 +120,11 @@ export interface Entreprise {
   pct_marge_defaut: number | null;
   heures_prod_presse_mois: number | null;
   heures_prod_finition_mois: number | null;
+  // PR #9.1 — paramètres BAT (renvoyés en string par FastAPI car Decimal)
+  chute_laterale_min_mm: string;
+  palier_laize_papier_mm: number;
+  refilage_systematique: boolean;
+  marge_liner_mm: string;
 }
 
 export type EntrepriseUpdate = Omit<Entreprise, "id">;
@@ -961,6 +966,8 @@ export interface OptimisationContrainteClient {
   intervalle_dev_min_mm: number;
 }
 
+export type SensEnroulement = "SE1" | "SE2" | "SE3" | "SE4";
+
 export interface OptimisationCalculerRequest {
   format: OptimisationFormat;
   intervalle_dev_min_mm: number;
@@ -969,6 +976,10 @@ export interface OptimisationCalculerRequest {
   matiere_est_transparente?: boolean;
   options_codes: string[];
   contrainte_client: OptimisationContrainteClient;
+  // PR #9.1 BAT
+  mandrin_mm?: number;
+  sens_enroulement?: SensEnroulement;
+  epaisseur_matiere_um?: number;
 }
 
 export interface OptimisationConfigOut {
@@ -995,6 +1006,19 @@ export interface OptimisationConfigOut {
   coef_vitesse_final: number;
   coef_gache_final: number;
   score: number;
+  // PR #9.1 BAT
+  laize_plaque_mm: number;
+  laize_papier_mm: number;
+  chute_laterale_reelle_mm: number;
+  z_cylindre_mm: number;
+  ml_total_m: number;
+  m2_consomme: number;
+  rendement_pct: number;
+  diametre_bobine_mm: number;
+  laize_liner_mm: number;
+  sens_enroulement: SensEnroulement;
+  machines_compatibles: number[];
+  noms_machines_compatibles: string[];
 }
 
 export interface OptimisationCalculerResponse {
