@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BobineIllustration } from "@/components/BobineIllustration";
 import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -454,6 +455,23 @@ export default function OptimisationPage() {
                 (face ext) ou à droite (face int), avec rotation du A finale.
                 Application au schéma résultat à venir en PR 9.2.
               </p>
+
+              {/* === Prototype illustration vectorielle bobine SE1 ===
+                  Preview pour validation Eric avant de décliner les 8 sens.
+                  Si OK : remplacera le composant SEPictogramme actuel.
+                  Si KO : on ajuste avant de tout générer. */}
+              <div className="mt-4 rounded-md border border-dashed border-blue-400 bg-blue-50/30 p-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-blue-900">
+                  Prototype illustration — à valider
+                </p>
+                <BobineIllustration width={320} height={220} />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Aperçu d&apos;un seul sens (SE1) avant de décliner les 8.
+                  Style à valider : bobine 3/4 avec mandrin carton, liner
+                  sortant avec 4 étiquettes, repère START, ø bobine, flèche
+                  déroulement.
+                </p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="epaisseur">Épaisseur matière totale (µm)</Label>
