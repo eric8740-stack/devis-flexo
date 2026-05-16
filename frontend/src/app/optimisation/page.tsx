@@ -71,8 +71,13 @@ const SE_OPTIONS: SEOption[] = [
  *  - rotation A : 0/90/180/270° applique à la dernière étiquette
  */
 function SEPictogramme({ rotationA, face }: { rotationA: 0 | 90 | 180 | 270; face: "ext" | "int" }) {
-  // Pour "int", on flip horizontalement tout le pictogramme.
+  // Pour "int", on flip horizontalement tout le pictogramme + on teinte les
+  // étiquettes en jaune-beige (liner siliconé translucide visible).
   const flipTransform = face === "int" ? "translate(72 0) scale(-1 1)" : "";
+  const isInt = face === "int";
+  const etiqFill = isInt ? "#F0E4B4" : "#DCE7F3";
+  const etiqStroke = isInt ? "#9C8E4E" : "#0C447C";
+  const aFill = isInt ? "#374151" : "#0C447C";
   return (
     <svg
       viewBox="0 0 72 40"
@@ -87,12 +92,13 @@ function SEPictogramme({ rotationA, face }: { rotationA: 0 | 90 | 180 | 270; fac
         <ellipse cx={14} cy={20} rx={4} ry={5} fill="#6B7280" stroke="#374151" strokeWidth={0.6} />
         {/* Liner sortant à droite */}
         <rect x={20} y={14} width={48} height={12} fill="#FAF7EE" stroke="#C8C6BC" strokeWidth={0.5} />
-        {/* Étiquettes (rectangles bleu pâle) */}
-        <rect x={26} y={16} width={10} height={8} fill="#DCE7F3" stroke="#0C447C" strokeWidth={0.5} />
-        <rect x={38} y={16} width={10} height={8} fill="#DCE7F3" stroke="#0C447C" strokeWidth={0.5} />
-        <rect x={50} y={16} width={10} height={8} fill="#DCE7F3" stroke="#0C447C" strokeWidth={0.5} />
-        {/* A dans la dernière étiquette (la plus à droite) avec rotation */}
-        <g transform={`translate(55 20) rotate(${rotationA})`}>
+        {/* Étiquettes : bleu (ext) ou jaune-liner (int) */}
+        <rect x={26} y={16} width={10} height={8} fill={etiqFill} stroke={etiqStroke} strokeWidth={0.5} />
+        <rect x={38} y={16} width={10} height={8} fill={etiqFill} stroke={etiqStroke} strokeWidth={0.5} />
+        <rect x={50} y={16} width={10} height={8} fill={etiqFill} stroke={etiqStroke} strokeWidth={0.5} />
+        {/* A dans la dernière étiquette avec rotation. On compense le flip
+            horizontal pour que le A reste lisible côté observateur. */}
+        <g transform={`translate(55 20) ${isInt ? "scale(-1 1) " : ""}rotate(${rotationA})`}>
           <text
             x={0}
             y={0}
@@ -100,7 +106,7 @@ function SEPictogramme({ rotationA, face }: { rotationA: 0 | 90 | 180 | 270; fac
             dominantBaseline="central"
             fontSize={7}
             fontWeight={700}
-            fill="#0C447C"
+            fill={aFill}
           >
             A
           </text>
