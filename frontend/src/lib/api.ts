@@ -1026,6 +1026,68 @@ export const getOptionsDisponibles = () =>
   apiFetch<OptionDisponible[]>("/api/optimisation/options-disponibles");
 
 // ---------------------------------------------------------------------------
+// Paramètres > Options de fabrication (CRUD tenant)
+// ---------------------------------------------------------------------------
+
+export interface OptionFabricationTenant {
+  id: number;
+  code: string;
+  libelle: string;
+  categorie: string | null;
+  description: string | null;
+  coef_vitesse_impact: string;
+  coef_gache_impact: string;
+  ajoute_temps_calage_min: number;
+  forfait_eur: string | null;
+  prix_au_m2_eur: string | null;
+  prix_au_mille_eur: string | null;
+  cout_consommable_eur: string | null;
+  actif: boolean;
+  valeur_recommandee_origine: {
+    coef_vitesse_impact: number;
+    coef_gache_impact: number;
+    ajoute_temps_calage_min: number;
+  } | null;
+}
+
+export interface OptionFabricationUpdatePayload {
+  coef_vitesse_impact?: string;
+  coef_gache_impact?: string;
+  forfait_eur?: string | null;
+  prix_au_m2_eur?: string | null;
+  prix_au_mille_eur?: string | null;
+  cout_consommable_eur?: string | null;
+  actif?: boolean;
+}
+
+export const listOptionsFabrication = () =>
+  apiFetch<OptionFabricationTenant[]>("/api/parametres/options-fabrication");
+
+export const createOptionFromMaster = (code: string) =>
+  apiFetch<OptionFabricationTenant>(
+    `/api/parametres/options-fabrication/from-master/${encodeURIComponent(code)}`,
+    { method: "POST" }
+  );
+
+export const updateOptionFabrication = (
+  id: number,
+  payload: OptionFabricationUpdatePayload
+) =>
+  apiFetch<OptionFabricationTenant>(
+    `/api/parametres/options-fabrication/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+
+export const deleteOptionFabrication = (id: number) =>
+  apiFetch<OptionFabricationTenant>(
+    `/api/parametres/options-fabrication/${id}`,
+    { method: "DELETE" }
+  );
+
+// ---------------------------------------------------------------------------
 // Sprint 13 Lot S13.E : POC IA analyse photo etiquette (FlexoCheck)
 // ---------------------------------------------------------------------------
 

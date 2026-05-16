@@ -22,6 +22,7 @@ from app.routers import (
     operation_finition,
     optimisation,
     outil_decoupe,
+    parametres_options,
     partenaire_st,
     tarif_poste,
 )
@@ -76,6 +77,8 @@ app.include_router(onboarding.router)
 app.include_router(optimisation.router)
 # Sprint 13 Lot S13.E — POC IA analyse photo étiquette (FlexoCheck)
 app.include_router(ia.router)
+# Sprint 13 post — Paramètres > Options de fabrication (CRUD tenant)
+app.include_router(parametres_options.router)
 
 
 @app.exception_handler(IntegrityError)
