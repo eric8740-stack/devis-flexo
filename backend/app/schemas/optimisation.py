@@ -6,7 +6,7 @@ du tenant) puis appelle optimiser_pose(). Renvoie top 3 + metadata.
 
 extra='forbid' partout pour rejeter les champs accessoires.
 """
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -62,6 +62,23 @@ class OptimisationCalculerRequest(BaseModel):
         default_factory=OptimisationContrainteClient
     )
 
+    # PR #9.1 — paramètres BAT (volatile pour MVP, persistés sur devis en 9.3)
+    mandrin_mm: int = Field(
+        76,
+        description="Diamètre mandrin (25/38/76/152 mm typiquement)",
+        ge=10,
+        le=500,
+    )
+    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4"] = Field(
+        "SE1", description="Sens enroulement bobine fille (PR #9.2 pour le rendu)"
+    )
+    epaisseur_matiere_um: float = Field(
+        150.0,
+        ge=10,
+        le=1000,
+        description="Épaisseur totale matière (étiq + liner adhésif), µm",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Output
@@ -96,6 +113,22 @@ class OptimisationConfigOut(BaseModel):
     coef_vitesse_final: float
     coef_gache_final: float
     score: float
+
+    # PR #9.1 — enrichissements BAT (Bon À Tirer) calculés par le router à
+    # partir des params tenant (chute, palier, marge_liner) et du payload
+    # client (mandrin, sens enroulement, épaisseur matière).
+    laize_plaque_mm: float
+    laize_papier_mm: float
+    chute_laterale_reelle_mm: float
+    z_cylindre_mm: float
+    ml_total_m: float
+    m2_consomme: float
+    rendement_pct: float
+    diametre_bobine_mm: int
+    laize_liner_mm: float
+    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4"]
+    # Machines équivalentes (dédoublonnage). Au moins l'élément `machine_id`.
+    machines_compatibles: list[int]
 
 
 class OptimisationCalculerResponse(BaseModel):

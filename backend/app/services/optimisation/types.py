@@ -150,6 +150,11 @@ class ConfigurationPose:
     # Score [0..100] post-règles (calculé par l'orchestrateur)
     score: float = 0.0
 
+    # PR #9.1 — dédoublonnage : agrège les machines équivalentes (mêmes
+    # cylindre/poses/intervalles, différentes machines). Initialisé à
+    # [machine_id] par le moteur, fusionné par `_dedoublonner_configs`.
+    machines_compatibles: list[int] = field(default_factory=list)
+
     @property
     def coef_vitesse_final(self) -> float:
         """Coefficient vitesse cumulé (CdC § 758)."""
