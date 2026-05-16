@@ -36,7 +36,46 @@ import {
  * un mapping UI : laize→largeur, dev→hauteur.
  */
 const MANDRIN_OPTIONS = [25, 38, 76, 152] as const;
-const SE_OPTIONS: SensEnroulement[] = ["SE1", "SE2", "SE3", "SE4"];
+const SE_OPTIONS: { code: SensEnroulement; label: string; transform: string }[] = [
+  { code: "SE1", label: "face dehors, tête haut", transform: "" },
+  { code: "SE2", label: "face dehors, tête bas", transform: "rotate(180 16 16)" },
+  { code: "SE3", label: "face dedans, tête haut", transform: "scale(-1 1) translate(-32 0)" },
+  { code: "SE4", label: "face dedans, tête bas", transform: "scale(-1 1) translate(-32 0) rotate(180 16 16)" },
+];
+
+function SEPictogramme({ transform }: { transform: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      width={28}
+      height={28}
+      className="inline-block rounded border border-border bg-white"
+      aria-hidden
+    >
+      <rect
+        x={3}
+        y={3}
+        width={26}
+        height={26}
+        fill="#DCE7F3"
+        stroke="#0C447C"
+        strokeWidth={0.8}
+      />
+      <text
+        x={16}
+        y={16}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={18}
+        fontWeight={700}
+        fill="#0C447C"
+        transform={transform}
+      >
+        A
+      </text>
+    </svg>
+  );
+}
 
 export default function OptimisationPage() {
   const { toast } = useToast();
@@ -332,25 +371,40 @@ export default function OptimisationPage() {
             </div>
             <div className="space-y-2">
               <Label>Sens enroulement</Label>
-              <div className="flex flex-wrap gap-3 text-sm">
-                {SE_OPTIONS.map((se) => (
-                  <label
-                    key={se}
-                    className="flex cursor-pointer items-center gap-1"
-                  >
-                    <input
-                      type="radio"
-                      name="sens-enroulement"
-                      checked={sensEnroulement === se}
-                      onChange={() => setSensEnroulement(se)}
-                      className="accent-foreground"
-                    />
-                    {se}
-                  </label>
-                ))}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {SE_OPTIONS.map((opt) => {
+                  const selected = sensEnroulement === opt.code;
+                  return (
+                    <label
+                      key={opt.code}
+                      className={
+                        "flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors " +
+                        (selected
+                          ? "border-foreground bg-muted/50"
+                          : "border-border hover:bg-muted/30")
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="sens-enroulement"
+                        checked={selected}
+                        onChange={() => setSensEnroulement(opt.code)}
+                        className="accent-foreground"
+                      />
+                      <SEPictogramme transform={opt.transform} />
+                      <div className="flex flex-col">
+                        <span className="font-medium">{opt.code}</span>
+                        <span className="text-[10px] leading-tight text-muted-foreground">
+                          {opt.label}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
               <p className="text-xs text-muted-foreground">
-                Rendu visuel détaillé du A (rotation/miroir) à venir en PR 9.2.
+                Le pictogramme indique l&apos;orientation du A finale sur la
+                bobine livrée. Application au schéma résultat à venir en PR 9.2.
               </p>
             </div>
             <div className="space-y-2">
@@ -546,7 +600,8 @@ function ConfigCard({
           </span>
         </div>
         <CardDescription>
-          Cylindre Z={config.z_cylindre_mm} mm · Compatible avec{" "}
+          <strong>Cylindre {config.nb_dents_cylindre} dents</strong>
+          {" · "}Z = {config.z_cylindre_mm} mm · Compatible avec{" "}
           <strong>
             {config.noms_machines_compatibles.length > 0
               ? config.noms_machines_compatibles.join(", ")

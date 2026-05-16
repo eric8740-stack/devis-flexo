@@ -1011,6 +1011,7 @@ export interface OptimisationConfigOut {
   laize_papier_mm: number;
   chute_laterale_reelle_mm: number;
   z_cylindre_mm: number;
+  nb_dents_cylindre: number;
   ml_total_m: number;
   m2_consomme: number;
   rendement_pct: number;

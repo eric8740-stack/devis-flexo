@@ -380,6 +380,8 @@ def test_cas_metier_eric_etiquette_laize100_dev80_sur_cyl_104dents(
     assert top1["chute_laterale_reelle_mm"] == 12.5
     # Z cylindre = 330.2 mm (104 dents)
     assert top1["z_cylindre_mm"] == 330.2
+    # Nomenclature ICE — nombre de dents exposé pour affichage UI
+    assert top1["nb_dents_cylindre"] == 104
     # ml_total = ceil(10000 / 8) × 330.2 / 1000 = 1250 × 330.2 / 1000 = 412.75
     assert abs(top1["ml_total_m"] - 412.75) < 0.01
     # Rendement ≈ 84.27 %

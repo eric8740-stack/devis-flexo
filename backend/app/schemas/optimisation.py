@@ -121,6 +121,10 @@ class OptimisationConfigOut(BaseModel):
     laize_papier_mm: float
     chute_laterale_reelle_mm: float
     z_cylindre_mm: float
+    # Nomenclature ICE : les imprimeurs désignent un cylindre par son
+    # nombre de dents (1 dent = 3.175 mm). On expose les deux pour
+    # afficher "104 dents (Z=330.2 mm)" dans l'UI.
+    nb_dents_cylindre: int
     ml_total_m: float
     m2_consomme: float
     rendement_pct: float
