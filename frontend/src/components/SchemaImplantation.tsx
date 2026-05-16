@@ -23,6 +23,12 @@ const COULEUR_GRIS_FONCE = "#374151";
 const COULEUR_GRIS = "#9CA3AF";
 const COULEUR_LINER = "#FAF7EE";
 const COULEUR_HACHURE = "#C8C6BC";
+// Sens intérieur (SE5-8) : la face imprimée est tournée vers l'intérieur de
+// la bobine. Le client voit le liner siliconé translucide PAR-DESSUS
+// l'étiquette → teinte jaune-beige caractéristique de l'aspect "vu à travers
+// le liner". Sens extérieur (SE1-4) : étiquettes bleu clair franc.
+const COULEUR_ETIQ_INT = "#F0E4B4"; // jaune-beige liner translucide
+const COULEUR_ETIQ_INT_BORDURE = "#9C8E4E";
 
 interface Props {
   config: OptimisationConfigOut;
@@ -123,7 +129,7 @@ function VuePlaque({
   return (
     <figure className="space-y-2">
       <figcaption className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Vue A — plaque (vue de face)
+        Vue A — plaque (vue de dessous, sens machine)
       </figcaption>
       <svg
         viewBox={`0 0 ${VBW} ${VBH}`}
@@ -235,11 +241,17 @@ function VuePlaque({
           strokeWidth={1}
         />
 
-        {/* Grille des poses */}
+        {/* Grille des poses.
+            VUE A = vue DE DESSOUS de la plaque (point de vue de la matière
+            qui passe sous le cylindre). Le A est donc rendu à 180° pour que
+            l'observateur voie ce qu'il verrait s'il regardait sous la
+            presse — convention métier flexo. */}
         {Array.from({ length: config.nb_poses_dev }).map((_, row) =>
           Array.from({ length: config.nb_poses_laize }).map((__, col) => {
             const px = ox + chuteW + col * poseW;
             const py = oy + row * poseH;
+            const cxA = px + poseW / 2;
+            const cyA = py + poseH / 2;
             return (
               <g key={`pose-${row}-${col}`}>
                 <rect
@@ -251,17 +263,19 @@ function VuePlaque({
                   stroke={COULEUR_BLEU}
                   strokeWidth={0.4}
                 />
-                <text
-                  x={px + poseW / 2}
-                  y={py + poseH / 2}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={Math.min(poseW, poseH) * 0.42}
-                  fontWeight={700}
-                  fill={COULEUR_BLEU}
-                >
-                  A
-                </text>
+                <g transform={`translate(${cxA} ${cyA}) rotate(180)`}>
+                  <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={Math.min(poseW, poseH) * 0.42}
+                    fontWeight={700}
+                    fill={COULEUR_BLEU}
+                  >
+                    A
+                  </text>
+                </g>
               </g>
             );
           })
@@ -426,27 +440,39 @@ function VuePlaque({
           </g>
         )}
 
-        {/* Flèche défilement à gauche */}
-        <g transform={`translate(${ox - 35}, ${oy + innerH / 2})`}>
-          <line
-            x1={0}
-            y1={-25}
-            x2={0}
-            y2={25}
+        {/* Flèche défilement à gauche : badge bleu pâle bordé + grosse flèche
+            verticale épaisse, label rotaté à côté. Doit se voir au premier
+            coup d'œil (retour Eric). */}
+        <g transform={`translate(${ox - 40}, ${oy + innerH / 2})`}>
+          <rect
+            x={-18}
+            y={-50}
+            width={26}
+            height={100}
+            rx={4}
+            fill={COULEUR_BLEU_CLAIR}
             stroke={COULEUR_BLEU}
-            strokeWidth={1.5}
+            strokeWidth={0.6}
+          />
+          <line
+            x1={-5}
+            y1={-38}
+            x2={-5}
+            y2={38}
+            stroke={COULEUR_BLEU}
+            strokeWidth={2.5}
             markerEnd="url(#arrow-bleu-a)"
           />
           <text
-            x={-8}
+            x={9}
             y={0}
-            fontSize={9}
-            fontWeight={600}
+            fontSize={10}
+            fontWeight={700}
             fill={COULEUR_BLEU}
             textAnchor="middle"
-            transform="rotate(-90)"
+            transform={`rotate(-90 9 0)`}
           >
-            défilement
+            défilement presse
           </text>
         </g>
 
@@ -473,40 +499,42 @@ function VuePlaque({
 
 function VueBobine({ config }: { config: OptimisationConfigOut }) {
   const { rotation, faceInt } = parseSE(config.sens_enroulement);
-  const VBW = 460;
-  const VBH = 260;
+  const VBW = 480;
+  const VBH = 280;
 
-  // Pour "face intérieur" on inverse horizontalement toute la vue (la bobine
-  // se retrouve à droite et le liner sort vers la gauche).
-  const flipGroup = faceInt ? `translate(${VBW} 0) scale(-1 1)` : "";
-
-  // Géométrie : bobine cylindrique à gauche (rectangle vertical ombré + 2
-  // ellipses pour les faces avant/arrière), mandrin au centre, liner
-  // horizontal sortant vers la droite, 3 étiquettes posées dessus avec un A
-  // tourné selon le sens d'enroulement dans la DERNIÈRE étiquette.
-  const cxBobine = 110;
+  // Bobine vue de FACE (de profil sur l'axe horizontal de la machine).
+  //   - Sens extérieur (SE1-4) : bobine à gauche, liner sortant à droite avec
+  //     les étiquettes bleu clair (face imprimée vers l'observateur).
+  //   - Sens intérieur (SE5-8) : bobine à droite, liner sortant à gauche, et
+  //     les étiquettes apparaissent JAUNI parce que le liner siliconé
+  //     translucide passe par-dessus (convention atelier flexo).
+  const cxBobine = faceInt ? VBW - 110 : 110;
   const cyBobine = 130;
-  const rxBobine = 60;
-  const ryBobine = 85;
-  const rxMandrin = 22;
-  const ryMandrin = 26;
+  const rBobine = 80;
+  const rMandrin = 22;
 
-  const linerY = cyBobine - 28;
-  const linerH = 56;
-  const linerStartX = cxBobine + 18;
-  const linerEndX = VBW - 30;
+  // Liner sortant tangent à la bobine, du côté opposé au centre
+  const linerY = cyBobine - 26;
+  const linerH = 52;
+  const linerStartX = faceInt ? 30 : cxBobine + rBobine - 4;
+  const linerEndX = faceInt ? cxBobine - rBobine + 4 : VBW - 30;
   const linerLen = linerEndX - linerStartX;
 
   const NB_ETIQ = 3;
-  const etiqGap = 4;
-  const etiqW = (linerLen - 24 - etiqGap * (NB_ETIQ - 1)) / NB_ETIQ;
-  const etiqH = linerH - 14;
-  const etiqYTop = linerY + 7;
+  const etiqGap = 5;
+  const etiqW = (linerLen - 20 - etiqGap * (NB_ETIQ - 1)) / NB_ETIQ;
+  const etiqH = linerH - 12;
+  const etiqYTop = linerY + 6;
+
+  // Couleurs étiquettes : bleu pour ext, jaune-liner pour int
+  const etiqFill = faceInt ? COULEUR_ETIQ_INT : COULEUR_BLEU_CLAIR;
+  const etiqStroke = faceInt ? COULEUR_ETIQ_INT_BORDURE : COULEUR_BLEU;
+  const aFill = faceInt ? COULEUR_GRIS_FONCE : COULEUR_BLEU;
 
   return (
     <figure className="space-y-2">
       <figcaption className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Vue B — bobine livrée
+        Vue B — bobine livrée (vue de face)
       </figcaption>
       <svg
         viewBox={`0 0 ${VBW} ${VBH}`}
@@ -515,13 +543,13 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          <linearGradient id="grad-bobine-b" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#D1D5DB" />
-            <stop offset="50%" stopColor="#F3F4F6" />
+          <radialGradient id="grad-bobine-face" cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#F9FAFB" />
+            <stop offset="70%" stopColor="#E5E7EB" />
             <stop offset="100%" stopColor="#9CA3AF" />
-          </linearGradient>
+          </radialGradient>
           <pattern
-            id="liner-dots-b"
+            id="liner-dots-b2"
             patternUnits="userSpaceOnUse"
             width={8}
             height={8}
@@ -529,174 +557,178 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
             <circle cx={2} cy={2} r={0.6} fill={COULEUR_HACHURE} />
           </pattern>
           <marker
-            id="arrow-bleu-b"
+            id="arrow-bleu-b2"
             viewBox="0 0 10 10"
             refX={9}
             refY={5}
-            markerWidth={8}
-            markerHeight={8}
+            markerWidth={9}
+            markerHeight={9}
             orient="auto"
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill={COULEUR_BLEU} />
           </marker>
         </defs>
 
-        <g transform={flipGroup}>
-          {/* Tube cylindrique vu de profil (bobine pleine) */}
-          {/* Côté arrière (rectangle ombré) */}
-          <rect
-            x={cxBobine - rxBobine + 8}
-            y={cyBobine - ryBobine}
-            width={(rxBobine - 8) * 2}
-            height={ryBobine * 2}
-            fill="url(#grad-bobine-b)"
-            stroke="none"
-          />
-          {/* Côté gauche (ellipse face) */}
-          <ellipse
-            cx={cxBobine - rxBobine + 8}
+        {/* Bobine vue de face : cercle plein avec ombre douce */}
+        <circle
+          cx={cxBobine}
+          cy={cyBobine}
+          r={rBobine}
+          fill="url(#grad-bobine-face)"
+          stroke={COULEUR_GRIS_FONCE}
+          strokeWidth={1}
+        />
+        {/* Quelques arcs concentriques pour suggérer les couches enroulées */}
+        {[0.85, 0.7, 0.55, 0.4].map((f, i) => (
+          <circle
+            key={i}
+            cx={cxBobine}
             cy={cyBobine}
-            rx={8}
-            ry={ryBobine}
-            fill="#D1D5DB"
-            stroke={COULEUR_GRIS_FONCE}
-            strokeWidth={0.8}
-          />
-          {/* Côté droit (ellipse arrière, visible en perspective légère) */}
-          <ellipse
-            cx={cxBobine + rxBobine}
-            cy={cyBobine}
-            rx={8}
-            ry={ryBobine}
-            fill="#F3F4F6"
-            stroke={COULEUR_GRIS_FONCE}
-            strokeWidth={0.8}
-          />
-
-          {/* Bord supérieur et inférieur du tube */}
-          <line
-            x1={cxBobine - rxBobine + 8}
-            y1={cyBobine - ryBobine}
-            x2={cxBobine + rxBobine}
-            y2={cyBobine - ryBobine}
-            stroke={COULEUR_GRIS_FONCE}
-            strokeWidth={0.8}
-          />
-          <line
-            x1={cxBobine - rxBobine + 8}
-            y1={cyBobine + ryBobine}
-            x2={cxBobine + rxBobine}
-            y2={cyBobine + ryBobine}
-            stroke={COULEUR_GRIS_FONCE}
-            strokeWidth={0.8}
-          />
-
-          {/* Mandrin (vue de profil : ovale au centre du flanc droit) */}
-          <ellipse
-            cx={cxBobine + rxBobine}
-            cy={cyBobine}
-            rx={6}
-            ry={ryMandrin}
-            fill="#6B7280"
-            stroke={COULEUR_GRIS_FONCE}
-            strokeWidth={0.6}
-          />
-          <ellipse
-            cx={cxBobine + rxBobine}
-            cy={cyBobine}
-            rx={3}
-            ry={ryMandrin * 0.6}
-            fill="#374151"
-            stroke="none"
-          />
-
-          {/* Repère START orange en surface */}
-          <g transform={`translate(${cxBobine + rxBobine + 2}, ${cyBobine - ryBobine + 12})`}>
-            <rect x={-5} y={-5} width={10} height={10} fill={COULEUR_ORANGE} stroke="white" strokeWidth={0.4} />
-            <text x={14} y={4} fontSize={9} fontWeight={700} fill={COULEUR_ORANGE}>
-              START
-            </text>
-          </g>
-
-          {/* Liner sortant (rectangle horizontal beige) */}
-          <rect
-            x={linerStartX}
-            y={linerY}
-            width={linerEndX - linerStartX}
-            height={linerH}
-            fill={COULEUR_LINER}
+            r={rBobine * f}
+            fill="none"
             stroke={COULEUR_HACHURE}
-            strokeWidth={0.6}
-          />
-          <rect
-            x={linerStartX}
-            y={linerY}
-            width={linerEndX - linerStartX}
-            height={linerH}
-            fill="url(#liner-dots-b)"
+            strokeWidth={0.5}
+            strokeDasharray="2 3"
             opacity={0.5}
           />
+        ))}
+        {/* Mandrin au centre (vue de face : cercle plus foncé) */}
+        <circle
+          cx={cxBobine}
+          cy={cyBobine}
+          r={rMandrin}
+          fill="#9CA3AF"
+          stroke={COULEUR_GRIS_FONCE}
+          strokeWidth={0.8}
+        />
+        <circle
+          cx={cxBobine}
+          cy={cyBobine}
+          r={rMandrin * 0.55}
+          fill="#4B5563"
+          stroke="none"
+        />
+        <text
+          x={cxBobine}
+          y={cyBobine + 3}
+          textAnchor="middle"
+          fontSize={8}
+          fontWeight={600}
+          fill="white"
+        >
+          mandrin
+        </text>
 
-          {/* 3 étiquettes sur le liner */}
-          {Array.from({ length: NB_ETIQ }).map((_, i) => {
-            const px = linerStartX + 12 + i * (etiqW + etiqGap);
-            const isLast = i === NB_ETIQ - 1;
-            return (
-              <g key={i}>
-                <rect
-                  x={px}
-                  y={etiqYTop}
-                  width={etiqW}
-                  height={etiqH}
-                  fill={COULEUR_BLEU_CLAIR}
-                  stroke={COULEUR_BLEU}
-                  strokeWidth={0.7}
-                />
-                {/* Le A apparaît uniquement dans la dernière étiquette
-                     (convention image Eric : on voit le sens du A "en sortie"
-                     de la bobine). Les 2 premières sont vides pour
-                     symboliser la continuité du tirage. */}
-                {isLast && (
-                  <g
-                    transform={
-                      // Compense le flip horizontal pour que le A garde son
-                      // sens lisible côté observateur même quand toute la
-                      // vue est inversée.
-                      `translate(${px + etiqW / 2} ${etiqYTop + etiqH / 2}) ` +
-                      (faceInt ? "scale(-1 1) " : "") +
-                      `rotate(${rotation})`
-                    }
-                  >
-                    <text
-                      x={0}
-                      y={0}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fontSize={etiqH * 0.65}
-                      fontWeight={700}
-                      fill={COULEUR_BLEU}
-                    >
-                      A
-                    </text>
-                  </g>
-                )}
-              </g>
-            );
-          })}
-
-          {/* Flèche défilement au-dessus du liner */}
-          <line
-            x1={linerStartX + 6}
-            y1={linerY - 12}
-            x2={linerEndX - 10}
-            y2={linerY - 12}
-            stroke={COULEUR_BLEU}
-            strokeWidth={1.2}
-            markerEnd="url(#arrow-bleu-b)"
+        {/* Repère START orange tangent au cercle (en haut) */}
+        <g
+          transform={`translate(${cxBobine + (faceInt ? -rBobine : rBobine) * 0.7}, ${cyBobine - rBobine + 6})`}
+        >
+          <rect
+            x={-5}
+            y={-5}
+            width={10}
+            height={10}
+            fill={COULEUR_ORANGE}
+            stroke="white"
+            strokeWidth={0.5}
           />
           <text
+            x={faceInt ? -10 : 10}
+            y={4}
+            fontSize={9}
+            fontWeight={700}
+            fill={COULEUR_ORANGE}
+            textAnchor={faceInt ? "end" : "start"}
+          >
+            START
+          </text>
+        </g>
+
+        {/* Liner sortant tangent (rectangle horizontal beige) */}
+        <rect
+          x={linerStartX}
+          y={linerY}
+          width={linerLen}
+          height={linerH}
+          fill={COULEUR_LINER}
+          stroke={COULEUR_HACHURE}
+          strokeWidth={0.6}
+        />
+        <rect
+          x={linerStartX}
+          y={linerY}
+          width={linerLen}
+          height={linerH}
+          fill="url(#liner-dots-b2)"
+          opacity={0.5}
+        />
+
+        {/* 3 étiquettes sur le liner (couleur jaune si sens intérieur) */}
+        {Array.from({ length: NB_ETIQ }).map((_, i) => {
+          // Index de la dernière étiquette = celle "qui sort" de la bobine
+          // (proche du bord libre du liner, donc côté droit en ext, côté
+          // gauche en int).
+          const orderIdx = faceInt ? NB_ETIQ - 1 - i : i;
+          const px = linerStartX + 10 + orderIdx * (etiqW + etiqGap);
+          const isFurthest = i === NB_ETIQ - 1; // la + éloignée de la bobine
+          return (
+            <g key={i}>
+              <rect
+                x={px}
+                y={etiqYTop}
+                width={etiqW}
+                height={etiqH}
+                fill={etiqFill}
+                stroke={etiqStroke}
+                strokeWidth={0.7}
+              />
+              {isFurthest && (
+                <g
+                  transform={`translate(${px + etiqW / 2} ${etiqYTop + etiqH / 2}) rotate(${rotation})`}
+                >
+                  <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={etiqH * 0.6}
+                    fontWeight={700}
+                    fill={aFill}
+                  >
+                    A
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Flèche déroulement au-dessus du liner */}
+        <g>
+          {faceInt ? (
+            <line
+              x1={linerEndX - 6}
+              y1={linerY - 14}
+              x2={linerStartX + 10}
+              y2={linerY - 14}
+              stroke={COULEUR_BLEU}
+              strokeWidth={1.4}
+              markerEnd="url(#arrow-bleu-b2)"
+            />
+          ) : (
+            <line
+              x1={linerStartX + 6}
+              y1={linerY - 14}
+              x2={linerEndX - 10}
+              y2={linerY - 14}
+              stroke={COULEUR_BLEU}
+              strokeWidth={1.4}
+              markerEnd="url(#arrow-bleu-b2)"
+            />
+          )}
+          <text
             x={(linerStartX + linerEndX) / 2}
-            y={linerY - 16}
+            y={linerY - 18}
             textAnchor="middle"
             fontSize={9}
             fontWeight={600}
@@ -706,68 +738,91 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
           </text>
         </g>
 
-        {/* Cote ø bobine (sous la bobine, NON flippée pour rester lisible) */}
-        <g transform={faceInt ? `translate(${VBW - cxBobine * 2} 0)` : ""}>
-          <line
-            x1={cxBobine - rxBobine + 8}
-            y1={cyBobine + ryBobine + 14}
-            x2={cxBobine + rxBobine}
-            y2={cyBobine + ryBobine + 14}
-            stroke={COULEUR_BLEU}
-            strokeWidth={0.8}
-          />
-          <text
-            x={cxBobine + 4}
-            y={cyBobine + ryBobine + 28}
-            textAnchor="middle"
-            fontSize={10}
-            fontWeight={700}
-            fill={COULEUR_BLEU}
-          >
-            ø {config.diametre_bobine_mm} mm
-          </text>
-          <text
-            x={cxBobine + 4}
-            y={cyBobine + ryBobine + 40}
-            textAnchor="middle"
-            fontSize={8}
-            fill={COULEUR_GRIS_FONCE}
-          >
-            mandrin ({rxMandrin * 2}×{ryMandrin * 2} schématique)
-          </text>
-        </g>
+        {/* Cote ø bobine sous le cercle */}
+        <line
+          x1={cxBobine - rBobine}
+          y1={cyBobine + rBobine + 15}
+          x2={cxBobine + rBobine}
+          y2={cyBobine + rBobine + 15}
+          stroke={COULEUR_BLEU}
+          strokeWidth={0.8}
+        />
+        <line
+          x1={cxBobine - rBobine}
+          y1={cyBobine + rBobine + 10}
+          x2={cxBobine - rBobine}
+          y2={cyBobine + rBobine + 20}
+          stroke={COULEUR_BLEU}
+          strokeWidth={0.4}
+        />
+        <line
+          x1={cxBobine + rBobine}
+          y1={cyBobine + rBobine + 10}
+          x2={cxBobine + rBobine}
+          y2={cyBobine + rBobine + 20}
+          stroke={COULEUR_BLEU}
+          strokeWidth={0.4}
+        />
+        <text
+          x={cxBobine}
+          y={cyBobine + rBobine + 32}
+          textAnchor="middle"
+          fontSize={11}
+          fontWeight={700}
+          fill={COULEUR_BLEU}
+        >
+          ø bobine {config.diametre_bobine_mm} mm
+        </text>
+        <text
+          x={cxBobine}
+          y={cyBobine + rBobine + 45}
+          textAnchor="middle"
+          fontSize={9}
+          fill={COULEUR_GRIS_FONCE}
+        >
+          mandrin ø {rMandrin * 2} schématique
+        </text>
 
-        {/* Badge SE en haut-gauche */}
+        {/* Badge SE en haut */}
         <g transform="translate(18, 22)">
           <rect
             x={0}
             y={0}
-            width={140}
+            width={150}
             height={36}
             rx={5}
             fill={COULEUR_BLEU_CLAIR}
             stroke={COULEUR_BLEU}
             strokeWidth={0.6}
           />
-          <text x={70} y={15} textAnchor="middle" fontSize={12} fontWeight={700} fill={COULEUR_BLEU}>
+          <text
+            x={75}
+            y={15}
+            textAnchor="middle"
+            fontSize={12}
+            fontWeight={700}
+            fill={COULEUR_BLEU}
+          >
             {config.sens_enroulement}
           </text>
-          <text x={70} y={28} textAnchor="middle" fontSize={9} fill={COULEUR_BLEU}>
+          <text x={75} y={28} textAnchor="middle" fontSize={9} fill={COULEUR_BLEU}>
             {labelSE(config.sens_enroulement)}
           </text>
         </g>
 
-        {/* Cote laize liner (à droite du liner) */}
-        <text
-          x={VBW - 30}
-          y={cyBobine + ryBobine + 28}
-          textAnchor="end"
-          fontSize={9}
-          fontWeight={600}
-          fill={COULEUR_GRIS_FONCE}
-        >
-          laize liner {config.laize_liner_mm} mm
-        </text>
+        {/* Note "liner par-dessus" pour les sens intérieur */}
+        {faceInt && (
+          <text
+            x={(linerStartX + linerEndX) / 2}
+            y={linerY + linerH + 18}
+            textAnchor="middle"
+            fontSize={9}
+            fontStyle="italic"
+            fill={COULEUR_ETIQ_INT_BORDURE}
+          >
+            étiquettes vues à travers le liner siliconé (face dedans)
+          </text>
+        )}
       </svg>
     </figure>
   );
@@ -800,6 +855,7 @@ function VueBobineFille({
   laizeEtiqMm: number;
   devEtiqMm: number;
 }) {
+  const { faceInt } = parseSE(config.sens_enroulement);
   const VBW = 720;
   const VBH = 260;
   const NB_ETIQ_AFFICHEES = 5;
@@ -814,6 +870,12 @@ function VueBobineFille({
   const aspectEtiq = laizeEtiqMm / devEtiqMm;
   const etiqH = etiqW * aspectEtiq;
   const linerH = etiqH + 20;
+
+  // Sens intérieur (SE5-8) : étiquettes vues à travers le liner siliconé
+  // (face dedans) → teinte jaune-beige. Sens extérieur : bleu clair.
+  const etiqFill = faceInt ? COULEUR_ETIQ_INT : COULEUR_BLEU_CLAIR;
+  const etiqStroke = faceInt ? COULEUR_ETIQ_INT_BORDURE : COULEUR_BLEU;
+  const aFill = faceInt ? COULEUR_GRIS_FONCE : COULEUR_BLEU;
 
   return (
     <figure className="space-y-2">
@@ -879,8 +941,8 @@ function VueBobineFille({
                 y={oy}
                 width={etiqW}
                 height={etiqH}
-                fill={COULEUR_BLEU_CLAIR}
-                stroke={COULEUR_BLEU}
+                fill={etiqFill}
+                stroke={etiqStroke}
                 strokeWidth={0.8}
               />
               <text
@@ -890,7 +952,7 @@ function VueBobineFille({
                 dominantBaseline="central"
                 fontSize={etiqH * 0.5}
                 fontWeight={700}
-                fill={COULEUR_BLEU}
+                fill={aFill}
               >
                 A
               </text>
