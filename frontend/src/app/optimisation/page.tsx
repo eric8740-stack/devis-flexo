@@ -36,43 +36,76 @@ import {
  * un mapping UI : laize→largeur, dev→hauteur.
  */
 const MANDRIN_OPTIONS = [25, 38, 76, 152] as const;
-const SE_OPTIONS: { code: SensEnroulement; label: string; transform: string }[] = [
-  { code: "SE1", label: "face dehors, tête haut", transform: "" },
-  { code: "SE2", label: "face dehors, tête bas", transform: "rotate(180 16 16)" },
-  { code: "SE3", label: "face dedans, tête haut", transform: "scale(-1 1) translate(-32 0)" },
-  { code: "SE4", label: "face dedans, tête bas", transform: "scale(-1 1) translate(-32 0) rotate(180 16 16)" },
+
+/**
+ * 8 sens d'enroulement convention métier flexo :
+ *   SE1-4 : face EXTÉRIEUR (étiquettes vers l'extérieur de la bobine)
+ *           orientations 0° / 180° / 270° / 90° du A
+ *   SE5-8 : face INTÉRIEUR (étiquettes vers l'intérieur de la bobine)
+ *           bobine inversée (sens de défilement opposé)
+ * Le `rotationA` indique la rotation du A en degrés.
+ * Le `face` "ext" / "int" change l'orientation de la bobine sur le picto.
+ */
+type SEOption = {
+  code: SensEnroulement;
+  rotationA: 0 | 90 | 180 | 270;
+  face: "ext" | "int";
+  label: string;
+};
+
+const SE_OPTIONS: SEOption[] = [
+  { code: "SE1", rotationA: 0, face: "ext", label: "0° extérieur" },
+  { code: "SE2", rotationA: 180, face: "ext", label: "180° extérieur" },
+  { code: "SE3", rotationA: 270, face: "ext", label: "270° extérieur" },
+  { code: "SE4", rotationA: 90, face: "ext", label: "90° extérieur" },
+  { code: "SE5", rotationA: 0, face: "int", label: "0° intérieur" },
+  { code: "SE6", rotationA: 180, face: "int", label: "180° intérieur" },
+  { code: "SE7", rotationA: 270, face: "int", label: "270° intérieur" },
+  { code: "SE8", rotationA: 90, face: "int", label: "90° intérieur" },
 ];
 
-function SEPictogramme({ transform }: { transform: string }) {
+/**
+ * Pictogramme bobine schématique simple inspiré des conventions atelier :
+ *  - face ext  : bobine à gauche, liner sortant à droite avec 2 étiquettes
+ *  - face int  : bobine à droite, liner sortant à gauche (image miroir)
+ *  - rotation A : 0/90/180/270° applique à la dernière étiquette
+ */
+function SEPictogramme({ rotationA, face }: { rotationA: 0 | 90 | 180 | 270; face: "ext" | "int" }) {
+  // Pour "int", on flip horizontalement tout le pictogramme.
+  const flipTransform = face === "int" ? "translate(72 0) scale(-1 1)" : "";
   return (
     <svg
-      viewBox="0 0 32 32"
-      width={28}
-      height={28}
-      className="inline-block rounded border border-border bg-white"
+      viewBox="0 0 72 40"
+      width={64}
+      height={36}
+      className="inline-block"
       aria-hidden
     >
-      <rect
-        x={3}
-        y={3}
-        width={26}
-        height={26}
-        fill="#DCE7F3"
-        stroke="#0C447C"
-        strokeWidth={0.8}
-      />
-      <text
-        x={16}
-        y={16}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={18}
-        fontWeight={700}
-        fill="#0C447C"
-        transform={transform}
-      >
-        A
-      </text>
+      <g transform={flipTransform}>
+        {/* Bobine (mandrin tubulaire à gauche) */}
+        <ellipse cx={14} cy={20} rx={10} ry={14} fill="#E5E7EB" stroke="#374151" strokeWidth={0.8} />
+        <ellipse cx={14} cy={20} rx={4} ry={5} fill="#6B7280" stroke="#374151" strokeWidth={0.6} />
+        {/* Liner sortant à droite */}
+        <rect x={20} y={14} width={48} height={12} fill="#FAF7EE" stroke="#C8C6BC" strokeWidth={0.5} />
+        {/* Étiquettes (rectangles bleu pâle) */}
+        <rect x={26} y={16} width={10} height={8} fill="#DCE7F3" stroke="#0C447C" strokeWidth={0.5} />
+        <rect x={38} y={16} width={10} height={8} fill="#DCE7F3" stroke="#0C447C" strokeWidth={0.5} />
+        <rect x={50} y={16} width={10} height={8} fill="#DCE7F3" stroke="#0C447C" strokeWidth={0.5} />
+        {/* A dans la dernière étiquette (la plus à droite) avec rotation */}
+        <g transform={`translate(55 20) rotate(${rotationA})`}>
+          <text
+            x={0}
+            y={0}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={7}
+            fontWeight={700}
+            fill="#0C447C"
+          >
+            A
+          </text>
+        </g>
+      </g>
     </svg>
   );
 }
@@ -369,42 +402,51 @@ export default function OptimisationPage() {
                 ))}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Sens enroulement</Label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {SE_OPTIONS.map((opt) => {
-                  const selected = sensEnroulement === opt.code;
-                  return (
-                    <label
-                      key={opt.code}
-                      className={
-                        "flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm transition-colors " +
-                        (selected
-                          ? "border-foreground bg-muted/50"
-                          : "border-border hover:bg-muted/30")
-                      }
-                    >
-                      <input
-                        type="radio"
-                        name="sens-enroulement"
-                        checked={selected}
-                        onChange={() => setSensEnroulement(opt.code)}
-                        className="accent-foreground"
-                      />
-                      <SEPictogramme transform={opt.transform} />
-                      <div className="flex flex-col">
-                        <span className="font-medium">{opt.code}</span>
-                        <span className="text-[10px] leading-tight text-muted-foreground">
-                          {opt.label}
-                        </span>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
+            <div className="space-y-3">
+              <Label>Sens enroulement (8 sens, convention métier)</Label>
+              {(["ext", "int"] as const).map((face) => (
+                <div key={face} className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Sens {face === "ext" ? "extérieur" : "intérieur"}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {SE_OPTIONS.filter((o) => o.face === face).map((opt) => {
+                      const selected = sensEnroulement === opt.code;
+                      return (
+                        <label
+                          key={opt.code}
+                          className={
+                            "flex cursor-pointer flex-col items-center gap-1 rounded-md border p-2 text-xs transition-colors " +
+                            (selected
+                              ? "border-foreground bg-muted/50"
+                              : "border-border hover:bg-muted/30")
+                          }
+                        >
+                          <input
+                            type="radio"
+                            name="sens-enroulement"
+                            checked={selected}
+                            onChange={() => setSensEnroulement(opt.code)}
+                            className="sr-only"
+                          />
+                          <SEPictogramme
+                            rotationA={opt.rotationA}
+                            face={opt.face}
+                          />
+                          <span className="font-medium">{opt.code}</span>
+                          <span className="text-[10px] leading-tight text-muted-foreground">
+                            {opt.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
               <p className="text-xs text-muted-foreground">
-                Le pictogramme indique l&apos;orientation du A finale sur la
-                bobine livrée. Application au schéma résultat à venir en PR 9.2.
+                Le pictogramme reproduit la convention atelier : bobine à gauche
+                (face ext) ou à droite (face int), avec rotation du A finale.
+                Application au schéma résultat à venir en PR 9.2.
               </p>
             </div>
             <div className="space-y-2">

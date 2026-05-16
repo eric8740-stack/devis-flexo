@@ -69,8 +69,13 @@ class OptimisationCalculerRequest(BaseModel):
         ge=10,
         le=500,
     )
-    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4"] = Field(
-        "SE1", description="Sens enroulement bobine fille (PR #9.2 pour le rendu)"
+    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8"] = Field(
+        "SE1",
+        description=(
+            "Sens enroulement bobine fille (convention métier flexo 8 sens) : "
+            "SE1-4 face extérieur (0°/180°/270°/90°), "
+            "SE5-8 face intérieur (0°/180°/270°/90°)."
+        ),
     )
     epaisseur_matiere_um: float = Field(
         150.0,
@@ -130,7 +135,7 @@ class OptimisationConfigOut(BaseModel):
     rendement_pct: float
     diametre_bobine_mm: int
     laize_liner_mm: float
-    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4"]
+    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8"]
     # Machines équivalentes (dédoublonnage). Au moins l'élément `machine_id`.
     machines_compatibles: list[int]
     # Noms machines équivalentes — facilité d'affichage UI (au lieu d'IDs).
