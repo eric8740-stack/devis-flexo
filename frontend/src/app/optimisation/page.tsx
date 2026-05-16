@@ -35,7 +35,10 @@ import {
  * `hauteur_mm` (= dev) pour ne pas casser la DB / cost_engine. C'est juste
  * un mapping UI : laize→largeur, dev→hauteur.
  */
-const MANDRIN_OPTIONS = [25, 38, 76, 152] as const;
+// Diamètres mandrin courants flexo. ICE standard = 40 et 76 mm (annotés
+// dans l'UI). Les autres (25, 38, 50) sont disponibles pour cas spéciaux.
+const MANDRIN_OPTIONS = [25, 38, 40, 50, 76] as const;
+const MANDRIN_STANDARDS_ICE = new Set([40, 76]);
 
 /**
  * 8 sens d'enroulement convention métier flexo :
@@ -53,15 +56,18 @@ type SEOption = {
   label: string;
 };
 
-const SE_OPTIONS: SEOption[] = [
-  { code: "SE1", rotationA: 0, face: "ext", label: "0° extérieur" },
-  { code: "SE2", rotationA: 180, face: "ext", label: "180° extérieur" },
-  { code: "SE3", rotationA: 270, face: "ext", label: "270° extérieur" },
-  { code: "SE4", rotationA: 90, face: "ext", label: "90° extérieur" },
-  { code: "SE5", rotationA: 0, face: "int", label: "0° intérieur" },
-  { code: "SE6", rotationA: 180, face: "int", label: "180° intérieur" },
-  { code: "SE7", rotationA: 270, face: "int", label: "270° intérieur" },
-  { code: "SE8", rotationA: 90, face: "int", label: "90° intérieur" },
+// Libellés ICE exact (cf guide métier Eric). `affichage` est le nom court
+// utilisé dans l'UI ("Sens 1" plutôt que "SE1"). `code` reste SE1-8 pour
+// rester cohérent avec la BDD/API/persistence existante.
+const SE_OPTIONS: (SEOption & { affichage: string })[] = [
+  { code: "SE1", rotationA: 0, face: "ext", affichage: "Sens 1", label: "0° Extérieur · droite avant" },
+  { code: "SE2", rotationA: 180, face: "ext", affichage: "Sens 2", label: "180° Extérieur · gauche avant" },
+  { code: "SE3", rotationA: 270, face: "ext", affichage: "Sens 3", label: "270° Extérieur · pied avant" },
+  { code: "SE4", rotationA: 90, face: "ext", affichage: "Sens 4", label: "90° Extérieur · tête avant" },
+  { code: "SE5", rotationA: 0, face: "int", affichage: "Sens 5", label: "0° Intérieur · droite avant" },
+  { code: "SE6", rotationA: 180, face: "int", affichage: "Sens 6", label: "180° Intérieur · gauche avant" },
+  { code: "SE7", rotationA: 270, face: "int", affichage: "Sens 7", label: "270° Intérieur · pied avant" },
+  { code: "SE8", rotationA: 90, face: "int", affichage: "Sens 8", label: "90° Intérieur · tête avant" },
 ];
 
 /**
@@ -389,23 +395,33 @@ export default function OptimisationPage() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Mandrin bobine fille (mm)</Label>
+              <Label>Ø Mandrin bobine fille (mm)</Label>
               <div className="flex flex-wrap gap-3 text-sm">
-                {MANDRIN_OPTIONS.map((m) => (
-                  <label
-                    key={m}
-                    className="flex cursor-pointer items-center gap-1"
-                  >
-                    <input
-                      type="radio"
-                      name="mandrin"
-                      checked={mandrin === m}
-                      onChange={() => setMandrin(m)}
-                      className="accent-foreground"
-                    />
-                    {m}
-                  </label>
-                ))}
+                {MANDRIN_OPTIONS.map((m) => {
+                  const isStandard = MANDRIN_STANDARDS_ICE.has(m);
+                  return (
+                    <label
+                      key={m}
+                      className="flex cursor-pointer items-center gap-1"
+                    >
+                      <input
+                        type="radio"
+                        name="mandrin"
+                        checked={mandrin === m}
+                        onChange={() => setMandrin(m)}
+                        className="accent-foreground"
+                      />
+                      <span className={isStandard ? "font-medium" : ""}>
+                        {m}
+                      </span>
+                      {isStandard && (
+                        <span className="text-[10px] text-muted-foreground">
+                          (ICE standard)
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
             </div>
             <div className="space-y-3">
@@ -439,7 +455,7 @@ export default function OptimisationPage() {
                             rotationA={opt.rotationA}
                             face={opt.face}
                           />
-                          <span className="font-medium">{opt.code}</span>
+                          <span className="font-medium">{opt.affichage}</span>
                           <span className="text-[10px] leading-tight text-muted-foreground">
                             {opt.label}
                           </span>
@@ -717,7 +733,10 @@ function ConfigCard({
             label="Laize liner (vue client)"
             value={`${config.laize_liner_mm} mm`}
           />
-          <Line label="Sens enroulement" value={config.sens_enroulement} />
+          <Line
+            label="Sens d'enroulement"
+            value={formatSensEnroulement(config.sens_enroulement)}
+          />
         </div>
 
         <div className="lg:col-span-2 text-xs text-muted-foreground">
@@ -740,6 +759,15 @@ function ConfigCard({
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Convertit un code interne SE1..SE8 en libellé ICE affiché ("Sens 1 — 0°
+ * Extérieur · droite avant"). Code interne préservé pour la BDD/API.
+ */
+function formatSensEnroulement(code: SensEnroulement): string {
+  const opt = SE_OPTIONS.find((o) => o.code === code);
+  return opt ? `${opt.affichage} — ${opt.label}` : code;
 }
 
 function Line({

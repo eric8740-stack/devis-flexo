@@ -307,7 +307,7 @@ function VuePlaque({
           fontWeight={700}
           fill={COULEUR_BLEU}
         >
-          Laize papier {config.laize_papier_mm} mm
+          LAIZE {config.laize_papier_mm} mm
         </text>
 
         {/* Cote laize plaque (bas, gris) */}
@@ -330,24 +330,24 @@ function VuePlaque({
           Laize plaque {config.laize_plaque_mm} mm
         </text>
 
-        {/* Cotes chute */}
+        {/* Cotes zones d'enchenillage (chutes latérales gauche/droite) */}
         <text
           x={ox + chuteW / 2}
           y={oy + innerH + 42}
           textAnchor="middle"
-          fontSize={9}
+          fontSize={8}
           fill={COULEUR_GRIS}
         >
-          chute {config.chute_laterale_reelle_mm}
+          Zone enchenillage {config.chute_laterale_reelle_mm}
         </text>
         <text
           x={ox + widthPapier - chuteW / 2}
           y={oy + innerH + 42}
           textAnchor="middle"
-          fontSize={9}
+          fontSize={8}
           fill={COULEUR_GRIS}
         >
-          chute {config.chute_laterale_reelle_mm}
+          Zone enchenillage {config.chute_laterale_reelle_mm}
         </text>
 
         {/* Cote Z cylindre à droite (verticale) */}
@@ -393,7 +393,7 @@ function VuePlaque({
           {config.nb_dents_cylindre} dents
         </text>
 
-        {/* Cotes intervalles (orange pointillé) */}
+        {/* Cotes Écart entre chaque étiquette (sens laize & sens dev) en orange */}
         {config.nb_poses_laize > 1 && (
           <g>
             <line
@@ -412,7 +412,7 @@ function VuePlaque({
               fontSize={9}
               fill={COULEUR_ORANGE}
             >
-              int. laize {config.intervalle_laize_reel_mm}
+              écart {config.intervalle_laize_reel_mm}
             </text>
           </g>
         )}
@@ -435,7 +435,7 @@ function VuePlaque({
               fill={COULEUR_ORANGE}
               dominantBaseline="middle"
             >
-              int. dev {config.intervalle_dev_reel_mm}
+              écart {config.intervalle_dev_reel_mm}
             </text>
           </g>
         )}
@@ -472,9 +472,25 @@ function VuePlaque({
             textAnchor="middle"
             transform={`rotate(-90 9 0)`}
           >
-            défilement presse
+            AVANCE
           </text>
         </g>
+
+        {/* Cote "Pas en Avance" = dev étiquette + écart entre étiquettes.
+            C'est la longueur consommée sur le cylindre par une rangée. */}
+        {config.nb_poses_dev > 1 && (
+          <text
+            x={VBW / 2}
+            y={VBH - 28}
+            textAnchor="middle"
+            fontSize={10}
+            fontWeight={600}
+            fill={COULEUR_ORANGE}
+          >
+            Pas en Avance = {devEtiqMm} + {config.intervalle_dev_reel_mm} ={" "}
+            {(devEtiqMm + config.intervalle_dev_reel_mm).toFixed(2)} mm
+          </text>
+        )}
 
         {/* Légende dimensions */}
         <text
@@ -485,7 +501,7 @@ function VuePlaque({
           fill={COULEUR_GRIS_FONCE}
           fontStyle="italic"
         >
-          Étiquette laize {laizeEtiqMm} × dev {devEtiqMm} mm — {config.nb_poses_laize}{" "}
+          Étiquette LAIZE {laizeEtiqMm} × dev {devEtiqMm} mm — {config.nb_poses_laize}{" "}
           × {config.nb_poses_dev} = {config.nb_poses_total} poses
         </text>
       </svg>
@@ -734,7 +750,7 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
             fontWeight={600}
             fill={COULEUR_BLEU}
           >
-            déroulement
+            Sens de déroulement
           </text>
         </g>
 
@@ -771,7 +787,7 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
           fontWeight={700}
           fill={COULEUR_BLEU}
         >
-          ø bobine {config.diametre_bobine_mm} mm
+          Ø Diamètre Total Bobine {config.diametre_bobine_mm} mm
         </text>
         <text
           x={cxBobine}
@@ -780,7 +796,7 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
           fontSize={9}
           fill={COULEUR_GRIS_FONCE}
         >
-          mandrin ø {rMandrin * 2} schématique
+          Ø Mandrin (saisi dans le formulaire)
         </text>
 
         {/* Badge SE en haut */}
@@ -803,10 +819,10 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
             fontWeight={700}
             fill={COULEUR_BLEU}
           >
-            {config.sens_enroulement}
+            {senseAffichage(config.sens_enroulement)}
           </text>
-          <text x={75} y={28} textAnchor="middle" fontSize={9} fill={COULEUR_BLEU}>
-            {labelSE(config.sens_enroulement)}
+          <text x={75} y={28} textAnchor="middle" fontSize={8} fill={COULEUR_BLEU}>
+            {labelSE(config.sens_enroulement).split(" — ")[1] ?? ""}
           </text>
         </g>
 
@@ -830,16 +846,21 @@ function VueBobine({ config }: { config: OptimisationConfigOut }) {
 
 function labelSE(se: SensEnroulement): string {
   const map: Record<SensEnroulement, string> = {
-    SE1: "0° extérieur",
-    SE2: "180° extérieur",
-    SE3: "270° extérieur",
-    SE4: "90° extérieur",
-    SE5: "0° intérieur",
-    SE6: "180° intérieur",
-    SE7: "270° intérieur",
-    SE8: "90° intérieur",
+    SE1: "Sens 1 — 0° Extérieur droite avant",
+    SE2: "Sens 2 — 180° Extérieur gauche avant",
+    SE3: "Sens 3 — 270° Extérieur pied avant",
+    SE4: "Sens 4 — 90° Extérieur tête avant",
+    SE5: "Sens 5 — 0° Intérieur droite avant",
+    SE6: "Sens 6 — 180° Intérieur gauche avant",
+    SE7: "Sens 7 — 270° Intérieur pied avant",
+    SE8: "Sens 8 — 90° Intérieur tête avant",
   };
   return map[se];
+}
+
+function senseAffichage(se: SensEnroulement): string {
+  const n = parseInt(se.replace("SE", ""), 10);
+  return `Sens ${n}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -883,8 +904,8 @@ function VueBobineFille({
         Vue C — bobine fille déroulée chez le client
       </figcaption>
       <p className="text-xs text-muted-foreground">
-        Laize liner {config.laize_liner_mm} mm · sens enroulement{" "}
-        {config.sens_enroulement} · ml total {config.ml_total_m} m
+        Laize liner {config.laize_liner_mm} mm ·{" "}
+        {labelSE(config.sens_enroulement)} · ml total {config.ml_total_m} m
       </p>
       <svg
         viewBox={`0 0 ${VBW} ${VBH}`}
@@ -995,7 +1016,7 @@ function VueBobineFille({
           fontSize={9}
           fill={COULEUR_ORANGE}
         >
-          int. dev {config.intervalle_dev_reel_mm}
+          écart {config.intervalle_dev_reel_mm}
         </text>
 
         <line
