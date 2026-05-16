@@ -311,3 +311,79 @@ def test_post_calculer_422_message_actionnable(cleanup_and_onboard):
     detail = r.json()["detail"].lower()
     assert "onboarding" in detail
     assert "option_qui_nexiste_pas" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Cas métier de référence — Cas Eric 100×80 mm
+# ---------------------------------------------------------------------------
+
+
+def test_cas_metier_eric_etiquette_laize100_dev80_sur_cyl_104dents(
+    cleanup_and_onboard,
+):
+    """Cas de référence métier ICE remonté par Eric pour valider le fix Cas B.
+
+    Étiquette laize 100 mm × dev 80 mm, intervalle dev min 2 mm,
+    catalogue ICE seedé (dont cylindre 104 dents = 330.2 mm).
+
+    Calcul Excel attendu :
+      - nb_poses_dev = floor(330.2 / (80 + 2)) = 4
+      - intervalle dev réel = 330.2 / 4 − 80 = 2.55 mm (palier 'parfait')
+      - Sur Mark Andy 2200 (laize utile 320), nb_poses_laize = 2
+        (variante 3 exclue par effet banane : plaque 310 mm → Z mini 508)
+      - Total = 4 × 2 = 8 poses
+
+    Avant fix Cas B (developpe_mm en dents, valait 104 au lieu de 330.2) :
+    le moteur trouvait 1 pose au lieu de 4 (104/82 = 1).
+    """
+    _onboard_tenant_minimal()
+    r = client.post(
+        "/api/optimisation/calculer",
+        json={
+            "format": {
+                "hauteur_mm": 80,
+                "largeur_mm": 100,
+                "rayon_angles_mm": 2.0,
+                "forme_courbe": False,
+            },
+            "intervalle_dev_min_mm": 2.0,
+            "nb_couleurs_impression": 4,
+            "quantite": 10_000,
+            "options_codes": [],
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["nb_candidats"] >= 1, "Au moins une config viable attendue"
+
+    # Top 1 doit être sur le cylindre 330.2 mm (104 dents), 4×2 poses
+    top1 = body["configurations"][0]
+    assert top1["nb_poses_dev"] == 4, (
+        f"Attendu 4 poses dev, obtenu {top1['nb_poses_dev']}. "
+        "Vérifier que les cylindres sont seedés en mm réels (pas dents)."
+    )
+    assert top1["nb_poses_laize"] == 2, (
+        f"Attendu 2 poses laize, obtenu {top1['nb_poses_laize']}."
+    )
+    assert top1["nb_poses_total"] == 8
+    assert abs(top1["intervalle_dev_reel_mm"] - 2.55) < 0.01, (
+        f"Intervalle dev attendu ~2.55 mm, obtenu {top1['intervalle_dev_reel_mm']}"
+    )
+    assert top1["qualite_echenillage"] == "parfait"
+
+
+def test_sanity_cylindres_seedes_en_mm_pas_dents(cleanup_and_onboard):
+    """Garde-fou Cas B : aucun cylindre seedé via l'onboarding ne doit avoir
+    `developpe_mm` < 200. Sinon → régression du fix dents→mm."""
+    _onboard_tenant_minimal()
+    db: Session = SessionLocal()
+    try:
+        cylindres = db.query(CylindreMagnetique).filter_by(entreprise_id=1).all()
+        assert len(cylindres) > 0
+        for c in cylindres:
+            assert float(c.developpe_mm) >= 200, (
+                f"Cylindre id={c.id} dev={c.developpe_mm} < 200 mm — "
+                "régression Cas B (valeur en dents au lieu de mm) ?"
+            )
+    finally:
+        db.close()
