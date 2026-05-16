@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.routers import (
     admin,
+    admin_audit,
     auth,
     catalogue,
     charge_mensuelle,
@@ -79,6 +80,8 @@ app.include_router(optimisation.router)
 app.include_router(ia.router)
 # Sprint 13 post — Paramètres > Options de fabrication (CRUD tenant)
 app.include_router(parametres_options.router)
+# 2026-05-16 TEMPORAIRE — endpoint audit prod seeds. À retirer après diagnostic.
+app.include_router(admin_audit.router)
 
 
 @app.exception_handler(IntegrityError)
