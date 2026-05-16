@@ -236,6 +236,11 @@ def _to_config_out(
         ml_total, epaisseur_matiere_um, mandrin_mm, laize_papier
     )
     laize_liner = calcul_laize_liner(laize_etiq_mm, marge_liner_mm)
+    # Nomenclature ICE : développé physique → nombre de dents (1 dent = 3.175 mm).
+    # Arrondi à l'entier car les cylindres réels sont fabriqués au nombre de
+    # dents entier ; les valeurs catalogue ICE (72, 80, 104, etc.) sont toujours
+    # exactement reproductibles.
+    nb_dents = round(z_cyl_mm / 3.175) if z_cyl_mm > 0 else 0
 
     return OptimisationConfigOut(
         cylindre_id=c.cylindre_id,
@@ -266,6 +271,7 @@ def _to_config_out(
         laize_papier_mm=round(laize_papier, 2),
         chute_laterale_reelle_mm=round(chute_reelle, 2),
         z_cylindre_mm=round(z_cyl_mm, 2),
+        nb_dents_cylindre=nb_dents,
         ml_total_m=round(ml_total, 2),
         m2_consomme=round(m2, 2),
         rendement_pct=round(rendement, 2),
