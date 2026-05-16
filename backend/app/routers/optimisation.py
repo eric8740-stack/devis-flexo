@@ -13,7 +13,13 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import require_module
-from app.models import CylindreMagnetique, Entreprise, OptionFabrication, User
+from app.models import (
+    CylindreMagnetique,
+    Entreprise,
+    MachineImprimerie,
+    OptionFabrication,
+    User,
+)
 from app.schemas.optimisation import (
     OptimisationCalculerRequest,
     OptimisationCalculerResponse,
@@ -163,6 +169,10 @@ def post_calculer(
                  db.query(CylindreMagnetique)
                  .filter_by(entreprise_id=user.entreprise_id, actif=True)
                  .all()}
+    nom_par_machine = {m.id: m.nom for m in
+                       db.query(MachineImprimerie)
+                       .filter_by(entreprise_id=user.entreprise_id, actif=True)
+                       .all()}
     chute_min = float(entreprise.chute_laterale_min_mm)
     palier = entreprise.palier_laize_papier_mm
     marge_liner = float(entreprise.marge_liner_mm)
@@ -173,6 +183,10 @@ def post_calculer(
             _to_config_out(
                 c=c,
                 z_cyl_mm=z_par_cyl.get(c.cylindre_id, 0.0),
+                noms_machines=[
+                    nom_par_machine.get(mid, f"#{mid}")
+                    for mid in c.machines_compatibles
+                ],
                 quantite=payload.quantite,
                 laize_etiq_mm=payload.format.largeur_mm,
                 dev_etiq_mm=payload.format.hauteur_mm,
@@ -198,6 +212,7 @@ def _to_config_out(
     *,
     c: ConfigurationPose,
     z_cyl_mm: float,
+    noms_machines: list[str],
     quantite: int,
     laize_etiq_mm: float,
     dev_etiq_mm: float,
@@ -258,4 +273,5 @@ def _to_config_out(
         laize_liner_mm=round(laize_liner, 2),
         sens_enroulement=sens_enroulement,  # type: ignore[arg-type]
         machines_compatibles=list(c.machines_compatibles),
+        noms_machines_compatibles=noms_machines,
     )
