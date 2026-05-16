@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Float, Integer, String
+from decimal import Decimal
+
+from sqlalchemy import Boolean, Float, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -22,6 +24,23 @@ class Entreprise(Base):
     pct_marge_defaut: Mapped[float | None] = mapped_column(Float)
     heures_prod_presse_mois: Mapped[int | None] = mapped_column(Integer)
     heures_prod_finition_mois: Mapped[int | None] = mapped_column(Integer)
+
+    # PR #9.1 — 4 paramètres BAT (Bon À Tirer / FlexoCompare).
+    # Pilotent les calculs d'implantation affichés sur /optimisation.
+    # Defaults ICE Étiquettes (28 ans d'expertise Eric Paysant) ; les
+    # imprimeurs pilotes peuvent les ajuster via Paramètres > Entreprise.
+    chute_laterale_min_mm: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("10.00")
+    )
+    palier_laize_papier_mm: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=10
+    )
+    refilage_systematique: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    marge_liner_mm: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("2.50")
+    )
 
     # Sprint 12 multi-tenant : flag pour identifier le compte démo Eric
     # (qui hérite des 148 records seedés). Les nouvelles entreprises créées

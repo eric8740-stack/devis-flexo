@@ -120,6 +120,11 @@ export interface Entreprise {
   pct_marge_defaut: number | null;
   heures_prod_presse_mois: number | null;
   heures_prod_finition_mois: number | null;
+  // PR #9.1 — paramètres BAT (renvoyés en string par FastAPI car Decimal)
+  chute_laterale_min_mm: string;
+  palier_laize_papier_mm: number;
+  refilage_systematique: boolean;
+  marge_liner_mm: string;
 }
 
 export type EntrepriseUpdate = Omit<Entreprise, "id">;
