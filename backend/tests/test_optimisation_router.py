@@ -57,9 +57,13 @@ def cleanup_and_onboard():
 
 def _onboard_tenant_minimal():
     """Onboarde via l'API : 6 cylindres représentatifs + 2 machines +
-    options minimales + barèmes (toujours 4)."""
+    options minimales + barèmes (toujours 4).
+
+    Valeurs mm = dents × 3.175 (cf. fix Cas B du 2026-05-16) :
+    72→228.6, 96→304.8, 104→330.2, 112→355.6, 128→406.4, 144→457.2.
+    """
     payload = {
-        "cylindres_developpes_mm": [72, 96, 104, 112, 128, 144],
+        "cylindres_developpes_mm": [228.6, 304.8, 330.2, 355.6, 406.4, 457.2],
         "machines_codes": ["mark_andy_2200", "omet_xflex_330"],
         "matieres_codes": [],
         "options_codes": ["vernis_selectif", "dorure_chaud"],

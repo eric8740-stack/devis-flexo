@@ -85,11 +85,11 @@ def test_status_false_avant_onboarding(cleanup_tenant_rows):
 
 
 def test_status_true_apres_onboarding(cleanup_tenant_rows):
-    # Onboarding minimal d'abord
+    # Onboarding minimal d'abord — 304.8 mm = 96 dents (cf. fix Cas B)
     r = client.post(
         "/api/onboarding/initialiser-catalogues",
         json={
-            "cylindres_developpes_mm": [96],
+            "cylindres_developpes_mm": [304.8],
             "machines_codes": ["mark_andy_2200"],
             "matieres_codes": [],
             "options_codes": [],
@@ -107,8 +107,10 @@ def test_status_true_apres_onboarding(cleanup_tenant_rows):
 
 
 def test_post_initialiser_catalogues_happy_path(cleanup_tenant_rows):
+    # Valeurs mm réelles = dents × 3.175 (cf. fix Cas B). 72→228.6, 96→304.8,
+    # 104→330.2, 144→457.2.
     payload = {
-        "cylindres_developpes_mm": [72, 96, 104, 144],
+        "cylindres_developpes_mm": [228.6, 304.8, 330.2, 457.2],
         "machines_codes": ["mark_andy_2200", "omet_xflex_330"],
         "matieres_codes": ["PAP_COUCHE_BRILL_80", "BOPP_TRANSP_50"],
         "options_codes": ["vernis_selectif", "dorure_chaud", "numerotation"],
@@ -150,7 +152,7 @@ def test_post_initialiser_catalogues_happy_path(cleanup_tenant_rows):
 
 def test_post_refuse_si_deja_initialise(cleanup_tenant_rows):
     payload = {
-        "cylindres_developpes_mm": [96],
+        "cylindres_developpes_mm": [304.8],  # 96 dents × 3.175
         "machines_codes": ["mark_andy_2200"],
         "matieres_codes": [],
         "options_codes": [],
@@ -171,7 +173,7 @@ def test_post_refuse_code_matiere_inconnu(cleanup_tenant_rows):
     r = client.post(
         "/api/onboarding/initialiser-catalogues",
         json={
-            "cylindres_developpes_mm": [96],
+            "cylindres_developpes_mm": [304.8],  # 96 dents
             "machines_codes": [],
             "matieres_codes": ["INEXISTANT_42"],
             "options_codes": [],
@@ -182,18 +184,19 @@ def test_post_refuse_code_matiere_inconnu(cleanup_tenant_rows):
 
 
 def test_post_refuse_cylindre_hors_catalogue(cleanup_tenant_rows):
-    # 99 mm n'est PAS dans la liste des 19 développés standard
+    # 314.2 mm n'est dérivé d'AUCUNE dent standard (98 dents = 311.15,
+    # 103 dents = 327.025 — donc 314.2 tombe entre les deux).
     r = client.post(
         "/api/onboarding/initialiser-catalogues",
         json={
-            "cylindres_developpes_mm": [99],
+            "cylindres_developpes_mm": [314.2],
             "machines_codes": [],
             "matieres_codes": [],
             "options_codes": [],
         },
     )
     assert r.status_code == 422
-    assert "99" in r.json()["detail"]
+    assert "314.2" in r.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -204,11 +207,11 @@ def test_post_refuse_cylindre_hors_catalogue(cleanup_tenant_rows):
 def test_isolation_tenant_onboarding_independants(
     cleanup_tenant_rows, switch_to_user_b
 ):
-    # User A (admin demo, entreprise_id=1) s'onboarde
+    # User A (admin demo, entreprise_id=1) s'onboarde — 96 dents = 304.8 mm
     r = client.post(
         "/api/onboarding/initialiser-catalogues",
         json={
-            "cylindres_developpes_mm": [96],
+            "cylindres_developpes_mm": [304.8],
             "machines_codes": ["mark_andy_2200"],
             "matieres_codes": [],
             "options_codes": [],
@@ -222,11 +225,11 @@ def test_isolation_tenant_onboarding_independants(
     # User B n'a pas encore onboardé — son catalogue est vide
     assert r.json() == {"catalogue_initialise": False}
 
-    # User B peut s'onboarder normalement
+    # User B peut s'onboarder normalement — 104 dents = 330.2 mm
     r = client.post(
         "/api/onboarding/initialiser-catalogues",
         json={
-            "cylindres_developpes_mm": [104],
+            "cylindres_developpes_mm": [330.2],
             "machines_codes": ["nilpeter_fa_22"],
             "matieres_codes": [],
             "options_codes": [],

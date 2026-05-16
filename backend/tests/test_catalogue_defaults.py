@@ -14,7 +14,9 @@ import json
 
 from app.data.catalogue_defaults import (
     BAREMES_DEFAULT,
+    CYLINDRES_STANDARD_DENTS,
     CYLINDRES_STANDARD_MM,
+    DENTS_TO_MM_FACTOR,
     MACHINES_DEFAULT,
     MATIERES_DEFAULT,
     OPTIONS_FABRICATION_DEFAULT,
@@ -27,11 +29,26 @@ from app.models.bareme import BAREME_TYPES
 
 
 def test_cylindres_count_and_range():
+    """19 cylindres ICE, nomenclature dents puis dérivés mm.
+
+    Cas B du 2026-05-16 : la liste historique s'appelait `CYLINDRES_STANDARD_MM`
+    mais portait en réalité des nombres de dents. Le seed prod en a hérité
+    (5 cylindres avec dev=72/96/104/112/144 au lieu de mm réels). On
+    sépare maintenant explicitement les deux représentations.
+    """
+    # Dents : nomenclature ICE inchangée.
+    assert len(CYLINDRES_STANDARD_DENTS) == 19
+    assert min(CYLINDRES_STANDARD_DENTS) == 72
+    assert max(CYLINDRES_STANDARD_DENTS) == 144
+    assert len(set(CYLINDRES_STANDARD_DENTS)) == 19
+
+    # mm : dérivés des dents (×3.175), source de vérité pour la BDD et le moteur.
     assert len(CYLINDRES_STANDARD_MM) == 19
-    assert min(CYLINDRES_STANDARD_MM) == 72
-    assert max(CYLINDRES_STANDARD_MM) == 144
-    # Tous les développés doivent être uniques (pas de doublon)
-    assert len(set(CYLINDRES_STANDARD_MM)) == 19
+    # Sanity : aucun n'est en deçà de 200 mm (sinon retour Cas B).
+    assert all(c > 200 for c in CYLINDRES_STANDARD_MM)
+    # Conversion stable : valeur reconstructible depuis les dents.
+    for dents, mm in zip(CYLINDRES_STANDARD_DENTS, CYLINDRES_STANDARD_MM):
+        assert mm == float(dents * DENTS_TO_MM_FACTOR)
 
 
 def test_machines_unique_codes_and_required_fields():
@@ -117,8 +134,9 @@ def test_bareme_echenillage_palier_5mm_alignement_cdc():
 
 
 def test_bareme_effet_banane_saut_non_lineaire_300_350():
-    """Le saut Z=120 → Z=160 entre paliers 250-300 et 300-350 reflète
+    """Le saut Z=381 → Z=508 entre paliers 250-300 et 300-350 reflète
     un seuil physique de rigidité (CdC ligne 575 — non extrapolable).
+    Valeurs en mm réels après fix Cas B (anciennement 120 et 160 dents).
     """
     bareme = get_bareme_by_code("effet_banane_ice")
     assert bareme is not None
@@ -128,8 +146,8 @@ def test_bareme_effet_banane_saut_non_lineaire_300_350():
     palier_350 = next(
         p for p in bareme["bareme_data"] if p["largeur_max_mm"] == 350
     )
-    assert palier_300["developpe_mini_mm"] == 120
-    assert palier_350["developpe_mini_mm"] == 160
+    assert palier_300["developpe_mini_mm"] == 381.0
+    assert palier_350["developpe_mini_mm"] == 508.0
 
 
 def test_all_data_is_json_serializable():
