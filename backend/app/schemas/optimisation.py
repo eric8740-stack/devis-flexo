@@ -109,3 +109,22 @@ class OptimisationCalculerResponse(BaseModel):
     intervalle_dev_min_applique_mm: float
     message_contrainte_client: str | None = None
     debug: dict[str, Any] | None = None
+
+
+class OptionDisponiblePublic(BaseModel):
+    """Option de fabrication réellement disponible pour le tenant courant
+    (présente dans `option_fabrication`, scopée tenant ou catalogue global).
+
+    Sert à peupler les checkboxes de la page d'optimisation : seules les
+    options exposées ici sont garanties d'être acceptées par
+    POST /api/optimisation/calculer.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    code: str
+    libelle: str
+    categorie: str | None = None
+    coef_vitesse_impact: float
+    coef_gache_impact: float

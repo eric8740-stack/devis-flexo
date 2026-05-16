@@ -1013,6 +1013,18 @@ export const postOptimisationCalculer = (
     body: JSON.stringify(data),
   });
 
+export interface OptionDisponible {
+  id: number;
+  code: string;
+  libelle: string;
+  categorie: string | null;
+  coef_vitesse_impact: number;
+  coef_gache_impact: number;
+}
+
+export const getOptionsDisponibles = () =>
+  apiFetch<OptionDisponible[]>("/api/optimisation/options-disponibles");
+
 // ---------------------------------------------------------------------------
 // Sprint 13 Lot S13.E : POC IA analyse photo etiquette (FlexoCheck)
 // ---------------------------------------------------------------------------
