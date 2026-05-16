@@ -12,6 +12,8 @@ const PARAMETRES_NAV = [
   { href: "/parametres/tarifs", label: "Tarifs" },
   // Sprint 0-1 — entreprise (déplacée depuis /parametres mono-page)
   { href: "/parametres/entreprise", label: "Entreprise" },
+  // Post Sprint 13 — CRUD options de fabrication scopées tenant
+  { href: "/parametres/options-fabrication", label: "Options de fabrication" },
   // Liens externes vers les CRUD existants (catalogues + charges)
   { href: "/parametres/outils", label: "Outils de découpe" },
   { href: "/machines", label: "Machines" },

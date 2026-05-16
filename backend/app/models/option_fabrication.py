@@ -98,6 +98,12 @@ class OptionFabrication(Base):
     actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # Snapshot des valeurs catalogue master au moment de l'activation par le
+    # tenant (POST /api/parametres/options-fabrication/from-master/{code}).
+    # Sert de hint "(recommandé : X.XX)" dans la page d'édition tenant.
+    # Reste NULL pour les rows du catalogue global (entreprise_id IS NULL).
+    valeur_recommandee_origine: Mapped[dict | None] = mapped_column(JSON)
+
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
