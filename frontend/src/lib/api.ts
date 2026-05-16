@@ -966,7 +966,15 @@ export interface OptimisationContrainteClient {
   intervalle_dev_min_mm: number;
 }
 
-export type SensEnroulement = "SE1" | "SE2" | "SE3" | "SE4";
+export type SensEnroulement =
+  | "SE1"
+  | "SE2"
+  | "SE3"
+  | "SE4"
+  | "SE5"
+  | "SE6"
+  | "SE7"
+  | "SE8";
 
 export interface OptimisationCalculerRequest {
   format: OptimisationFormat;
