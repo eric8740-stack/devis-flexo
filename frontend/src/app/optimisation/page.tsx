@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { useToast } from "@/hooks/use-toast";
 import {
   getOptionsDisponibles,
@@ -625,22 +626,17 @@ function ConfigCard({
           {config.coef_gache_options.toFixed(2)}
         </div>
 
-        {/* Schéma BAT — placeholder pour le composant SchemaImplantation du commit 5 */}
-        <div
-          className="lg:col-span-2"
-          data-laize-etiq={laizeEtiq}
-          data-dev-etiq={devEtiq}
-        >
-          <SchemaPlaceholder />
+        {/* Schéma BAT — 3 vues (plaque + bobine + bobine fille) */}
+        <div className="lg:col-span-2">
+          <SchemaImplantation
+            config={config}
+            laizeEtiqMm={laizeEtiq}
+            devEtiqMm={devEtiq}
+          />
         </div>
       </CardContent>
     </Card>
   );
-}
-
-function SchemaPlaceholder() {
-  // Placeholder — remplacé par <SchemaImplantation> dans le commit 5.
-  return null;
 }
 
 function Line({
