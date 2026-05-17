@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -71,54 +72,22 @@ const SE_OPTIONS: (SEOption & { affichage: string })[] = [
 ];
 
 /**
- * Pictogramme bobine schématique simple inspiré des conventions atelier :
- *  - face ext  : bobine à gauche, liner sortant à droite avec 2 étiquettes
- *  - face int  : bobine à droite, liner sortant à gauche (image miroir)
- *  - rotation A : 0/90/180/270° applique à la dernière étiquette
+ * Pictogramme bobine pour la sélection du sens d'enroulement.
+ * Utilise les illustrations PNG produites par Eric (style atelier ICE pro,
+ * annotations métier complètes) servies depuis `/assets/bobines/sens-N.png`.
+ * Next.js `<Image>` gère la compression automatique (WebP/AVIF) selon le
+ * navigateur, donc pas besoin d'optimiser les sources.
  */
-function SEPictogramme({ rotationA, face }: { rotationA: 0 | 90 | 180 | 270; face: "ext" | "int" }) {
-  // Pour "int", on flip horizontalement tout le pictogramme + on teinte les
-  // étiquettes en jaune-beige (liner siliconé translucide visible).
-  const flipTransform = face === "int" ? "translate(72 0) scale(-1 1)" : "";
-  const isInt = face === "int";
-  const etiqFill = isInt ? "#F0E4B4" : "#DCE7F3";
-  const etiqStroke = isInt ? "#9C8E4E" : "#0C447C";
-  const aFill = isInt ? "#374151" : "#0C447C";
+function SEPictogramme({ code }: { code: SensEnroulement }) {
+  const idx = parseInt(code.replace("SE", ""), 10);
   return (
-    <svg
-      viewBox="0 0 72 40"
-      width={64}
-      height={36}
-      className="inline-block"
-      aria-hidden
-    >
-      <g transform={flipTransform}>
-        {/* Bobine (mandrin tubulaire à gauche) */}
-        <ellipse cx={14} cy={20} rx={10} ry={14} fill="#E5E7EB" stroke="#374151" strokeWidth={0.8} />
-        <ellipse cx={14} cy={20} rx={4} ry={5} fill="#6B7280" stroke="#374151" strokeWidth={0.6} />
-        {/* Liner sortant à droite */}
-        <rect x={20} y={14} width={48} height={12} fill="#FAF7EE" stroke="#C8C6BC" strokeWidth={0.5} />
-        {/* Étiquettes : bleu (ext) ou jaune-liner (int) */}
-        <rect x={26} y={16} width={10} height={8} fill={etiqFill} stroke={etiqStroke} strokeWidth={0.5} />
-        <rect x={38} y={16} width={10} height={8} fill={etiqFill} stroke={etiqStroke} strokeWidth={0.5} />
-        <rect x={50} y={16} width={10} height={8} fill={etiqFill} stroke={etiqStroke} strokeWidth={0.5} />
-        {/* A dans la dernière étiquette avec rotation. On compense le flip
-            horizontal pour que le A reste lisible côté observateur. */}
-        <g transform={`translate(55 20) ${isInt ? "scale(-1 1) " : ""}rotate(${rotationA})`}>
-          <text
-            x={0}
-            y={0}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={7}
-            fontWeight={700}
-            fill={aFill}
-          >
-            A
-          </text>
-        </g>
-      </g>
-    </svg>
+    <Image
+      src={`/assets/bobines/sens-${idx}.png`}
+      alt={`Bobine ${code}`}
+      width={120}
+      height={120}
+      className="inline-block rounded border border-border bg-white"
+    />
   );
 }
 
@@ -451,10 +420,7 @@ export default function OptimisationPage() {
                             onChange={() => setSensEnroulement(opt.code)}
                             className="sr-only"
                           />
-                          <SEPictogramme
-                            rotationA={opt.rotationA}
-                            face={opt.face}
-                          />
+                          <SEPictogramme code={opt.code} />
                           <span className="font-medium">{opt.affichage}</span>
                           <span className="text-[10px] leading-tight text-muted-foreground">
                             {opt.label}

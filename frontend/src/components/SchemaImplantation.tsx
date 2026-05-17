@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { type OptimisationConfigOut, type SensEnroulement } from "@/lib/api";
 
 /**
@@ -513,334 +515,75 @@ function VuePlaque({
 // VUE B — bobine livrée (vue schématique simple, façon atelier flexo)
 // ---------------------------------------------------------------------------
 
+
 function VueBobine({ config }: { config: OptimisationConfigOut }) {
-  const { rotation, faceInt } = parseSE(config.sens_enroulement);
-  const VBW = 480;
-  const VBH = 280;
-
-  // Bobine vue de FACE (de profil sur l'axe horizontal de la machine).
-  //   - Sens extérieur (SE1-4) : bobine à gauche, liner sortant à droite avec
-  //     les étiquettes bleu clair (face imprimée vers l'observateur).
-  //   - Sens intérieur (SE5-8) : bobine à droite, liner sortant à gauche, et
-  //     les étiquettes apparaissent JAUNI parce que le liner siliconé
-  //     translucide passe par-dessus (convention atelier flexo).
-  const cxBobine = faceInt ? VBW - 110 : 110;
-  const cyBobine = 130;
-  const rBobine = 80;
-  const rMandrin = 22;
-
-  // Liner sortant tangent à la bobine, du côté opposé au centre
-  const linerY = cyBobine - 26;
-  const linerH = 52;
-  const linerStartX = faceInt ? 30 : cxBobine + rBobine - 4;
-  const linerEndX = faceInt ? cxBobine - rBobine + 4 : VBW - 30;
-  const linerLen = linerEndX - linerStartX;
-
-  const NB_ETIQ = 3;
-  const etiqGap = 5;
-  const etiqW = (linerLen - 20 - etiqGap * (NB_ETIQ - 1)) / NB_ETIQ;
-  const etiqH = linerH - 12;
-  const etiqYTop = linerY + 6;
-
-  // Couleurs étiquettes : bleu pour ext, jaune-liner pour int
-  const etiqFill = faceInt ? COULEUR_ETIQ_INT : COULEUR_BLEU_CLAIR;
-  const etiqStroke = faceInt ? COULEUR_ETIQ_INT_BORDURE : COULEUR_BLEU;
-  const aFill = faceInt ? COULEUR_GRIS_FONCE : COULEUR_BLEU;
-
+  // VUE B refondue PR #14 : on utilise désormais directement les
+  // illustrations Canva produites par Eric (style atelier ICE pro,
+  // annotations métier complètes). Plus de SVG paramétrique.
+  // L'image change selon le sens d'enroulement choisi ; les valeurs
+  // dynamiques (Ø bobine, Ø mandrin, laize liner, ml total) sont
+  // affichées dans un cartouche dédié à droite de l'image.
+  const idx = parseInt(config.sens_enroulement.replace("SE", ""), 10);
   return (
     <figure className="space-y-2">
       <figcaption className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Vue B — bobine livrée (vue de face)
+        Vue B — bobine livrée
       </figcaption>
-      <svg
-        viewBox={`0 0 ${VBW} ${VBH}`}
-        width="100%"
-        className="font-sans"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <radialGradient id="grad-bobine-face" cx="35%" cy="35%" r="65%">
-            <stop offset="0%" stopColor="#F9FAFB" />
-            <stop offset="70%" stopColor="#E5E7EB" />
-            <stop offset="100%" stopColor="#9CA3AF" />
-          </radialGradient>
-          <pattern
-            id="liner-dots-b2"
-            patternUnits="userSpaceOnUse"
-            width={8}
-            height={8}
-          >
-            <circle cx={2} cy={2} r={0.6} fill={COULEUR_HACHURE} />
-          </pattern>
-          <marker
-            id="arrow-bleu-b2"
-            viewBox="0 0 10 10"
-            refX={9}
-            refY={5}
-            markerWidth={9}
-            markerHeight={9}
-            orient="auto"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill={COULEUR_BLEU} />
-          </marker>
-        </defs>
-
-        {/* Bobine vue de face : cercle plein avec ombre douce */}
-        <circle
-          cx={cxBobine}
-          cy={cyBobine}
-          r={rBobine}
-          fill="url(#grad-bobine-face)"
-          stroke={COULEUR_GRIS_FONCE}
-          strokeWidth={1}
-        />
-        {/* Quelques arcs concentriques pour suggérer les couches enroulées */}
-        {[0.85, 0.7, 0.55, 0.4].map((f, i) => (
-          <circle
-            key={i}
-            cx={cxBobine}
-            cy={cyBobine}
-            r={rBobine * f}
-            fill="none"
-            stroke={COULEUR_HACHURE}
-            strokeWidth={0.5}
-            strokeDasharray="2 3"
-            opacity={0.5}
+      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+        <div className="relative w-full overflow-hidden rounded border border-border bg-white">
+          <Image
+            src={`/assets/bobines/sens-${idx}.png`}
+            alt={`Bobine ${config.sens_enroulement} — ${labelSE(config.sens_enroulement)}`}
+            width={800}
+            height={800}
+            className="h-auto w-full"
+            sizes="(min-width: 640px) 50vw, 100vw"
           />
-        ))}
-        {/* Mandrin au centre (vue de face : cercle plus foncé) */}
-        <circle
-          cx={cxBobine}
-          cy={cyBobine}
-          r={rMandrin}
-          fill="#9CA3AF"
-          stroke={COULEUR_GRIS_FONCE}
-          strokeWidth={0.8}
-        />
-        <circle
-          cx={cxBobine}
-          cy={cyBobine}
-          r={rMandrin * 0.55}
-          fill="#4B5563"
-          stroke="none"
-        />
-        <text
-          x={cxBobine}
-          y={cyBobine + 3}
-          textAnchor="middle"
-          fontSize={8}
-          fontWeight={600}
-          fill="white"
-        >
-          mandrin
-        </text>
-
-        {/* Repère START orange tangent au cercle (en haut) */}
-        <g
-          transform={`translate(${cxBobine + (faceInt ? -rBobine : rBobine) * 0.7}, ${cyBobine - rBobine + 6})`}
-        >
-          <rect
-            x={-5}
-            y={-5}
-            width={10}
-            height={10}
-            fill={COULEUR_ORANGE}
-            stroke="white"
-            strokeWidth={0.5}
-          />
-          <text
-            x={faceInt ? -10 : 10}
-            y={4}
-            fontSize={9}
-            fontWeight={700}
-            fill={COULEUR_ORANGE}
-            textAnchor={faceInt ? "end" : "start"}
-          >
-            START
-          </text>
-        </g>
-
-        {/* Liner sortant tangent (rectangle horizontal beige) */}
-        <rect
-          x={linerStartX}
-          y={linerY}
-          width={linerLen}
-          height={linerH}
-          fill={COULEUR_LINER}
-          stroke={COULEUR_HACHURE}
-          strokeWidth={0.6}
-        />
-        <rect
-          x={linerStartX}
-          y={linerY}
-          width={linerLen}
-          height={linerH}
-          fill="url(#liner-dots-b2)"
-          opacity={0.5}
-        />
-
-        {/* 3 étiquettes sur le liner (couleur jaune si sens intérieur) */}
-        {Array.from({ length: NB_ETIQ }).map((_, i) => {
-          // Index de la dernière étiquette = celle "qui sort" de la bobine
-          // (proche du bord libre du liner, donc côté droit en ext, côté
-          // gauche en int).
-          const orderIdx = faceInt ? NB_ETIQ - 1 - i : i;
-          const px = linerStartX + 10 + orderIdx * (etiqW + etiqGap);
-          const isFurthest = i === NB_ETIQ - 1; // la + éloignée de la bobine
-          return (
-            <g key={i}>
-              <rect
-                x={px}
-                y={etiqYTop}
-                width={etiqW}
-                height={etiqH}
-                fill={etiqFill}
-                stroke={etiqStroke}
-                strokeWidth={0.7}
-              />
-              {isFurthest && (
-                <g
-                  transform={`translate(${px + etiqW / 2} ${etiqYTop + etiqH / 2}) rotate(${rotation})`}
-                >
-                  <text
-                    x={0}
-                    y={0}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={etiqH * 0.6}
-                    fontWeight={700}
-                    fill={aFill}
-                  >
-                    A
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Flèche déroulement au-dessus du liner */}
-        <g>
-          {faceInt ? (
-            <line
-              x1={linerEndX - 6}
-              y1={linerY - 14}
-              x2={linerStartX + 10}
-              y2={linerY - 14}
-              stroke={COULEUR_BLEU}
-              strokeWidth={1.4}
-              markerEnd="url(#arrow-bleu-b2)"
+        </div>
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="rounded border border-blue-300 bg-blue-50/50 p-2">
+            <div className="text-xs font-semibold text-blue-900">
+              {senseAffichage(config.sens_enroulement)}
+            </div>
+            <div className="text-[11px] text-blue-800">
+              {labelSE(config.sens_enroulement).split(" — ")[1] ?? ""}
+            </div>
+          </div>
+          <dl className="space-y-1 text-xs">
+            <Cote
+              label="Ø Diamètre Total Bobine"
+              value={`${config.diametre_bobine_mm} mm`}
+              strong
             />
-          ) : (
-            <line
-              x1={linerStartX + 6}
-              y1={linerY - 14}
-              x2={linerEndX - 10}
-              y2={linerY - 14}
-              stroke={COULEUR_BLEU}
-              strokeWidth={1.4}
-              markerEnd="url(#arrow-bleu-b2)"
+            <Cote
+              label="Laize liner"
+              value={`${config.laize_liner_mm} mm`}
             />
-          )}
-          <text
-            x={(linerStartX + linerEndX) / 2}
-            y={linerY - 18}
-            textAnchor="middle"
-            fontSize={9}
-            fontWeight={600}
-            fill={COULEUR_BLEU}
-          >
-            Sens de déroulement
-          </text>
-        </g>
-
-        {/* Cote ø bobine sous le cercle */}
-        <line
-          x1={cxBobine - rBobine}
-          y1={cyBobine + rBobine + 15}
-          x2={cxBobine + rBobine}
-          y2={cyBobine + rBobine + 15}
-          stroke={COULEUR_BLEU}
-          strokeWidth={0.8}
-        />
-        <line
-          x1={cxBobine - rBobine}
-          y1={cyBobine + rBobine + 10}
-          x2={cxBobine - rBobine}
-          y2={cyBobine + rBobine + 20}
-          stroke={COULEUR_BLEU}
-          strokeWidth={0.4}
-        />
-        <line
-          x1={cxBobine + rBobine}
-          y1={cyBobine + rBobine + 10}
-          x2={cxBobine + rBobine}
-          y2={cyBobine + rBobine + 20}
-          stroke={COULEUR_BLEU}
-          strokeWidth={0.4}
-        />
-        <text
-          x={cxBobine}
-          y={cyBobine + rBobine + 32}
-          textAnchor="middle"
-          fontSize={11}
-          fontWeight={700}
-          fill={COULEUR_BLEU}
-        >
-          Ø Diamètre Total Bobine {config.diametre_bobine_mm} mm
-        </text>
-        <text
-          x={cxBobine}
-          y={cyBobine + rBobine + 45}
-          textAnchor="middle"
-          fontSize={9}
-          fill={COULEUR_GRIS_FONCE}
-        >
-          Ø Mandrin (saisi dans le formulaire)
-        </text>
-
-        {/* Badge SE en haut */}
-        <g transform="translate(18, 22)">
-          <rect
-            x={0}
-            y={0}
-            width={150}
-            height={36}
-            rx={5}
-            fill={COULEUR_BLEU_CLAIR}
-            stroke={COULEUR_BLEU}
-            strokeWidth={0.6}
-          />
-          <text
-            x={75}
-            y={15}
-            textAnchor="middle"
-            fontSize={12}
-            fontWeight={700}
-            fill={COULEUR_BLEU}
-          >
-            {senseAffichage(config.sens_enroulement)}
-          </text>
-          <text x={75} y={28} textAnchor="middle" fontSize={8} fill={COULEUR_BLEU}>
-            {labelSE(config.sens_enroulement).split(" — ")[1] ?? ""}
-          </text>
-        </g>
-
-        {/* Note "liner par-dessus" pour les sens intérieur */}
-        {faceInt && (
-          <text
-            x={(linerStartX + linerEndX) / 2}
-            y={linerY + linerH + 18}
-            textAnchor="middle"
-            fontSize={9}
-            fontStyle="italic"
-            fill={COULEUR_ETIQ_INT_BORDURE}
-          >
-            étiquettes vues à travers le liner siliconé (face dedans)
-          </text>
-        )}
-      </svg>
+            <Cote
+              label="Mètres linéaires totaux"
+              value={`${config.ml_total_m} m`}
+            />
+          </dl>
+        </div>
+      </div>
     </figure>
+  );
+}
+
+function Cote({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 border-b border-border/50 py-0.5">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={strong ? "font-semibold" : "font-medium"}>{value}</dd>
+    </div>
   );
 }
 
