@@ -36,7 +36,7 @@ interface Props {
  * timestamp ISO. Aucune saisie email/identité à la charge de l'utilisateur.
  *
  * Choix design (cf. brief feedback-pilote) :
- *   - 1 seul textarea, pas de catégorisation (< 10 users → Eric trie à la main)
+ *   - 1 seul textarea, pas de catégorisation (< 10 users → admin trie à la main)
  *   - Toast succès → reset + ferme la modale
  *   - Toast erreur → modale reste ouverte, message préservé pour retry
  *   - Si la variable d'env Formspree n'est pas définie : envoi silencieux
