@@ -528,15 +528,15 @@ function VueBobine({
   // gauche).
   const idx = parseInt(config.sens_enroulement.replace("SE", ""), 10);
 
-  // Cadre X/Y unitaire : copie de l'étiquette telle qu'elle apparaît en
-  // VUE C (vue client en décollant). Convention métier flexographique :
-  //   X = laize TOUJOURS, Y = dev TOUJOURS (peu importe la position visuelle).
-  //   Géométrie : rectangle vertical si laize > dev, horizontal sinon.
+  // Cadre X/Y unitaire : étiquette telle que le client la tient en main.
+  // Convention métier flexographique "format laize × dev" :
+  //   laize HORIZONTALE (X en haut), dev VERTICAL (Y à droite).
+  //   Géométrie : rectangle horizontal si laize > dev, vertical sinon.
   //   A pivoté selon rotation_vue_c_deg (single source of truth backend).
   const CADRE_MAX_PX = 80;
   const cadreScale = CADRE_MAX_PX / Math.max(devEtiqMm, laizeEtiqMm);
-  const cadreW = devEtiqMm * cadreScale;
-  const cadreH = laizeEtiqMm * cadreScale;
+  const cadreW = laizeEtiqMm * cadreScale;
+  const cadreH = devEtiqMm * cadreScale;
   const cadreCx = 70;
   const cadreCy = 75;
   const cadreOx = cadreCx - cadreW / 2;
@@ -571,11 +571,11 @@ function VueBobine({
         </div>
       </div>
 
-      {/* Cadre X/Y unitaire — copie de l'étiquette telle que vue en VUE C
-          (dev horizontal × laize vertical, A pivoté selon backend). */}
+      {/* Cadre X/Y unitaire — étiquette telle que le client la tient en main
+          (laize horizontale × dev vertical, A pivoté selon backend). */}
       <div className="rounded border border-border bg-white p-2">
         <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Cadre étiquette unitaire (= vue client)
+          Cadre étiquette unitaire (tenue en main)
         </p>
         <svg
           viewBox="0 0 140 140"
@@ -608,7 +608,8 @@ function VueBobine({
             </text>
           </g>
 
-          {/* Y = dev — cote horizontale au-dessus du cadre (convention métier) */}
+          {/* X = laize — cote horizontale au-dessus du cadre (laize horizontale,
+              convention métier "tenue en main"). */}
           <line
             x1={cadreOx}
             y1={cadreOy - 8}
@@ -641,10 +642,11 @@ function VueBobine({
             fontWeight={700}
             fill={COULEUR_BLEU}
           >
-            Y = dev {devEtiqMm} mm
+            X = laize {laizeEtiqMm} mm
           </text>
 
-          {/* X = laize — cote verticale à droite du cadre (convention métier) */}
+          {/* Y = dev — cote verticale à droite du cadre (dev vertical,
+              convention métier "tenue en main"). */}
           <line
             x1={cadreOx + cadreW + 8}
             y1={cadreOy}
@@ -678,7 +680,7 @@ function VueBobine({
             fontWeight={700}
             fill={COULEUR_BLEU}
           >
-            X = laize
+            Y = dev
           </text>
           <text
             x={cadreOx + cadreW + 13}
@@ -689,7 +691,7 @@ function VueBobine({
             fontWeight={700}
             fill={COULEUR_BLEU}
           >
-            {laizeEtiqMm} mm
+            {devEtiqMm} mm
           </text>
         </svg>
       </div>
