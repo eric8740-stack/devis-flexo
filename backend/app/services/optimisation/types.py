@@ -107,6 +107,11 @@ class OptimisationInput:
     contrainte_client: ContrainteClient = field(
         default_factory=ContrainteClient
     )
+    # Sprint 13 avenant : forçage du nb poses laize. None = comportement
+    # standard (max, max-1, max-2). Sinon, le moteur se bloque sur N poses
+    # laize ; les candidats qui ne satisfont pas N * largeur ≤ laize_utile
+    # sont skippés.
+    nb_poses_laize_force: int | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -227,6 +227,7 @@ def post_calculer(
         bareme_compensation=baremes["compensation_laize_dev"],
         bareme_confort_roulage=baremes["confort_roulage"],
         contrainte_client=moteur_contrainte_client,
+        nb_poses_laize_force=payload.nb_poses_laize_force,
     )
 
     out = optimiser_pose(inp)

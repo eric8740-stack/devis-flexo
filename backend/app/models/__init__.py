@@ -10,6 +10,7 @@ from app.models.correspondance_laize_metrage import CorrespondanceLaizeMetrage
 from app.models.cylindre_magnetique import CylindreMagnetique
 from app.models.devis import Devis
 from app.models.entreprise import Entreprise
+from app.models.lot_production import LotProduction
 from app.models.fournisseur import Fournisseur
 from app.models.machine import Machine
 from app.models.machine_imprimerie import MachineImprimerie
@@ -50,6 +51,8 @@ __all__ = [
     "Devis",
     "Entreprise",
     "Fournisseur",
+    # Sprint 13 avenant — multi-lots production
+    "LotProduction",
     "Machine",
     "OperationFinition",
     "OutilDecoupe",
