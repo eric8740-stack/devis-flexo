@@ -14,6 +14,7 @@ JSON portable SQLite (dev) + Postgres (prod, JSONB via le dialect).
 """
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -26,9 +27,12 @@ from sqlalchemy import (
     String,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.lot_production import LotProduction
 
 
 class Devis(Base):
@@ -91,4 +95,13 @@ class Devis(Base):
     format_l_mm: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
     machine_id: Mapped[int] = mapped_column(
         ForeignKey("machine.id"), nullable=False
+    )
+
+    # Sprint 13 avenant — lots de production multi-lots (N lots par devis).
+    # Cascade delete : la suppression d'un devis emporte ses lots.
+    lots_production: Mapped[list["LotProduction"]] = relationship(
+        "LotProduction",
+        back_populates="devis",
+        cascade="all, delete-orphan",
+        order_by="LotProduction.ordre",
     )
