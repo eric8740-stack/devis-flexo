@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brief CC — Refonte Optim Pose + Multi-lots · Sprint 13</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:wght@600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #fef8ea;
+    --paper: #ffffff;
+    --ink: #1a2238;
+    --ink-soft: #3a4458;
+    --accent: #1a52a3;
+    --accent-soft: #d8e4f5;
+    --gold: #c79a3a;
+    --gold-soft: #f5e9c8;
+    --green: #2d7a4f;
+    --green-soft: #d8efdf;
+    --red: #b53838;
+    --red-soft: #f5d8d8;
+    --purple: #6b4a9e;
+    --purple-soft: #e8dff5;
+    --code-bg: #1a2238;
+    --code-text: #e8e4d0;
+    --border: #d6cba0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Atkinson Hyperlegible', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    padding: 0;
+    font-size: 15px;
+  }
+
+  .page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 50px;
+    background: var(--paper);
+    box-shadow: 0 0 30px rgba(0,0,0,0.08);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Fraunces', serif;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 4px; }
+  .subtitle { font-size: 1rem; color: var(--ink-soft); font-style: italic; margin-bottom: 30px; }
+
+  h2 {
+    font-size: 1.45rem; font-weight: 700; color: var(--accent);
+    margin-top: 36px; margin-bottom: 14px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--border);
+  }
+
+  h3 { font-size: 1.15rem; font-weight: 700; color: var(--ink); margin-top: 22px; margin-bottom: 10px; }
+  h4 { font-size: 1rem; font-weight: 700; color: var(--ink-soft); margin-top: 14px; margin-bottom: 6px; }
+
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 4px; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--gold-soft);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.88em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 14px 18px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 10px 0 14px 0;
+    font-size: 0.85em;
+  }
+  pre code {
+    background: transparent;
+    color: var(--code-text);
+    padding: 0;
+    font-size: 1em;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.93em;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { background: var(--accent-soft); font-weight: 700; }
+  td.num { font-family: 'JetBrains Mono', monospace; text-align: right; }
+
+  .header-block {
+    background: var(--gold-soft);
+    border-left: 4px solid var(--gold);
+    padding: 14px 20px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+
+  .box {
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin: 14px 0;
+    border-left: 4px solid;
+  }
+  .box-label {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+  }
+  .box-green { background: var(--green-soft); border-color: var(--green); }
+  .box-green .box-label { color: var(--green); }
+  .box-gold { background: var(--gold-soft); border-color: var(--gold); }
+  .box-gold .box-label { color: var(--gold); }
+  .box-blue { background: var(--accent-soft); border-color: var(--accent); }
+  .box-blue .box-label { color: var(--accent); }
+  .box-purple { background: var(--purple-soft); border-color: var(--purple); }
+  .box-purple .box-label { color: var(--purple); }
+
+  .sacred {
+    background: var(--red-soft);
+    border: 2px solid var(--red);
+    border-radius: 8px;
+    padding: 16px 22px;
+    margin: 18px 0;
+  }
+  .sacred-label {
+    font-family: 'Fraunces', serif;
+    color: var(--red);
+    font-weight: 800;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .ascii-frame {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 14px 18px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82em;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 12px 0;
+    line-height: 1.4;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+  }
+  .badge-new { background: var(--green-soft); color: var(--green); }
+  .badge-refacto { background: var(--accent-soft); color: var(--accent); }
+  .badge-sacred { background: var(--red-soft); color: var(--red); }
+  .badge-test { background: var(--purple-soft); color: var(--purple); }
+
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; padding: 30px; max-width: 100%; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Brief CC — Refonte Optimisation de pose</h1>
+  <p class="subtitle">Workflow 3 étapes · Multi-lots production · Sprint 13 (avenant)</p>
+
+  <div class="header-block">
+    <p style="margin-bottom: 8px"><strong>📦 Repo</strong> : <code>devis-flexo</code> (cwd local, CC déjà cloné)</p>
+    <p style="margin-bottom: 8px"><strong>🌳 Branche</strong> : <code>main</code> (créer une feature branch <code>feat/optim-pose-multilots</code>)</p>
+    <p style="margin-bottom: 8px"><strong>📋 Référence métier</strong> : <code>docs/cdc-sprint13.html</code> sections 03b (moteur optim), 03 (saisie devis)</p>
+    <p style="margin: 0"><strong>🎯 Objectif</strong> : refonte UX de l'écran <code>OptimisationPose</code> en workflow 3 étapes avec multi-sélection de configurations (multi-lots production) et matière indépendante par lot.</p>
+  </div>
+
+  <h2>1. Contexte métier</h2>
+
+  <p>En flexo, il est <strong>très fréquent</strong> qu'une commande client soit fractionnée en plusieurs lots de production avec configurations différentes :</p>
+
+  <ul>
+    <li>Urgence client : on lance ce qu'on a en stock immédiatement, on finit avec matière qui arrive en J+2</li>
+    <li>Optimisation matière : un lot court avec laize réduite + un lot principal en laize standard</li>
+    <li>Dépannage : matière A pour les 10 000 premières, matière B pour les 5 000 suivantes</li>
+  </ul>
+
+  <p>Le moteur actuel mono-config ne couvre pas ce cas. Cette refonte permet à un devis de référencer N lots de production indépendants.</p>
+
+  <h2>2. Périmètre</h2>
+
+  <ol>
+    <li><strong>Modifs champs étape 1</strong> : default <code>intervalle_dev_min_client</code> = 2 mm, champ "Nb poses laize Auto/Forcer", suppression vignettes sens enroulement (remplacées par dropdown texte) <span class="badge badge-refacto">REFACTO</span></li>
+    <li><strong>Workflow 3 étapes</strong> : saisie → tableau multi-sélection → détail multi-lots avec édition matière par lot <span class="badge badge-new">NEW</span></li>
+    <li><strong>Modèle DB <code>lots_production</code></strong> : 1 devis → N lots avec config + quantité + matière par lot <span class="badge badge-new">NEW</span></li>
+    <li><strong>Agrégateur cost_engine multi-lots</strong> : appelle le moteur N fois et agrège, sans modification de la logique <span class="badge badge-new">NEW</span></li>
+    <li><strong>Refacto endpoints <code>/devis</code></strong> pour accepter payload multi-lots <span class="badge badge-refacto">REFACTO</span></li>
+    <li><strong>Endpoint candidats viables sans top_n</strong> : renvoie TOUS les candidats qui passent les filtres durs <span class="badge badge-refacto">REFACTO</span></li>
+  </ol>
+
+  <p><strong>Charge estimée</strong> : 30h (avenant Sprint 13).</p>
+
+  <h2>3. Modifs champs étape 1</h2>
+
+  <table>
+    <thead><tr><th>Item</th><th>Avant</th><th>Après</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>intervalle_dev_min_client</code></td>
+        <td>default <code>0</code></td>
+        <td>default <code>2</code></td>
+      </tr>
+      <tr>
+        <td>Texte d'aide field</td>
+        <td>"0 si pas de contrainte"</td>
+        <td>"Par défaut 2 mm. Mettre 0 si pas de contrainte. Sinon MAX(min imprimeur, min client) appliqué."</td>
+      </tr>
+      <tr>
+        <td>Champ <code>nb_poses_laize_mode</code> <span class="badge badge-new">NEW</span></td>
+        <td>—</td>
+        <td>Radio <code>Auto</code> (default) / <code>Forcer N poses</code> + input number</td>
+      </tr>
+      <tr>
+        <td>8 vignettes sens enroulement</td>
+        <td>Affichées en étape 1</td>
+        <td><strong>Supprimées</strong> → dropdown texte compact : "Sens 1 — 0° Extérieur droite avant"</td>
+      </tr>
+      <tr>
+        <td>Champ matière étape 1</td>
+        <td>Saisie unique</td>
+        <td><strong>Retiré</strong> → la matière est saisie par lot en étape 3</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>Logique nb_poses_laize_force backend</h4>
+
+  <ul>
+    <li>Si <code>nb_poses_laize_force = null</code> → comportement actuel (le moteur teste <code>[max, max-1, max-2]</code>)</li>
+    <li>Si <code>nb_poses_laize_force = N</code> → le moteur <strong>bloque</strong> sur N poses laize et calcule l'intervalle laize résultant</li>
+    <li>Validation : <code>N &gt;= 1</code> et <code>N * format.largeur &lt;= mach.laize_utile</code> sinon candidat skippé avec log</li>
+    <li>Si intervalle laize résultant hors plage normale (&lt; 2 mm ou &gt; 10 mm) → alerte non-bloquante affichée sur la ligne</li>
+  </ul>
+
+  <h2>4. Workflow 3 étapes</h2>
+
+  <h3>Étape 1 — Saisie</h3>
+
+  <div class="ascii-frame">┌──── ÉTAPE 1 ─ Saisie ──────────────────────────────────────────┐
+│ Format & impression                                            │
+│   Laize · Développé · Rayon · Couleurs · Forme courbe          │
+│                                                                │
+│ Contraintes & bobine                                           │
+│   Δ dev min imprimerie : [2]                                   │
+│   Δ dev min machine pose client : [2]   ← default 2 mm         │
+│   Mandrin · Nb poses laize : (•) Auto  ( ) Forcer [3]          │
+│                                                                │
+│ Quantité totale : [15000]                                      │
+│ Sens enroulement : [Sens 1 — 0° Ext. droite avant     ▼]       │
+│   ← dropdown texte, PAS de 8 vignettes ici                     │
+│                                                                │
+│ (PAS de matière ici — saisie par lot étape 3)                  │
+│                                                                │
+│ [ Calculer toutes les configurations possibles ]               │
+└────────────────────────────────────────────────────────────────┘</div>
+
+  <h3>Étape 2 — Tous candidats viables + multi-sélection</h3>
+
+  <div class="ascii-frame">┌──── ÉTAPE 2 ─ Candidats viables ───────────────────────────────┐
+│ Format 100×80 · qté totale 15 000 · Δ dev min effectif 2 mm    │
+│ [ ← Modifier la saisie ]                                       │
+│                                                                │
+│ Filtres :                                                      │
+│   [Score ≥ 30 ✓]  [Machine: toutes ▼]  [Grouper par cyl □]     │
+│                                                                │
+│ 23 configurations viables (triées par score DESC) :            │
+│ ┌─┬──────┬────────┬───────┬──────┬──────┬─────┬─────────────┐ │
+│ │☑│ Cyl  │Machine │Poses  │ Δdev │Δlaize│Score│ Quantité    │ │
+│ ├─┼──────┼────────┼───────┼──────┼──────┼─────┼─────────────┤ │
+│ │☑│164mm │MA 2200 │ 2×3=6 │ 2 mm │ 13mm │ 100 │ [10 000] qté│ │
+│ │☐│168mm │MA 2200 │ 2×3=6 │ 4 mm │ 13mm │  92 │             │ │
+│ │☑│164mm │MA 2200 │ 2×2=4 │ 2 mm │ 13mm │ 100 │ [ 5 000] qté│ │
+│ │☐│252mm │MA 2200 │ 3×2=6 │ 4 mm │ 13mm │  88 │             │ │
+│ │☐│ 84mm │MA 2200 │ 1×2=2 │ 4 mm │ 13mm │  72 │             │ │
+│ │…│  …   │   …    │   …   │  …   │  …   │  …  │             │ │
+│ └─┴──────┴────────┴───────┴──────┴──────┴─────┴─────────────┘ │
+│                                                                │
+│ Σ sélectionné : 15 000 / 15 000 ✅                             │
+│ [ Continuer avec ces 2 lots → ]                                │
+└────────────────────────────────────────────────────────────────┘</div>
+
+  <h4>Règles UI étape 2</h4>
+
+  <ul>
+    <li><strong>Aucun seuil backend</strong> : l'endpoint renvoie TOUS les candidats qui passent les filtres durs (effet banane, faisabilité physique, intervalle dev min)</li>
+    <li><strong>Tri</strong> : par score DESC par défaut. User peut basculer tri par développé ASC, par cylindre, par machine</li>
+    <li><strong>Filtre "Score ≥ 30"</strong> : chip activé par défaut, désactivable (alors toutes les lignes visibles, même score 5)</li>
+    <li><strong>Filtre "Machine"</strong> : dropdown multi-select</li>
+    <li><strong>Toggle "Grouper par cylindre"</strong> : collapse les variantes laize secondaires d'un même cylindre, badge <code>+2 variantes</code> cliquable</li>
+    <li><strong>Multi-sélection via checkbox</strong>, chaque ligne cochée révèle l'input "Quantité de ce lot"</li>
+    <li><strong>Validation</strong> : <code>Σ qté lots == qté totale</code>. Bouton "Continuer" désactivé tant que ≠ total. Tolérance ±5 % à proposer en option (paramètre entreprise futur, hors-scope ce brief)</li>
+    <li><strong>Mobile</strong> : tableau scroll horizontal pour les colonnes lointaines, pas de virtualisation tant que &lt; 200 lignes</li>
+  </ul>
+
+  <h3>Étape 3 — Détail lots + édition matière par lot + visuels</h3>
+
+  <div class="ascii-frame">┌──── ÉTAPE 3 ─ Détail lots ─────────────────────────────────────┐
+│ [ ← Retour aux candidats ]                                     │
+│                                                                │
+│ ┌─ LOT 1 ──────────────────────────────────────────────────┐  │
+│ │ Cyl 164 · MA 2200 · 2×3 poses · 10 000 étiq              │  │
+│ │ Matière : [PP couché 80g/m²              ▼] *obligatoire*│  │
+│ │ ┌─────────────────────┬──────────────────────────────┐   │  │
+│ │ │ [Visuel bobine      │ Δ dev réel : 2 mm            │   │  │
+│ │ │  sens 1] + cadre    │ Δ laize réel : 13 mm         │   │  │
+│ │ │  étiquette VUE B    │ Largeur plaque : 326 mm      │   │  │
+│ │ │                     │ Effet banane : OK            │   │  │
+│ │ │                     │ Confort roulage : 1.05       │   │  │
+│ │ │                     │ Score : 100                  │   │  │
+│ │ │                     │ Coût lot HT : 1 234,56 €     │   │  │
+│ │ └─────────────────────┴──────────────────────────────┘   │  │
+│ └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│ ┌─ LOT 2 ──────────────────────────────────────────────────┐  │
+│ │ Cyl 164 · MA 2200 · 2×2 poses · 5 000 étiq               │  │
+│ │ Matière : [PET blanc 50µ                 ▼] *obligatoire*│  │
+│ │ [Visuel bobine sens 1] + détails techniques              │  │
+│ │ Coût lot HT : 687,23 €                                   │  │
+│ └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│ ═══════════════════════════════════════════════════════════════│
+│ COÛT TOTAL DEVIS HT : 1 921,79 €                               │
+│ [ ← Retour candidats ] [ Valider et créer le devis ]           │
+└────────────────────────────────────────────────────────────────┘</div>
+
+  <h4>Règles UI étape 3</h4>
+
+  <ul>
+    <li>1 card par lot, dans l'ordre saisi en étape 2</li>
+    <li>Matière <strong>obligatoire</strong> par lot (FK NOT NULL) — bouton "Valider" désactivé tant qu'un lot n'a pas de matière</li>
+    <li>Le visuel d'enroulement utilise <strong>EXACTEMENT le composant existant</strong> (bobine + cadre étiquette VUE B), sans modification du rendu. Les data du candidat sélectionné sont passées en props au composant tel quel. L'endpoint <code>GET /optimisation/candidats/{id}/visuel</code> renvoie les data au format attendu par le composant existant</li>
+    <li>Récap agrégé en bas : coût total HT = somme(cout_lot_ht)</li>
+    <li>Pas de modification du nb_poses_laize ou cylindre en étape 3 — déjà choisi via la ligne sélectionnée étape 2. Pour changer, retour étape 2</li>
+  </ul>
+
+  <h2>5. Modèle DB</h2>
+
+  <h3>Table <code>lots_production</code> <span class="badge badge-new">NEW</span></h3>
+
+<pre><code># backend/app/models/lot_production.py
+
+class LotProduction(Base):
+    __tablename__ = "lots_production"
+
+    id = Column(Integer, primary_key=True)
+    devis_id = Column(Integer, ForeignKey("devis.id"), nullable=False)
+    entreprise_id = Column(Integer, ForeignKey("entreprises.id"), nullable=False)
+    ordre = Column(Integer, nullable=False)                  # 1, 2, 3...
+
+    # Config production
+    cylindre_id = Column(Integer, ForeignKey("cylindres.id"), nullable=False)
+    machine_id = Column(Integer, ForeignKey("machines.id"), nullable=False)
+    nb_poses_dev = Column(Integer, nullable=False)
+    nb_poses_laize = Column(Integer, nullable=False)
+    sens_enroulement = Column(Integer, nullable=False)       # 1 à 8
+
+    # Quantité + matière par lot
+    quantite = Column(Integer, nullable=False)
+    matiere_id = Column(Integer, ForeignKey("matieres.id"), nullable=False)
+
+    # Résultats calculés (caching pour PDF / historique)
+    intervalle_dev_reel = Column(Numeric(5, 2))
+    intervalle_laize_reel = Column(Numeric(5, 2))
+    largeur_plaque_mm = Column(Numeric(6, 2))
+    score_optim = Column(Float)
+    cout_lot_ht = Column(Numeric(10, 2))
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    devis = relationship("Devis", back_populates="lots_production")
+    cylindre = relationship("Cylindre")
+    machine = relationship("Machine")
+    matiere = relationship("Matiere")
+
+    __table_args__ = (
+        Index("ix_lots_production_devis", "devis_id"),
+        Index("ix_lots_production_entreprise", "entreprise_id"),
+        UniqueConstraint("devis_id", "ordre", name="uq_lot_devis_ordre"),
+    )</code></pre>
+
+  <h3>Mise à jour <code>Devis</code> existant <span class="badge badge-refacto">REFACTO</span></h3>
+
+<pre><code># backend/app/models/devis.py
+
+class Devis(Base):
+    # ... champs existants
+    quantite_totale = Column(Integer, nullable=False)  # déjà existant, vérifier non-null
+
+    lots_production = relationship(
+        "LotProduction",
+        back_populates="devis",
+        cascade="all, delete-orphan",
+        order_by="LotProduction.ordre",
+    )</code></pre>
+
+  <h3>Migration Alembic</h3>
+
+<pre><code>alembic revision -m "add_lots_production_table"
+# Génère 14ᵉ table scopée multi-tenant.
+# Inclure get_or_404_scoped(LotProduction, entreprise_id) dans les CRUD.</code></pre>
+
+  <h2>6. Agrégateur cost_engine multi-lots</h2>
+
+  <div class="sacred">
+    <div class="sacred-label">⚠️ Sacred invariant — logique cost_engine inchangée</div>
+    <p style="margin: 0">L'agrégateur appelle <code>cost_engine.calculer()</code> <strong>N fois</strong> (une fois par lot, paramètres lot indépendants). Les valeurs EXACT V1a (1 449,09 €), V1b (1 921,09 €), V1b silhouette (2 109,89 €), V7a (6,85 €/1000), V8a-e sont préservées <strong>par lot</strong>. Aucune modification de la logique cost_engine. Le moteur reste un service stateless qui calcule un coût pour une config donnée.</p>
+  </div>
+
+<pre><code># backend/app/services/cost_engine_aggregator.py  ← NEW
+
+from app.services import cost_engine
+from app.models.lot_production import LotProduction
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class CoutLot:
+    lot_id: int
+    cout_ht: float
+    details: dict  # détail brut cost_engine pour audit
+
+@dataclass
+class CoutAgrege:
+    cout_total_ht: float
+    details_par_lot: List[CoutLot]
+
+def calculer_devis_multilots(lots: List[LotProduction]) -> CoutAgrege:
+    """Agrège les coûts de N lots de production.
+
+    NE modifie PAS la logique cost_engine. Appelle simplement le moteur
+    pour chaque lot avec ses propres paramètres (cylindre, machine,
+    poses, quantité, matière).
+    """
+    couts_lots = []
+    for lot in lots:
+        detail = cost_engine.calculer(
+            cylindre=lot.cylindre,
+            machine=lot.machine,
+            nb_poses_dev=lot.nb_poses_dev,
+            nb_poses_laize=lot.nb_poses_laize,
+            quantite=lot.quantite,
+            matiere=lot.matiere,
+            # ... autres params nécessaires depuis le devis parent
+        )
+        couts_lots.append(CoutLot(
+            lot_id=lot.id,
+            cout_ht=detail.cout_total_ht,
+            details=detail.to_dict(),
+        ))
+
+    cout_total = sum(c.cout_ht for c in couts_lots)
+    return CoutAgrege(cout_total_ht=cout_total, details_par_lot=couts_lots)</code></pre>
+
+  <h2>7. Endpoints API</h2>
+
+  <table>
+    <thead><tr><th>Méthode</th><th>Route</th><th>Statut</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>POST</code></td>
+        <td><code>/optimisation/calculer</code></td>
+        <td><span class="badge badge-refacto">REFACTO</span></td>
+        <td>Retourne TOUS candidats viables triés par score DESC. <strong>Pas de top_n</strong>. Pas de seuil de score backend.</td>
+      </tr>
+      <tr>
+        <td><code>GET</code></td>
+        <td><code>/optimisation/candidats/{id}/visuel</code></td>
+        <td><span class="badge badge-new">NEW</span></td>
+        <td>Data visuel d'un candidat : positions A, <code>rotation_vue_a_deg</code>, <code>rotation_vue_c_deg</code>, sens enroulement. Respecte SACRED <code>rotation_se.py</code>.</td>
+      </tr>
+      <tr>
+        <td><code>POST</code></td>
+        <td><code>/devis</code></td>
+        <td><span class="badge badge-refacto">REFACTO</span></td>
+        <td>Accepte payload <code>{quantite_totale, lots: [{cylindre_id, machine_id, nb_poses_dev, nb_poses_laize, sens, quantite, matiere_id}, ...]}</code></td>
+      </tr>
+      <tr>
+        <td><code>GET</code></td>
+        <td><code>/devis/{id}</code></td>
+        <td><span class="badge badge-refacto">REFACTO</span></td>
+        <td>Renvoie devis + relation <code>lots_production</code> avec détail par lot</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>Schéma payload POST /devis (Pydantic)</h4>
+
+<pre><code>class LotProductionCreate(BaseModel):
+    cylindre_id: int
+    machine_id: int
+    nb_poses_dev: int = Field(ge=1)
+    nb_poses_laize: int = Field(ge=1)
+    sens_enroulement: int = Field(ge=1, le=8)
+    quantite: int = Field(ge=1)
+    matiere_id: int
+
+class DevisCreate(BaseModel):
+    # ... champs existants (format, options, etc.)
+    quantite_totale: int = Field(ge=1)
+    lots: List[LotProductionCreate] = Field(min_items=1)
+
+    @validator('lots')
+    def somme_quantites_egale_total(cls, v, values):
+        total = sum(lot.quantite for lot in v)
+        if total != values['quantite_totale']:
+            raise ValueError(f"Σ quantités lots ({total}) != quantité totale ({values['quantite_totale']})")
+        return v</code></pre>
+
+  <h2>8. Composants frontend</h2>
+
+  <table>
+    <thead><tr><th>Fichier</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>frontend/app/optimisation/_components/OptimisationPoseSaisie.tsx</code></td>
+        <td><span class="badge badge-refacto">REFACTO</span> Vire les 8 vignettes sens enroulement, ajoute champ "Nb poses laize Auto/Forcer", default Δ dev min client à 2, remplace vignettes par dropdown texte, retire le champ matière</td>
+      </tr>
+      <tr>
+        <td><code>frontend/app/optimisation/_components/OptimisationPoseCandidats.tsx</code></td>
+        <td><span class="badge badge-new">NEW</span> Tableau multi-sélection avec checkboxes + inputs quantité + filtres UI (score, machine, grouper)</td>
+      </tr>
+      <tr>
+        <td><code>frontend/app/optimisation/_components/OptimisationPoseDetailLots.tsx</code></td>
+        <td><span class="badge badge-new">NEW</span> Cards multi-lots avec édition matière + visuel par lot + récap agrégé</td>
+      </tr>
+      <tr>
+        <td><code>frontend/app/optimisation/_components/OptimisationPoseStore.tsx</code></td>
+        <td><span class="badge badge-new">NEW</span> Context React (state machine 3 étapes + lots sélectionnés + quantités)</td>
+      </tr>
+      <tr>
+        <td><code>frontend/app/optimisation/page.tsx</code></td>
+        <td><span class="badge badge-refacto">REFACTO</span> Orchestrateur : affiche le composant selon <code>etape</code> du store</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>State machine simple</h4>
+
+<pre><code>type Etape = 'saisie' | 'candidats' | 'detail';
+
+interface OptimStore {
+  etape: Etape;
+  params: ParamsOptim;
+  candidats: Candidat[];
+  selection: { id_candidat: string; quantite: number }[];
+  lots_avec_matiere: { id_candidat: string; quantite: number; matiere_id: number | null }[];
+  visuels: Record&lt;string, VisuelData&gt;;  // cache par id_candidat
+}</code></pre>
+
+  <h2>9. Tests</h2>
+
+  <div class="box box-purple">
+    <div class="box-label">— Baseline cible : 695 + 12 nouveaux = 707 passed</div>
+    <p style="margin: 0">pytest reste vert à chaque commit. Coverage cible sur les nouveaux modules : 80 %.</p>
+  </div>
+
+<pre><code># backend/tests/
+
+test_lots_production_model.py
+  - test_creation_lot_production
+  - test_cascade_delete_devis_supprime_lots
+  - test_unique_constraint_devis_ordre
+
+test_lots_production_multitenant.py
+  - test_lot_scope_entreprise_via_get_or_404_scoped
+  - test_user_voit_pas_lots_autre_entreprise
+
+test_cost_engine_aggregator.py
+  - test_aggregateur_appelle_cost_engine_n_fois
+  - test_aggregateur_preserve_sacres_exact_par_lot
+  - test_aggregateur_somme_correcte
+
+test_optimisation_endpoint_no_topn.py
+  - test_endpoint_renvoie_tous_candidats_viables
+  - test_endpoint_tri_par_score_desc
+
+test_devis_multilots_endpoint.py
+  - test_post_devis_avec_2_lots
+  - test_validation_somme_quantites_egale_total
+
+test_nb_poses_laize_force.py
+  - test_force_compatible_calcule_intervalle_laize
+  - test_force_incompatible_skip_candidat</code></pre>
+
+  <h2>10. Commit plan (7 commits cohérents)</h2>
+
+<pre><code>git checkout main
+git pull
+git checkout -b feat/optim-pose-multilots
+
+# Commit 1 — champs étape 1
+feat(optim): default intervalle dev min client 2mm + champ nb poses laize forçable
+
+# Commit 2 — modèle DB
+feat(devis): modèle LotProduction + migration Alembic add_lots_production_table
+
+# Commit 3 — endpoint candidats sans top_n + endpoint visuel
+feat(optim/api): endpoint candidats viables sans top_n + endpoint visuel par config
+
+# Commit 4 — agrégateur
+feat(cost): agrégateur multi-lots (logique cost_engine inchangée, sacrés EXACT préservés)
+
+# Commit 5 — refacto endpoints devis
+feat(devis/api): refacto endpoints /devis pour payload multi-lots
+
+# Commit 6 — UI workflow 3 étapes
+feat(optim/ui): workflow 3-étapes saisie → multi-sélect → détail multi-lots avec matière par lot
+
+# Commit 7 — tests
+test(devis): 12 nouveaux tests multi-lots + multi-tenant + agrégation cost_engine
+
+# Pas de Co-Authored-By dans aucun commit
+# pytest vert à chaque commit
+# Pas de push automatique — attendre validation du responsable produit</code></pre>
+
+  <h2>10bis. Stratégie de livraison : 3 PRs séquentielles</h2>
+
+  <div class="box box-blue">
+    <div class="box-label">— Avantages du découpage</div>
+    <p style="margin: 0">Review Vercel preview incrémentale possible · diffs plus petits = review plus rapide · rollback ciblé possible si bug en aval · mode défendabilité : scope clair par PR.</p>
+  </div>
+
+  <p>Chaque PR est mergée et déployée en prod avant que la suivante ne démarre. Les fondations backend (PR A) restent <strong>latentes en prod</strong> (table créée mais inutilisée) jusqu'à l'activation par l'UI (PR C). Pas de breaking change utilisateur entre PRs.</p>
+
+  <table>
+    <thead><tr><th>PR</th><th>Branche</th><th>Commits</th><th>Topic</th><th>Charge</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>A</strong></td>
+        <td><code>feat/optim-pose-fondation-backend</code></td>
+        <td>1, 2, 4</td>
+        <td>Fondation backend : champs étape 1 + modèle <code>LotProduction</code> + migration Alembic + agrégateur cost_engine</td>
+        <td>~10h</td>
+      </tr>
+      <tr>
+        <td><strong>B</strong></td>
+        <td><code>feat/optim-pose-api-multilots</code></td>
+        <td>3, 5</td>
+        <td>Endpoints : candidats viables sans top_n + endpoint visuel par config + refacto endpoints <code>/devis</code> pour payload multi-lots</td>
+        <td>~8h</td>
+      </tr>
+      <tr>
+        <td><strong>C</strong></td>
+        <td><code>feat/optim-pose-ui-multilots</code></td>
+        <td>6, 7</td>
+        <td>UI workflow 3 étapes (saisie → multi-sélect → détail multi-lots) + 12 nouveaux tests d'intégration end-to-end</td>
+        <td>~12h</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>Séquençage</h4>
+
+  <ol>
+    <li><strong>PR A</strong> : branche depuis <code>main</code>, merge dès review verte. Tests pytest passent à 695 + 6 nouveaux tests modèle/agrégateur ≈ 701.</li>
+    <li><strong>PR B</strong> : branche depuis <code>main</code> (après merge PR A), merge dès review verte. Tests à 701 + 4 nouveaux tests endpoint ≈ 705.</li>
+    <li><strong>PR C</strong> : branche depuis <code>main</code> (après merge PR B), merge dès review verte. Tests à 705 + 2 nouveaux tests UI/E2E ≈ 707. Active l'UI multi-lots en prod.</li>
+  </ol>
+
+  <h4>Critères de merge par PR</h4>
+
+  <ul>
+    <li>pytest vert (0 failed)</li>
+    <li>Preview Vercel review OK</li>
+    <li>Pas de Co-Authored-By dans les commits</li>
+    <li>Conventional Commits respectés</li>
+    <li>Approbation explicite du responsable produit avant merge</li>
+  </ul>
+
+  <h4>Alternative : PR unique</h4>
+
+  <p>Si le responsable produit préfère une PR unique <code>feat/optim-pose-multilots</code> avec les 7 commits enchaînés, exécuter le plan tel quel sans découpage. Inconvénient : review du diff complet 30h en une fois, preview Vercel intermédiaire impossible.</p>
+
+  <h2>11. Sacred Invariants — JAMAIS TOUCHER</h2>
+
+  <div class="sacred">
+    <div class="sacred-label">⚠️ Règles intouchables — STOP et validation obligatoire</div>
+    <ul style="margin: 0">
+      <li>Logique <code>cost_engine</code> : aucune modification de calcul (STOP et validation responsable produit obligatoire si nécessaire). L'agrégateur appelle le moteur N fois sans toucher à la logique interne</li>
+      <li><strong>Composant visuel bobine + cadre étiquette unitaire VUE B</strong> : rendu existant <strong>INTOUCHABLE</strong>. SVG/canvas, layout, positions des A, rotations, vignettes, légendes — TOUT est callé et validé. L'étape 3 du nouveau workflow <strong>réutilise le composant existant tel quel</strong> en lui passant les data du candidat sélectionné. Aucun nouveau rendu, aucune modification des fichiers de rendu visuel</li>
+      <li>Valeurs EXACT V1a (1 449,09 € + 6,92 €/1000), V1b (1 921,09 €), V1b silhouette (2 109,89 €), V7a (6,85 €/1000), V8a-e — préservées <strong>par lot</strong></li>
+      <li>Convention 8 sens enroulement et mapping rotation dans <code>backend/app/services/rotation_se.py</code> — single source of truth, aucun changement</li>
+      <li>Compte <code>entreprise_id=1</code> et ses 114 records seedés (compte demo / invariants EXACT) — JAMAIS supprimer/modifier</li>
+      <li>Auth JWT existante — pas de breaking change sur login/signup</li>
+      <li>Multi-tenant strict — chaque user voit UNIQUEMENT ses lots de production via <code>get_or_404_scoped(LotProduction, entreprise_id)</code></li>
+      <li>Migrations Alembic OBLIGATOIRES pour le nouveau modèle</li>
+      <li>Pas de hardcoding de secrets</li>
+      <li>Baseline tests 695 préservée + 12 nouveaux tests</li>
+    </ul>
+  </div>
+
+  <h2>12. Hors-scope explicite</h2>
+
+  <ul>
+    <li>❌ Génération PDF devis pro avec lots — Sprint 17</li>
+    <li>❌ Modification logique <code>cost_engine</code> — interdit sauf validation explicite du responsable produit</li>
+    <li>❌ Refonte ou amélioration du rendu visuel bobine / cadre étiquette VUE B — SACRED, intouchable</li>
+    <li>❌ Modification de <code>rotation_se.py</code> ou du mapping rotation des 8 sens — SACRED</li>
+    <li>❌ Refacto modules BAT / IA — Sprint 14-15</li>
+    <li>❌ Import tarifs matières via Claude API — Sprint 17</li>
+    <li>❌ Tolérance ±5 % paramétrable sur somme quantités lots — laisser hook prévu mais pas implémenter</li>
+    <li>❌ Réordonnancement drag-and-drop des lots étape 3 — futur si besoin</li>
+    <li>❌ Ajout/suppression de lots en étape 3 — pour modifier, retour étape 2</li>
+  </ul>
+
+  <h2>13. Antipatterns à éviter</h2>
+
+  <ul>
+    <li>❌ Modifier <code>cost_engine</code> sans validation explicite du responsable produit</li>
+    <li>❌ Modifier <code>rotation_se.py</code> sans validation explicite du responsable produit</li>
+    <li>❌ Modifier le composant visuel existant (bobine, cadre étiquette VUE B, SVG, rotations, légendes) — TOUT est callé, on réutilise tel quel</li>
+    <li>❌ Ajouter un seuil de score côté backend (le filtre est UI uniquement)</li>
+    <li>❌ Top_n hardcodé dans l'endpoint candidats (renvoyer TOUT)</li>
+    <li>❌ Migration BDD sans Alembic</li>
+    <li>❌ Refactor "bonus" hors scope du brief</li>
+    <li>❌ Tooltips au survol (mobile-first → texte d'aide visible)</li>
+    <li>❌ Ajout dépendance npm/pip sans nécessité</li>
+    <li>❌ Renommer en anglais des modèles français</li>
+    <li>❌ Co-Authored-By dans un commit</li>
+    <li>❌ Push automatique sans validation du responsable produit</li>
+  </ul>
+
+  <h2>14. Critères d'acceptation</h2>
+
+  <div class="box box-green">
+    <div class="box-label">— Avenant considéré comme terminé quand :</div>
+    <ol style="margin: 0">
+      <li>L'écran <code>OptimisationPose</code> affiche les 3 étapes avec transitions fonctionnelles</li>
+      <li>Le default <code>intervalle_dev_min_client</code> est bien à 2 mm</li>
+      <li>Le champ "Nb poses laize Auto/Forcer" fonctionne et filtre correctement les candidats</li>
+      <li>L'étape 2 renvoie TOUS les candidats viables (pas de top_n), filtres UI fonctionnels</li>
+      <li>Un user peut sélectionner N lignes en étape 2, saisir une quantité par ligne, et la somme est validée == quantité totale</li>
+      <li>L'étape 3 affiche N cards avec édition matière obligatoire par lot + visuels</li>
+      <li>Le devis créé persiste correctement avec ses lots en DB</li>
+      <li>Les sacrés EXACT (V1a/V1b/V7a/V8a-e) sont préservés par lot — vérifié par tests de non-régression</li>
+      <li>Multi-tenant strict : un user d'<code>entreprise_id=2</code> ne voit jamais les lots d'<code>entreprise_id=1</code></li>
+      <li>Tous les tests passent (695 + 12 = 707 minimum), 0 failed</li>
+      <li>Pas de régression sur les fonctionnalités Sprint 1-12</li>
+      <li>L'app déploie sans erreur sur Vercel + Railway</li>
+    </ol>
+  </div>
+
+  <h2>15. Démarrage immédiat</h2>
+
+  <div class="box box-gold">
+    <div class="box-label">— Première commande à exécuter</div>
+<pre style="margin: 0">cd ~/projets/devis-flexo
+git checkout main
+git pull
+git checkout -b feat/optim-pose-multilots
+
+# Copier ce brief dans docs/
+cp ../Brief_CC_RefonteOptimPose_Multilots_Sprint13.html docs/
+git add docs/Brief_CC_RefonteOptimPose_Multilots_Sprint13.html
+git commit -m "docs: ajout brief refonte optim pose multi-lots"
+
+# Démarrer par le commit 1 — champs étape 1
+# Puis suivre l'ordre 1 → 7
+# Pytest vert à chaque commit, pas de push avant validation du responsable produit</pre>
+  </div>
+
+  <p style="margin-top: 30px; padding: 18px; background: var(--accent-soft); border-radius: 6px; text-align: center; font-size: 1rem;">
+    <strong>Avenant Sprint 13 ouvert</strong> · estimation 30h dev solo<br>
+    Tu codes, le responsable produit teste et review. pytest vert à chaque commit.
+  </p>
+
+</div>
+</body>
+</html>
