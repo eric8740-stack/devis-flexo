@@ -529,8 +529,9 @@ function VueBobine({
   const idx = parseInt(config.sens_enroulement.replace("SE", ""), 10);
 
   // Cadre X/Y unitaire : copie de l'étiquette telle qu'elle apparaît en
-  // VUE C (vue client en décollant). Convention verrouillée :
-  //   X = dev (horizontal), Y = laize (vertical),
+  // VUE C (vue client en décollant). Convention métier flexographique :
+  //   X = laize TOUJOURS, Y = dev TOUJOURS (peu importe la position visuelle).
+  //   Géométrie : rectangle vertical si laize > dev, horizontal sinon.
   //   A pivoté selon rotation_vue_c_deg (single source of truth backend).
   const CADRE_MAX_PX = 80;
   const cadreScale = CADRE_MAX_PX / Math.max(devEtiqMm, laizeEtiqMm);
@@ -607,7 +608,7 @@ function VueBobine({
             </text>
           </g>
 
-          {/* X = dev — cote horizontale au-dessus du cadre */}
+          {/* Y = dev — cote horizontale au-dessus du cadre (convention métier) */}
           <line
             x1={cadreOx}
             y1={cadreOy - 8}
@@ -640,10 +641,10 @@ function VueBobine({
             fontWeight={700}
             fill={COULEUR_BLEU}
           >
-            X = dev {devEtiqMm} mm
+            Y = dev {devEtiqMm} mm
           </text>
 
-          {/* Y = laize — cote verticale à droite du cadre */}
+          {/* X = laize — cote verticale à droite du cadre (convention métier) */}
           <line
             x1={cadreOx + cadreW + 8}
             y1={cadreOy}
@@ -677,7 +678,7 @@ function VueBobine({
             fontWeight={700}
             fill={COULEUR_BLEU}
           >
-            Y = laize
+            X = laize
           </text>
           <text
             x={cadreOx + cadreW + 13}
@@ -693,8 +694,9 @@ function VueBobine({
         </svg>
       </div>
 
-      {/* Cartouche cotes a/b/c/d/e/f + X/Y. X = dev (horizontal), Y = laize
-          (vertical) — convention VUE C verrouillée 18/05/2026. */}
+      {/* Cartouche cotes a/b/c/d/e/f + X/Y. Convention métier flexographique :
+          X = laize TOUJOURS, Y = dev TOUJOURS. d = laize liner (bobine fille
+          livrée = laize étiq + lacets), pas la laize de la bande presse. */}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-border bg-white p-2 text-xs sm:grid-cols-3">
         <Cote
           letter="a"
@@ -713,8 +715,8 @@ function VueBobine({
         />
         <Cote
           letter="d"
-          label="laize bobine totale"
-          value={`${config.laize_papier_mm} mm`}
+          label="laize liner"
+          value={`${config.laize_liner_mm} mm`}
         />
         <Cote
           letter="e"
@@ -727,8 +729,8 @@ function VueBobine({
           label="Ø Mandrin"
           value={`${mandrinMm} mm`}
         />
-        <Cote letter="X" label="dev étiquette" value={`${devEtiqMm} mm`} />
-        <Cote letter="Y" label="laize étiquette" value={`${laizeEtiqMm} mm`} />
+        <Cote letter="X" label="laize étiquette" value={`${laizeEtiqMm} mm`} />
+        <Cote letter="Y" label="dev étiquette" value={`${devEtiqMm} mm`} />
         <Cote
           label="Mètres linéaires totaux"
           value={`${config.ml_total_m} m`}
