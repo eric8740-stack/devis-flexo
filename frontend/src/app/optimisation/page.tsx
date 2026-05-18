@@ -26,6 +26,13 @@ import {
   type SensEnroulement,
 } from "@/lib/api";
 
+import { OptimisationPoseCandidats } from "./_components/OptimisationPoseCandidats";
+import { OptimisationPoseDetailLots } from "./_components/OptimisationPoseDetailLots";
+import {
+  OptimisationPoseProvider,
+  useOptimisationPose,
+} from "./_components/OptimisationPoseStore";
+
 /**
  * Simulateur d'optimisation FlexoCompare — PR #9.1 BAT MVP.
  *
@@ -93,7 +100,32 @@ function SEPictogramme({ code }: { code: SensEnroulement }) {
   );
 }
 
+/**
+ * Sprint 13 avenant — orchestrateur workflow 3 étapes (Saisie → Candidats
+ * → DetailLots). Le state machine est porté par OptimisationPoseStore
+ * (React Context). Voir _components/.
+ */
 export default function OptimisationPage() {
+  return (
+    <OptimisationPoseProvider>
+      <OptimisationPageInner />
+    </OptimisationPoseProvider>
+  );
+}
+
+function OptimisationPageInner() {
+  const { etape } = useOptimisationPose();
+  return (
+    <>
+      {etape === "saisie" && <OptimisationPoseSaisie />}
+      {etape === "candidats" && <OptimisationPoseCandidats />}
+      {etape === "detail" && <OptimisationPoseDetailLots />}
+    </>
+  );
+}
+
+function OptimisationPoseSaisie() {
+  const { goCandidats } = useOptimisationPose();
   const { toast } = useToast();
 
   const [options, setOptions] = useState<OptionDisponible[] | null>(null);
@@ -267,6 +299,16 @@ export default function OptimisationPage() {
             "Tous les filtres ont éliminé les configurations.",
           variant: "destructive",
         });
+      } else {
+        // Sprint 13 avenant : push les candidats dans le store et bascule
+        // vers étape 2 (tableau multi-sélection).
+        goCandidats(
+          r.configurations,
+          parseInt(quantite, 10),
+          parseFloat(laize),
+          parseFloat(dev),
+          mandrin,
+        );
       }
     } catch (err) {
       toast({
