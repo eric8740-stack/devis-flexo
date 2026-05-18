@@ -12,7 +12,7 @@ from decimal import Decimal
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import Client, Devis, Machine
+from app.models import Client, Devis, LotProduction, Machine
 from app.schemas.devis_persist import DevisCreate, DevisUpdate
 from app.services.numero_devis_service import generate_next_numero
 
@@ -146,6 +146,10 @@ def create_devis(
     """Crée un devis : génère numero auto + extrait dénormalisés.
 
     S12-C : `entreprise_id` injecté par le router via user.entreprise_id.
+
+    Sprint 13 avenant : si `data.lots` est fourni, crée N LotProduction
+    rattachés au devis (ordre 1..N). La validation `Σ qté == quantite_totale`
+    est déjà faite par le validator Pydantic de DevisCreate.
     """
     denorm = _extract_denormalised_fields(data.payload_input, data.payload_output)
     numero = generate_next_numero(db)
@@ -162,6 +166,30 @@ def create_devis(
         **denorm,
     )
     db.add(devis)
+    db.flush()  # On a besoin de devis.id avant de créer les lots.
+
+    # Sprint 13 avenant — lots de production (cascade depuis devis.id).
+    if data.lots:
+        for ordre, lot_in in enumerate(data.lots, start=1):
+            lot = LotProduction(
+                devis_id=devis.id,
+                entreprise_id=entreprise_id,
+                ordre=ordre,
+                cylindre_id=lot_in.cylindre_id,
+                machine_id=lot_in.machine_id,
+                nb_poses_dev=lot_in.nb_poses_dev,
+                nb_poses_laize=lot_in.nb_poses_laize,
+                sens_enroulement=lot_in.sens_enroulement,
+                quantite=lot_in.quantite,
+                matiere_id=lot_in.matiere_id,
+                intervalle_dev_reel_mm=lot_in.intervalle_dev_reel_mm,
+                intervalle_laize_reel_mm=lot_in.intervalle_laize_reel_mm,
+                largeur_plaque_mm=lot_in.largeur_plaque_mm,
+                score_optim=lot_in.score_optim,
+                cout_lot_ht_eur=lot_in.cout_lot_ht_eur,
+            )
+            db.add(lot)
+
     db.commit()
     db.refresh(devis)
     return _attach_relation_names(devis, db)

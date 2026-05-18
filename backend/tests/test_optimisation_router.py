@@ -97,7 +97,7 @@ def test_post_calculer_happy_path(cleanup_and_onboard):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["nb_candidats"] >= 1
-    assert body["nb_candidats"] <= 3
+    # Sprint 13 avenant : pas de cap top_n côté backend.
     assert body["intervalle_dev_min_applique_mm"] == 2.0
     # Au moins 1 config a score > 0
     assert any(c["score"] > 0 for c in body["configurations"])

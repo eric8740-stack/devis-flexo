@@ -352,11 +352,13 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
 
                 candidats.append(config)
 
-    # 4. Tri + dédoublonnage + top 3
+    # 4. Tri + dédoublonnage — Sprint 13 avenant : pas de top_n. Le moteur
+    # retourne TOUS les candidats viables triés par score DESC. Le filtrage
+    # par seuil de score est UI uniquement (cf brief Sprint 13 avenant
+    # section 7 : "Pas de top_n. Pas de seuil de score backend").
     candidats.sort(key=lambda c: c.score, reverse=True)
     candidats = _dedoublonner_configs(candidats)
-    top = candidats[:3]
-    nb = len(top)
+    nb = len(candidats)
 
     message: str | None = None
     if nb < 3:
@@ -367,7 +369,7 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
         )
 
     return OptimisationOutput(
-        configurations=top,
+        configurations=candidats,
         nb_candidats=nb,
         message_filtrage=message,
         intervalle_dev_min_applique_mm=intervalle_min,
