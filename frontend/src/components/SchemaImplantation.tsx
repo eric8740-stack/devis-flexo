@@ -521,12 +521,31 @@ function VueBobine({
   devEtiqMm: number;
   mandrinMm: number;
 }) {
-  // VUE B utilise les illustrations Canva produites par Eric (style atelier
-  // ICE pro). L'image change selon le sens d'enroulement choisi et porte des
-  // annotations a/b/c/d/e/f/X/Y dont les valeurs correspondent au tableau
-  // ci-dessous (cartouche cotes affiché sous l'image, layout cohérent avec
-  // la VUE A à gauche).
+  // VUE B utilise les illustrations Canva (style atelier flexo). L'image
+  // change selon le sens d'enroulement choisi et porte des annotations
+  // a/b/c/d/e/f/X/Y dont les valeurs correspondent au tableau ci-dessous
+  // (cartouche cotes affiché sous l'image, layout cohérent avec la VUE A à
+  // gauche).
   const idx = parseInt(config.sens_enroulement.replace("SE", ""), 10);
+
+  // Cadre X/Y unitaire : copie de l'étiquette telle qu'elle apparaît en
+  // VUE C (vue client en décollant). Convention verrouillée :
+  //   X = dev (horizontal), Y = laize (vertical),
+  //   A pivoté selon rotation_vue_c_deg (single source of truth backend).
+  const CADRE_MAX_PX = 80;
+  const cadreScale = CADRE_MAX_PX / Math.max(devEtiqMm, laizeEtiqMm);
+  const cadreW = devEtiqMm * cadreScale;
+  const cadreH = laizeEtiqMm * cadreScale;
+  const cadreCx = 70;
+  const cadreCy = 75;
+  const cadreOx = cadreCx - cadreW / 2;
+  const cadreOy = cadreCy - cadreH / 2;
+  const cadreFaceInt = isFaceInt(config.sens_enroulement);
+  const cadreFill = cadreFaceInt ? COULEUR_ETIQ_INT : COULEUR_BLEU_CLAIR;
+  const cadreStroke = cadreFaceInt ? COULEUR_ETIQ_INT_BORDURE : COULEUR_BLEU;
+  const cadreAFill = cadreFaceInt ? COULEUR_GRIS_FONCE : COULEUR_BLEU;
+  const cadreAFont = Math.min(cadreW, cadreH) * 0.55;
+
   return (
     <figure className="space-y-2">
       <figcaption className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -544,14 +563,138 @@ function VueBobine({
         />
       </div>
 
-      {/* Badge SE — libellé officiel ICE depuis backend */}
+      {/* Badge SE — libellé officiel depuis backend */}
       <div className="rounded border border-blue-300 bg-blue-50/50 px-2 py-1">
         <div className="text-xs font-semibold text-blue-900">
           {config.sens_enroulement_libelle}
         </div>
       </div>
 
-      {/* Cartouche cotes a/b/c/d/e/f + X/Y (mapping fourni par Eric). */}
+      {/* Cadre X/Y unitaire — copie de l'étiquette telle que vue en VUE C
+          (dev horizontal × laize vertical, A pivoté selon backend). */}
+      <div className="rounded border border-border bg-white p-2">
+        <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Cadre étiquette unitaire (= vue client)
+        </p>
+        <svg
+          viewBox="0 0 140 140"
+          width="100%"
+          className="mx-auto max-w-[180px]"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <rect
+            x={cadreOx}
+            y={cadreOy}
+            width={cadreW}
+            height={cadreH}
+            fill={cadreFill}
+            stroke={cadreStroke}
+            strokeWidth={1}
+          />
+          <g
+            transform={`translate(${cadreCx} ${cadreCy}) rotate(${config.rotation_vue_c_deg})`}
+          >
+            <text
+              x={0}
+              y={0}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={cadreAFont}
+              fontWeight={700}
+              fill={cadreAFill}
+            >
+              A
+            </text>
+          </g>
+
+          {/* X = dev — cote horizontale au-dessus du cadre */}
+          <line
+            x1={cadreOx}
+            y1={cadreOy - 8}
+            x2={cadreOx + cadreW}
+            y2={cadreOy - 8}
+            stroke={COULEUR_BLEU}
+            strokeWidth={0.7}
+          />
+          <line
+            x1={cadreOx}
+            y1={cadreOy - 11}
+            x2={cadreOx}
+            y2={cadreOy - 5}
+            stroke={COULEUR_BLEU}
+            strokeWidth={0.5}
+          />
+          <line
+            x1={cadreOx + cadreW}
+            y1={cadreOy - 11}
+            x2={cadreOx + cadreW}
+            y2={cadreOy - 5}
+            stroke={COULEUR_BLEU}
+            strokeWidth={0.5}
+          />
+          <text
+            x={cadreCx}
+            y={cadreOy - 12}
+            textAnchor="middle"
+            fontSize={7}
+            fontWeight={700}
+            fill={COULEUR_BLEU}
+          >
+            X = dev {devEtiqMm} mm
+          </text>
+
+          {/* Y = laize — cote verticale à droite du cadre */}
+          <line
+            x1={cadreOx + cadreW + 8}
+            y1={cadreOy}
+            x2={cadreOx + cadreW + 8}
+            y2={cadreOy + cadreH}
+            stroke={COULEUR_BLEU}
+            strokeWidth={0.7}
+          />
+          <line
+            x1={cadreOx + cadreW + 5}
+            y1={cadreOy}
+            x2={cadreOx + cadreW + 11}
+            y2={cadreOy}
+            stroke={COULEUR_BLEU}
+            strokeWidth={0.5}
+          />
+          <line
+            x1={cadreOx + cadreW + 5}
+            y1={cadreOy + cadreH}
+            x2={cadreOx + cadreW + 11}
+            y2={cadreOy + cadreH}
+            stroke={COULEUR_BLEU}
+            strokeWidth={0.5}
+          />
+          <text
+            x={cadreOx + cadreW + 13}
+            y={cadreCy - 4}
+            textAnchor="start"
+            dominantBaseline="central"
+            fontSize={7}
+            fontWeight={700}
+            fill={COULEUR_BLEU}
+          >
+            Y = laize
+          </text>
+          <text
+            x={cadreOx + cadreW + 13}
+            y={cadreCy + 4}
+            textAnchor="start"
+            dominantBaseline="central"
+            fontSize={7}
+            fontWeight={700}
+            fill={COULEUR_BLEU}
+          >
+            {laizeEtiqMm} mm
+          </text>
+        </svg>
+      </div>
+
+      {/* Cartouche cotes a/b/c/d/e/f + X/Y. X = dev (horizontal), Y = laize
+          (vertical) — convention VUE C verrouillée 18/05/2026. */}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-border bg-white p-2 text-xs sm:grid-cols-3">
         <Cote
           letter="a"
@@ -584,8 +727,8 @@ function VueBobine({
           label="Ø Mandrin"
           value={`${mandrinMm} mm`}
         />
-        <Cote letter="X" label="laize étiquette" value={`${laizeEtiqMm} mm`} />
-        <Cote letter="Y" label="dev étiquette" value={`${devEtiqMm} mm`} />
+        <Cote letter="X" label="dev étiquette" value={`${devEtiqMm} mm`} />
+        <Cote letter="Y" label="laize étiquette" value={`${laizeEtiqMm} mm`} />
         <Cote
           label="Mètres linéaires totaux"
           value={`${config.ml_total_m} m`}
