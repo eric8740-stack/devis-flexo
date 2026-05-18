@@ -68,6 +68,49 @@ def _sens_int(sens_enroulement: str) -> int:
     return int(sens_enroulement.replace("SE", ""))
 
 
+@router.get("/candidats/{id_candidat}/visuel")
+def get_candidat_visuel(
+    id_candidat: str,
+    user: User = Depends(require_module("flexocompare")),
+) -> dict:
+    """Données visuelles d'un candidat — sens enroulement + rotations.
+
+    Sprint 13 avenant (commit 3 PR B). Endpoint consommé par l'UI workflow
+    3 étapes (PR C) au moment de l'affichage du visuel BAT par lot.
+
+    L'`id_candidat` est un id composite encodé côté frontend, contenant a
+    minima le sens d'enroulement en suffixe sous la forme `...-SE<n>`
+    (ex: `12-3-2x5-SE1`). Le sens est la seule donnée nécessaire pour
+    déterminer les rotations (les autres champs cylindre/machine/poses
+    ne changent pas les rotations).
+
+    SACRED : rotations issues de `app/services/rotation_se.py` (single
+    source of truth).
+    """
+    try:
+        sens_code = id_candidat.rsplit("-", 1)[-1]
+        if not sens_code.startswith("SE"):
+            raise ValueError("préfixe sens manquant")
+        sens_int = int(sens_code[2:])
+        if not 1 <= sens_int <= 8:
+            raise ValueError("sens hors plage 1-8")
+    except (ValueError, IndexError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"id_candidat invalide ({id_candidat}). Format attendu : "
+                "'<cyl>-<mach>-<dev>x<laize>-SE<n>' avec 1 ≤ n ≤ 8."
+            ),
+        ) from exc
+    return {
+        "id_candidat": id_candidat,
+        "sens_enroulement": sens_code,
+        "sens_enroulement_libelle": get_libelle_officiel(sens_int),
+        "rotation_vue_a_deg": get_rotation_vue_a(sens_int),
+        "rotation_vue_c_deg": get_rotation_vue_c(sens_int),
+    }
+
+
 @router.get(
     "/options-disponibles",
     response_model=list[OptionDisponiblePublic],

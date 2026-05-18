@@ -94,7 +94,7 @@ def test_cas_simple_un_cylindre_une_machine_donne_au_moins_une_config():
     )
     out = optimiser_pose(inp)
     assert out.nb_candidats >= 1
-    assert out.nb_candidats <= 3
+    # Sprint 13 avenant : plus de cap top_n côté backend.
     # Sanity : config cohérente
     c = out.configurations[0]
     assert c.cylindre_id == 1
@@ -120,10 +120,16 @@ def test_intervalle_dev_reel_coherent_avec_format():
     assert c.qualite_echenillage == "parfait"
 
 
-def test_top_3_max_meme_si_beaucoup_candidats():
-    """6 cylindres × 1 machine × 3 variantes possibles = potentiellement 18
-    candidats, on retourne max 3 (pas de triche). Cyls ICE en mm réels
-    (dents × 3.175) : [228.6, 254.0, 279.4, 304.8, 330.2, 355.6]."""
+def test_tous_candidats_viables_retournes_tries_par_score_desc():
+    """Sprint 13 avenant : le moteur retourne TOUS les candidats viables
+    (pas de top_n côté backend). Le filtrage par score est UI only.
+
+    6 cylindres × 1 machine × multi-variantes laize peut générer beaucoup
+    de candidats. Cyls en mm réels (dents × 3.175) :
+    [228.6, 254.0, 279.4, 304.8, 330.2, 355.6]. On vérifie que le moteur
+    renvoie au moins 3 candidats (donc plus de cap à 3) ET que le tri
+    score DESC est préservé.
+    """
     cyls = [
         Cylindre(id=i, developpe_mm=dev)
         for i, dev in enumerate(
@@ -136,8 +142,10 @@ def test_top_3_max_meme_si_beaucoup_candidats():
         format=Format(hauteur_mm=30, largeur_mm=30),
     )
     out = optimiser_pose(inp)
-    assert out.nb_candidats == 3
-    # Tri par score DESC
+    # Sprint 13 avenant : pas de top_n cap. Avec 6 cyl + 3 variantes
+    # potentielles chacun, on a beaucoup plus que 3 candidats viables.
+    assert out.nb_candidats > 3
+    # Tri par score DESC (invariant inchangé)
     scores = [c.score for c in out.configurations]
     assert scores == sorted(scores, reverse=True)
 
