@@ -438,7 +438,7 @@ function VuePlaque({
 
         {/* Flèche défilement à gauche : badge bleu pâle bordé + grosse flèche
             verticale épaisse, label rotaté à côté. Doit se voir au premier
-            coup d'œil (retour Eric). */}
+            coup d'œil (retour utilisateur métier). */}
         <g transform={`translate(${ox - 40}, ${oy + innerH / 2})`}>
           <rect
             x={-18}

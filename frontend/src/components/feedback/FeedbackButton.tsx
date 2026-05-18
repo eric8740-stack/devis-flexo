@@ -15,8 +15,8 @@ const FORMSPREE_URL = process.env.NEXT_PUBLIC_FEEDBACK_FORMSPREE_URL;
  *
  * Conditions de montage (return null silencieux sinon) :
  *   - User authentifié (via `useAuth`) — pas de feedback anonyme
- *   - Pas sur `/admin/*` (Eric, l'unique admin, ne s'envoie pas du
- *     feedback à lui-même — cf. brief décision #3)
+ *   - Pas sur `/admin/*` (l'admin ne s'envoie pas du feedback à
+ *     lui-même — cf. brief décision #3)
  *   - Variable d'env `NEXT_PUBLIC_FEEDBACK_FORMSPREE_URL` définie. Si
  *     absente (preview/dev sans config), on n'affiche pas le bouton :
  *     pas de crash, pas de panneau cassé.

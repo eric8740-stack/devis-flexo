@@ -836,7 +836,7 @@ export const duplicateDevis = (id: number) =>
   apiFetch<DevisDetail>(`/api/devis/${id}/duplicate`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
-// Sprint 12 Lot S12-D : Administration (Eric only — get_current_admin)
+// Sprint 12 Lot S12-D : Administration (admin only — get_current_admin)
 // ---------------------------------------------------------------------------
 
 export const listAdminUsers = () =>
@@ -1037,7 +1037,7 @@ export interface OptimisationConfigOut {
   diametre_bobine_mm: number;
   laize_liner_mm: number;
   sens_enroulement: SensEnroulement;
-  // Libellé officiel ICE à afficher dans le BAT (ex: "0° Extérieur droite avant").
+  // Libellé officiel flexo à afficher dans le BAT (ex: "0° Extérieur droite avant").
   sens_enroulement_libelle: string;
   // Rotations A en VUE A (planche presse) et VUE C (bobine fille client).
   // Mapping verrouillé 18/05/2026 — paires ext/int partagent même rotation.

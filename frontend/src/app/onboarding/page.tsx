@@ -573,7 +573,7 @@ function StepRecap({
       <CardHeader>
         <CardTitle>Récapitulatif — prêt à initialiser</CardTitle>
         <CardDescription>
-          Vérifiez avant validation. Les 4 barèmes ICE (échenillage, effet
+          Vérifiez avant validation. Les 4 barèmes flexo (échenillage, effet
           banane, confort de roulage, compensation laize/dev) seront créés
           automatiquement — ils sont indispensables au moteur d&apos;optimisation
           et restent ajustables à tout moment.
@@ -601,7 +601,7 @@ function StepRecap({
           total={defaults.options.length}
         />
         <RecapLine
-          label="Barèmes ICE (automatiques)"
+          label="Barèmes flexo (automatiques)"
           count={defaults.baremes.length}
           total={defaults.baremes.length}
         />

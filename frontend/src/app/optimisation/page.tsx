@@ -38,10 +38,10 @@ import {
  * `hauteur_mm` (= dev) pour ne pas casser la DB / cost_engine. C'est juste
  * un mapping UI : laize→largeur, dev→hauteur.
  */
-// Diamètres mandrin courants flexo. ICE standard = 40 et 76 mm (annotés
+// Diamètres mandrin courants flexo. Standard flexo = 40 et 76 mm (annotés
 // dans l'UI). Les autres (25, 38, 50) sont disponibles pour cas spéciaux.
 const MANDRIN_OPTIONS = [25, 38, 40, 50, 76] as const;
-const MANDRIN_STANDARDS_ICE = new Set([40, 76]);
+const MANDRIN_STANDARDS_FLEXO = new Set([40, 76]);
 
 /**
  * 8 sens d'enroulement convention métier flexo :
@@ -59,7 +59,7 @@ type SEOption = {
   label: string;
 };
 
-// Libellés ICE exact (cf guide métier Eric). `affichage` est le nom court
+// Libellés flexo exacts (cf guide métier). `affichage` est le nom court
 // utilisé dans l'UI ("Sens 1" plutôt que "SE1"). `code` reste SE1-8 pour
 // rester cohérent avec la BDD/API/persistence existante.
 const SE_OPTIONS: (SEOption & { affichage: string })[] = [
@@ -75,8 +75,8 @@ const SE_OPTIONS: (SEOption & { affichage: string })[] = [
 
 /**
  * Pictogramme bobine pour la sélection du sens d'enroulement.
- * Utilise les illustrations PNG produites par Eric (style atelier ICE pro,
- * annotations métier complètes) servies depuis `/assets/bobines/sens-N.png`.
+ * Utilise les illustrations PNG style atelier flexo pro (annotations
+ * métier complètes) servies depuis `/assets/bobines/sens-N.png`.
  * Next.js `<Image>` gère la compression automatique (WebP/AVIF) selon le
  * navigateur, donc pas besoin d'optimiser les sources.
  */
@@ -273,7 +273,7 @@ export default function OptimisationPage() {
           Saisissez l&apos;étiquette en <strong>laize × développé</strong>{" "}
           (convention métier flexo) et le contexte de production. Le top 3
           configurations cylindre × machine ressort scoré sur les 6 règles
-          métier ICE et enrichi des valeurs BAT (laize papier, ml total,
+          métier flexo et enrichi des valeurs BAT (laize papier, ml total,
           rendement, ø bobine).
         </p>
       </header>
@@ -338,7 +338,7 @@ export default function OptimisationPage() {
                 </label>
               </div>
             </div>
-            <div className="grid grid-cols-2 items-end gap-4">
+            <div className="grid grid-cols-2 items-start gap-4">
               <div className="space-y-2">
                 <Label htmlFor="nbcouleurs">Nb couleurs impression</Label>
                 <Input
@@ -426,7 +426,7 @@ export default function OptimisationPage() {
               <Label>Ø Mandrin bobine fille (mm)</Label>
               <div className="flex flex-wrap gap-3 text-sm">
                 {MANDRIN_OPTIONS.map((m) => {
-                  const isStandard = MANDRIN_STANDARDS_ICE.has(m);
+                  const isStandard = MANDRIN_STANDARDS_FLEXO.has(m);
                   return (
                     <label
                       key={m}
@@ -444,7 +444,7 @@ export default function OptimisationPage() {
                       </span>
                       {isStandard && (
                         <span className="text-[10px] text-muted-foreground">
-                          (ICE standard)
+                          (standard flexo)
                         </span>
                       )}
                     </label>
@@ -964,7 +964,7 @@ function ConfigCard({
 }
 
 /**
- * Convertit un code interne SE1..SE8 en libellé ICE affiché ("Sens 1 — 0°
+ * Convertit un code interne SE1..SE8 en libellé flexo affiché ("Sens 1 — 0°
  * Extérieur · droite avant"). Code interne préservé pour la BDD/API.
  */
 function formatSensEnroulement(code: SensEnroulement): string {
