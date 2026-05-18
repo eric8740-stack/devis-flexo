@@ -39,6 +39,10 @@ from app.services.optimisation.bat_calculs import (
     calcul_rendement,
 )
 from app.services.optimisation.moteur import optimiser_pose
+from app.services.optimisation.rotation_se import (
+    rotation_vue_a_deg,
+    rotation_vue_c_deg,
+)
 from app.services.optimisation.types import (
     ConfigurationPose,
     ContrainteClient,
@@ -392,6 +396,8 @@ def _to_config_out(
         sens_enroulement=sens_enroulement,  # type: ignore[arg-type]
         machines_compatibles=list(c.machines_compatibles),
         noms_machines_compatibles=noms_machines,
+        rotation_vue_a_deg=rotation_vue_a_deg(sens_enroulement),
+        rotation_vue_c_deg=rotation_vue_c_deg(sens_enroulement),
         # Souveraineté commerciale + lacets
         intervalle_laize_recommande_mm=round(intervalle_laize_recommande_mm, 2),
         intervalle_laize_applique_mm=round(intervalle_laize_applique_mm, 2),

@@ -266,7 +266,9 @@ function VuePlaque({
             const py = oy + row * poseH;
             const cxA = px + poseW / 2;
             const cyA = py + poseH / 2;
-            const aRotation = parseSE(config.sens_enroulement).rotation;
+            // Rotation VUE A calculée backend (cf rotation_se.py),
+            // référentiel sens machine — AVANCE verticale.
+            const aRotation = config.rotation_vue_a_deg;
             return (
               <g key={`pose-${row}-${col}`}>
                 <rect
@@ -752,11 +754,15 @@ function VueBobineFille({
           opacity={0.5}
         />
 
-        {/* VUE C — A TOUJOURS DEBOUT (rotation 0). C'est un schéma de
-            lisibilité commerciale du point de vue client final. Le sens
-            ext/int est porté par la VUE B (image bobine) + le badge SE. */}
+        {/* VUE C — rotation A selon sens d'enroulement, référentiel client
+            (horizontal, déroulement vers la droite). Calculée backend
+            (rotation_vue_c_deg). Les paires ext/int partagent la même
+            rotation : seule la face dehors/dedans diffère côté VUE B. */}
         {Array.from({ length: NB_ETIQ_AFFICHEES }).map((_, i) => {
           const px = ox + i * (etiqW + intervalleDevUnits);
+          const cxA = px + etiqW / 2;
+          const cyA = oy + etiqH / 2;
+          const aRotation = config.rotation_vue_c_deg;
           return (
             <g key={i}>
               <rect
@@ -768,17 +774,19 @@ function VueBobineFille({
                 stroke={etiqStroke}
                 strokeWidth={0.8}
               />
-              <text
-                x={px + etiqW / 2}
-                y={oy + etiqH / 2}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={etiqH * 0.5}
-                fontWeight={700}
-                fill={aFill}
-              >
-                A
-              </text>
+              <g transform={`translate(${cxA} ${cyA}) rotate(${aRotation})`}>
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={etiqH * 0.5}
+                  fontWeight={700}
+                  fill={aFill}
+                >
+                  A
+                </text>
+              </g>
             </g>
           );
         })}

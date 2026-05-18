@@ -225,6 +225,10 @@ class OptimisationConfigOut(BaseModel):
     machines_compatibles: list[int]
     # Noms machines équivalentes — facilité d'affichage UI (au lieu d'IDs).
     noms_machines_compatibles: list[str]
+    # Rotations du A pour le rendu SVG des vues BAT (cf. rotation_se.py).
+    # Découplées : VUE A en sens machine, VUE C en sens client.
+    rotation_vue_a_deg: int
+    rotation_vue_c_deg: int
 
     # ---- Souveraineté commerciale (Règle 7) — écho des forçages ------------
     # Valeurs "recommandées par le moteur" vs "appliquées effectivement".

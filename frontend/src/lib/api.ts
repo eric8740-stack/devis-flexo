@@ -1039,6 +1039,10 @@ export interface OptimisationConfigOut {
   sens_enroulement: SensEnroulement;
   machines_compatibles: number[];
   noms_machines_compatibles: string[];
+  // Rotation A pour VUE A (sens machine) et VUE C (sens client). Calculées
+  // backend depuis SE (cf services/optimisation/rotation_se.py).
+  rotation_vue_a_deg: number;
+  rotation_vue_c_deg: number;
   // Souveraineté commerciale
   intervalle_laize_recommande_mm: number;
   intervalle_laize_applique_mm: number;
