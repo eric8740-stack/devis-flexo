@@ -17,9 +17,11 @@ from app.models import (
     CylindreMagnetique,
     Entreprise,
     MachineImprimerie,
+    Matiere,
     OptionFabrication,
     User,
 )
+from app.schemas.matiere import MatiereOut
 from app.schemas.optimisation import (
     OptimisationCalculerRequest,
     OptimisationCalculerResponse,
@@ -112,6 +114,66 @@ def post_calculer(
     db: Session = Depends(get_db),
 ) -> OptimisationCalculerResponse:
     """Calcule le top 3 configurations de pose pour le devis donné."""
+    # === Matière : vérif scope AVANT toute autre logique (sécurité d'abord) ===
+    matiere_obj: Matiere | None = None
+    epaisseur_catalogue_um: int | None = None
+    matiere_transparente_finale = payload.matiere_est_transparente
+    if payload.matiere_id is not None:
+        matiere_obj = (
+            db.query(Matiere)
+            .filter(
+                Matiere.id == payload.matiere_id,
+                Matiere.entreprise_id == user.entreprise_id,
+            )
+            .first()
+        )
+        if matiere_obj is None:
+            # Anti-énumération multi-tenant : 404 si pas du tenant.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Matière introuvable",
+            )
+        epaisseur_catalogue_um = matiere_obj.epaisseur_microns
+        # La transparence devient automatiquement celle de la matière (la valeur
+        # `matiere_est_transparente` du payload est ignorée si une matière est
+        # sélectionnée, par contrat UI : champ read-only quand select dispo).
+        matiere_transparente_finale = matiere_obj.est_transparent
+
+    # Épaisseur appliquée : forçage > catalogue > legacy payload epaisseur_um
+    forcage_epaisseur = payload.epaisseur_matiere_force_um is not None
+    if forcage_epaisseur:
+        epaisseur_appliquee_um = int(payload.epaisseur_matiere_force_um)  # type: ignore[arg-type]
+    elif epaisseur_catalogue_um is not None:
+        epaisseur_appliquee_um = int(epaisseur_catalogue_um)
+    else:
+        epaisseur_appliquee_um = int(payload.epaisseur_matiere_um)
+
+    # Intervalle dev "recommandé" = ce que le moteur aurait choisi sans forçage
+    # (max imprimeur / client). Sert d'écho de souveraineté pour le frontend.
+    intervalle_dev_recommande = max(
+        payload.intervalle_dev_min_mm,
+        payload.contrainte_client.intervalle_dev_min_mm,
+    )
+    forcage_intervalle_dev = payload.intervalle_dev_force_mm is not None
+
+    # Logique moteur :
+    #  - Pas de forçage → on passe les valeurs natives, le moteur gère le
+    #    message contrainte_client et choisit le max imprimeur/client.
+    #  - Forçage → on impose la valeur en plancher imprimeur ET on neutralise
+    #    la contrainte client pour s'assurer que le moteur applique cette
+    #    valeur (et seulement celle-ci).
+    if forcage_intervalle_dev:
+        moteur_intervalle_dev_min = float(payload.intervalle_dev_force_mm)  # type: ignore[arg-type]
+        moteur_contrainte_client = ContrainteClient(intervalle_dev_min_mm=0.0)
+        intervalle_dev_applique = moteur_intervalle_dev_min
+    else:
+        moteur_intervalle_dev_min = payload.intervalle_dev_min_mm
+        moteur_contrainte_client = ContrainteClient(
+            intervalle_dev_min_mm=payload.contrainte_client.intervalle_dev_min_mm
+        )
+        intervalle_dev_applique = intervalle_dev_recommande
+
+    # === Chargement catalogue tenant (options, cylindres, machines, barèmes) ===
     try:
         options_dc = charger_options_par_codes(
             db, user.entreprise_id, payload.options_codes
@@ -142,10 +204,10 @@ def post_calculer(
             rayon_angles_mm=payload.format.rayon_angles_mm,
             forme_courbe=payload.format.forme_courbe,
         ),
-        intervalle_dev_min_mm=payload.intervalle_dev_min_mm,
+        intervalle_dev_min_mm=moteur_intervalle_dev_min,
         nb_couleurs_impression=payload.nb_couleurs_impression,
         quantite=payload.quantite,
-        matiere_est_transparente=payload.matiere_est_transparente,
+        matiere_est_transparente=matiere_transparente_finale,
         options=options_dc,
         cylindres=cylindres,
         machines=machines,
@@ -153,17 +215,12 @@ def post_calculer(
         bareme_effet_banane=baremes["effet_banane"],
         bareme_compensation=baremes["compensation_laize_dev"],
         bareme_confort_roulage=baremes["confort_roulage"],
-        contrainte_client=ContrainteClient(
-            intervalle_dev_min_mm=payload.contrainte_client.intervalle_dev_min_mm
-        ),
+        contrainte_client=moteur_contrainte_client,
     )
 
     out = optimiser_pose(inp)
 
-    # PR #9.1 — enrichir chaque config du top 3 avec les calculs BAT.
-    # On charge l'entreprise pour récupérer les 4 paramètres tenant
-    # (chute, palier, marge_liner, refilage), et un index cyl_id → dev
-    # pour retrouver Z (le moteur ne porte pas Z dans la config out).
+    # === Enrichissement BAT du top 3 ====================================
     entreprise = db.query(Entreprise).filter_by(id=user.entreprise_id).one()
     z_par_cyl = {c.id: float(c.developpe_mm) for c in
                  db.query(CylindreMagnetique)
@@ -177,8 +234,31 @@ def post_calculer(
     palier = entreprise.palier_laize_papier_mm
     marge_liner = float(entreprise.marge_liner_mm)
 
+    matiere_out = (
+        MatiereOut.model_validate(matiere_obj) if matiere_obj is not None else None
+    )
+
     configurations_out: list[OptimisationConfigOut] = []
     for c in out.configurations:
+        # Intervalle laize : recommandé par le moteur vs forcé par l'utilisateur
+        intervalle_laize_recommande = float(c.intervalle_laize_reel_mm)
+        forcage_intervalle_laize = payload.intervalle_laize_force_mm is not None
+        intervalle_laize_applique = (
+            float(payload.intervalle_laize_force_mm)  # type: ignore[arg-type]
+            if forcage_intervalle_laize
+            else intervalle_laize_recommande
+        )
+
+        # Lacets : symétriques par défaut (intervalle_laize_applique / 2),
+        # asymétriques si l'utilisateur les a explicitement forcés.
+        if payload.lacets_asymetriques and payload.lacet_droit_mm is not None and payload.lacet_gauche_mm is not None:
+            lacet_droit = float(payload.lacet_droit_mm)
+            lacet_gauche = float(payload.lacet_gauche_mm)
+        else:
+            moitie = intervalle_laize_applique / 2
+            lacet_droit = moitie
+            lacet_gauche = moitie
+
         configurations_out.append(
             _to_config_out(
                 c=c,
@@ -194,8 +274,24 @@ def post_calculer(
                 palier_mm=palier,
                 marge_liner_mm=marge_liner,
                 mandrin_mm=payload.mandrin_mm,
-                epaisseur_matiere_um=payload.epaisseur_matiere_um,
+                epaisseur_matiere_um=float(epaisseur_appliquee_um),
                 sens_enroulement=payload.sens_enroulement,
+                # Souveraineté + lacets
+                intervalle_laize_recommande_mm=intervalle_laize_recommande,
+                intervalle_laize_applique_mm=intervalle_laize_applique,
+                forcage_intervalle_laize=forcage_intervalle_laize,
+                motif_forcage_intervalle_laize=payload.motif_forcage_intervalle_laize,
+                intervalle_dev_recommande_mm=intervalle_dev_recommande,
+                intervalle_dev_applique_mm=intervalle_dev_applique,
+                forcage_intervalle_dev=forcage_intervalle_dev,
+                motif_forcage_intervalle_dev=payload.motif_forcage_intervalle_dev,
+                lacet_droit_mm=lacet_droit,
+                lacet_gauche_mm=lacet_gauche,
+                lacets_asymetriques=payload.lacets_asymetriques,
+                matiere_out=matiere_out,
+                epaisseur_appliquee_um=epaisseur_appliquee_um,
+                forcage_epaisseur=forcage_epaisseur,
+                motif_forcage_epaisseur=payload.motif_forcage_epaisseur,
             )
         )
 
@@ -222,6 +318,22 @@ def _to_config_out(
     mandrin_mm: int,
     epaisseur_matiere_um: float,
     sens_enroulement: str,
+    # Souveraineté commerciale + lacets
+    intervalle_laize_recommande_mm: float,
+    intervalle_laize_applique_mm: float,
+    forcage_intervalle_laize: bool,
+    motif_forcage_intervalle_laize: str | None,
+    intervalle_dev_recommande_mm: float,
+    intervalle_dev_applique_mm: float,
+    forcage_intervalle_dev: bool,
+    motif_forcage_intervalle_dev: str | None,
+    lacet_droit_mm: float,
+    lacet_gauche_mm: float,
+    lacets_asymetriques: bool,
+    matiere_out: MatiereOut | None,
+    epaisseur_appliquee_um: int,
+    forcage_epaisseur: bool,
+    motif_forcage_epaisseur: str | None,
 ) -> OptimisationConfigOut:
     """Map ConfigurationPose → OptimisationConfigOut avec champs BAT calculés."""
     laize_plaque = calcul_laize_plaque(
@@ -280,4 +392,20 @@ def _to_config_out(
         sens_enroulement=sens_enroulement,  # type: ignore[arg-type]
         machines_compatibles=list(c.machines_compatibles),
         noms_machines_compatibles=noms_machines,
+        # Souveraineté commerciale + lacets
+        intervalle_laize_recommande_mm=round(intervalle_laize_recommande_mm, 2),
+        intervalle_laize_applique_mm=round(intervalle_laize_applique_mm, 2),
+        forcage_intervalle_laize=forcage_intervalle_laize,
+        motif_forcage_intervalle_laize=motif_forcage_intervalle_laize,
+        intervalle_dev_recommande_mm=round(intervalle_dev_recommande_mm, 2),
+        intervalle_dev_applique_mm=round(intervalle_dev_applique_mm, 2),
+        forcage_intervalle_dev=forcage_intervalle_dev,
+        motif_forcage_intervalle_dev=motif_forcage_intervalle_dev,
+        lacet_droit_mm=round(lacet_droit_mm, 2),
+        lacet_gauche_mm=round(lacet_gauche_mm, 2),
+        lacets_asymetriques=lacets_asymetriques,
+        matiere=matiere_out,
+        epaisseur_appliquee_um=int(epaisseur_appliquee_um),
+        forcage_epaisseur=forcage_epaisseur,
+        motif_forcage_epaisseur=motif_forcage_epaisseur,
     )

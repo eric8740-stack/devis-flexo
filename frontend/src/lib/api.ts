@@ -988,6 +988,17 @@ export interface OptimisationCalculerRequest {
   mandrin_mm?: number;
   sens_enroulement?: SensEnroulement;
   epaisseur_matiere_um?: number;
+  // PR Souveraineté commerciale (Règle 7)
+  matiere_id?: number | null;
+  epaisseur_matiere_force_um?: number | null;
+  motif_forcage_epaisseur?: string | null;
+  intervalle_laize_force_mm?: number | null;
+  motif_forcage_intervalle_laize?: string | null;
+  intervalle_dev_force_mm?: number | null;
+  motif_forcage_intervalle_dev?: string | null;
+  lacets_asymetriques?: boolean;
+  lacet_droit_mm?: number | null;
+  lacet_gauche_mm?: number | null;
 }
 
 export interface OptimisationConfigOut {
@@ -1028,6 +1039,22 @@ export interface OptimisationConfigOut {
   sens_enroulement: SensEnroulement;
   machines_compatibles: number[];
   noms_machines_compatibles: string[];
+  // Souveraineté commerciale
+  intervalle_laize_recommande_mm: number;
+  intervalle_laize_applique_mm: number;
+  forcage_intervalle_laize: boolean;
+  motif_forcage_intervalle_laize: string | null;
+  intervalle_dev_recommande_mm: number;
+  intervalle_dev_applique_mm: number;
+  forcage_intervalle_dev: boolean;
+  motif_forcage_intervalle_dev: string | null;
+  lacet_droit_mm: number;
+  lacet_gauche_mm: number;
+  lacets_asymetriques: boolean;
+  matiere: MatiereOut | null;
+  epaisseur_appliquee_um: number;
+  forcage_epaisseur: boolean;
+  motif_forcage_epaisseur: string | null;
 }
 
 export interface OptimisationCalculerResponse {
@@ -1057,6 +1084,29 @@ export interface OptionDisponible {
 
 export const getOptionsDisponibles = () =>
   apiFetch<OptionDisponible[]>("/api/optimisation/options-disponibles");
+
+// ---------------------------------------------------------------------------
+// Matières — catalogue tenant pour sélecteur /optimisation
+// ---------------------------------------------------------------------------
+
+export interface MatiereOut {
+  id: number;
+  code: string;
+  libelle: string;
+  categorie: string | null;
+  sous_type: string | null;
+  grammage_gm2: number | null;
+  epaisseur_microns: number | null;
+  est_transparent: boolean;
+  opacite_pct: string | null;
+  certifications_sanitaires: string[] | null;
+  certifications_env: string[] | null;
+  adhesifs_compatibles: string[] | null;
+  actif: boolean;
+}
+
+export const listMatieres = () =>
+  apiFetch<MatiereOut[]>("/api/matieres");
 
 // ---------------------------------------------------------------------------
 // Paramètres > Options de fabrication (CRUD tenant)

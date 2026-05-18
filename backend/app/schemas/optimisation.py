@@ -8,7 +8,9 @@ extra='forbid' partout pour rejeter les champs accessoires.
 """
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.schemas.matiere import MatiereOut
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +86,89 @@ class OptimisationCalculerRequest(BaseModel):
         description="Épaisseur totale matière (étiq + liner adhésif), µm",
     )
 
+    # ---- Souveraineté commerciale (Règle 7) ---------------------------------
+    # Matière FK obligatoire. Le moteur lit l'épaisseur + transparence depuis
+    # la matière, surchargeables via `epaisseur_matiere_force_um` et
+    # `matiere_est_transparente` (déjà existant ci-dessus).
+    matiere_id: int | None = Field(
+        None,
+        description=(
+            "FK matière du tenant. Optionnel pour rétro-compat (les anciens "
+            "clients qui n'envoient pas matiere_id retombent sur le champ "
+            "epaisseur_matiere_um direct). Recommandé en pratique."
+        ),
+    )
+    epaisseur_matiere_force_um: int | None = Field(
+        None,
+        ge=10,
+        le=1000,
+        description=(
+            "Si renseignée, surcharge l'épaisseur du catalogue matière. "
+            "Motif obligatoire (>=10 caractères). Règle 7."
+        ),
+    )
+    motif_forcage_epaisseur: str | None = Field(None, max_length=500)
+
+    # Intervalle laize forçable (souveraineté). NULL = moteur libre de
+    # choisir selon ses règles (palier suggérable / max 5 mm).
+    intervalle_laize_force_mm: float | None = Field(
+        None,
+        ge=0,
+        le=50,
+        description="Force la valeur d'intervalle laize. Motif obligatoire.",
+    )
+    motif_forcage_intervalle_laize: str | None = Field(None, max_length=500)
+
+    # Intervalle dev forçable (souveraineté — audit règle 7).
+    intervalle_dev_force_mm: float | None = Field(
+        None,
+        ge=0,
+        le=50,
+        description="Force la valeur d'intervalle dev. Motif obligatoire.",
+    )
+    motif_forcage_intervalle_dev: str | None = Field(None, max_length=500)
+
+    # Lacets bobine fille (marge liner siliconé de chaque côté de l'étiquette).
+    # Par défaut symétrique = intervalle_laize_applique / 2. Le client peut
+    # demander des lacets asymétriques (rebobinage particulier).
+    lacets_asymetriques: bool = False
+    lacet_droit_mm: float | None = Field(None, ge=0.5, le=50)
+    lacet_gauche_mm: float | None = Field(None, ge=0.5, le=50)
+
+    @model_validator(mode="after")
+    def _valider_forcages_et_lacets(self) -> "OptimisationCalculerRequest":
+        # Forçage intervalle laize → motif obligatoire ≥ 10 chars
+        if self.intervalle_laize_force_mm is not None:
+            motif = (self.motif_forcage_intervalle_laize or "").strip()
+            if len(motif) < 10:
+                raise ValueError(
+                    "Forçage intervalle laize : motif obligatoire (10 caractères min)."
+                )
+
+        # Forçage intervalle dev → motif obligatoire ≥ 10 chars
+        if self.intervalle_dev_force_mm is not None:
+            motif = (self.motif_forcage_intervalle_dev or "").strip()
+            if len(motif) < 10:
+                raise ValueError(
+                    "Forçage intervalle dev : motif obligatoire (10 caractères min)."
+                )
+
+        # Forçage épaisseur → motif obligatoire ≥ 10 chars
+        if self.epaisseur_matiere_force_um is not None:
+            motif = (self.motif_forcage_epaisseur or "").strip()
+            if len(motif) < 10:
+                raise ValueError(
+                    "Forçage épaisseur matière : motif obligatoire (10 caractères min)."
+                )
+
+        # Lacets asymétriques → les deux valeurs obligatoires + min 0.5 mm
+        if self.lacets_asymetriques:
+            if self.lacet_droit_mm is None or self.lacet_gauche_mm is None:
+                raise ValueError(
+                    "Lacets asymétriques : lacet_droit_mm et lacet_gauche_mm obligatoires."
+                )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # Output
@@ -140,6 +225,30 @@ class OptimisationConfigOut(BaseModel):
     machines_compatibles: list[int]
     # Noms machines équivalentes — facilité d'affichage UI (au lieu d'IDs).
     noms_machines_compatibles: list[str]
+
+    # ---- Souveraineté commerciale (Règle 7) — écho des forçages ------------
+    # Valeurs "recommandées par le moteur" vs "appliquées effectivement".
+    # Le frontend les compare pour afficher l'écart le cas échéant.
+    intervalle_laize_recommande_mm: float
+    intervalle_laize_applique_mm: float
+    forcage_intervalle_laize: bool
+    motif_forcage_intervalle_laize: str | None = None
+
+    intervalle_dev_recommande_mm: float
+    intervalle_dev_applique_mm: float
+    forcage_intervalle_dev: bool
+    motif_forcage_intervalle_dev: str | None = None
+
+    # Lacets bobine fille (calculés selon paramètres entrée).
+    lacet_droit_mm: float
+    lacet_gauche_mm: float
+    lacets_asymetriques: bool
+
+    # Matière sélectionnée + épaisseur appliquée (forcée ou catalogue).
+    matiere: MatiereOut | None = None
+    epaisseur_appliquee_um: int
+    forcage_epaisseur: bool
+    motif_forcage_epaisseur: str | None = None
 
 
 class OptimisationCalculerResponse(BaseModel):

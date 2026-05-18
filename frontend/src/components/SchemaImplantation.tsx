@@ -76,10 +76,15 @@ export function SchemaImplantation({
 // ---------------------------------------------------------------------------
 
 /**
- * Selon la convention métier flexo 8 sens :
- *   SE1=0° ext   SE2=180° ext   SE3=270° ext   SE4=90° ext
- *   SE5=0° int   SE6=180° int   SE7=270° int   SE8=90° int
- * On dérive la rotation du A et le flag "face intérieur" (bobine inversée).
+ * Convention métier "X avant" = côté X de l'étiquette pointe vers AVANCE
+ * (vers le bas de la VUE A, sens de défilement machine). Le numéro de sens
+ * désigne quel côté sort en avant :
+ *   Sens 1/5 : droite avant  → A couché tête à gauche (rotation 270°)
+ *   Sens 2/6 : gauche avant  → A couché tête à droite (rotation 90°)
+ *   Sens 3/7 : pied avant    → A debout normal (rotation 0°)
+ *   Sens 4/8 : tête avant    → A renversé tête en bas (rotation 180°)
+ * Idem face int ou ext (la face change l'enroulement bobine, pas la
+ * rotation visuelle du A en sortie de presse).
  */
 function parseSE(se: SensEnroulement): {
   rotation: 0 | 90 | 180 | 270;
@@ -89,14 +94,14 @@ function parseSE(se: SensEnroulement): {
     SensEnroulement,
     { rotation: 0 | 90 | 180 | 270; faceInt: boolean }
   > = {
-    SE1: { rotation: 0, faceInt: false },
-    SE2: { rotation: 180, faceInt: false },
-    SE3: { rotation: 270, faceInt: false },
-    SE4: { rotation: 90, faceInt: false },
-    SE5: { rotation: 0, faceInt: true },
-    SE6: { rotation: 180, faceInt: true },
-    SE7: { rotation: 270, faceInt: true },
-    SE8: { rotation: 90, faceInt: true },
+    SE1: { rotation: 270, faceInt: false }, // droite avant
+    SE2: { rotation: 90, faceInt: false },  // gauche avant
+    SE3: { rotation: 0, faceInt: false },   // pied avant
+    SE4: { rotation: 180, faceInt: false }, // tête avant
+    SE5: { rotation: 270, faceInt: true },
+    SE6: { rotation: 90, faceInt: true },
+    SE7: { rotation: 0, faceInt: true },
+    SE8: { rotation: 180, faceInt: true },
   };
   return map[se];
 }
@@ -578,12 +583,12 @@ function VueBobine({
         <Cote
           letter="b"
           label="lacet droit"
-          value={`${config.chute_laterale_reelle_mm} mm`}
+          value={`${config.lacet_droit_mm} mm`}
         />
         <Cote
           letter="c"
           label="lacet gauche"
-          value={`${config.chute_laterale_reelle_mm} mm`}
+          value={`${config.lacet_gauche_mm} mm`}
         />
         <Cote
           letter="d"
@@ -747,11 +752,11 @@ function VueBobineFille({
           opacity={0.5}
         />
 
+        {/* VUE C — A TOUJOURS DEBOUT (rotation 0). C'est un schéma de
+            lisibilité commerciale du point de vue client final. Le sens
+            ext/int est porté par la VUE B (image bobine) + le badge SE. */}
         {Array.from({ length: NB_ETIQ_AFFICHEES }).map((_, i) => {
           const px = ox + i * (etiqW + intervalleDevUnits);
-          const cxA = px + etiqW / 2;
-          const cyA = oy + etiqH / 2;
-          const aRotation = parseSE(config.sens_enroulement).rotation;
           return (
             <g key={i}>
               <rect
@@ -763,19 +768,17 @@ function VueBobineFille({
                 stroke={etiqStroke}
                 strokeWidth={0.8}
               />
-              <g transform={`translate(${cxA} ${cyA}) rotate(${aRotation})`}>
-                <text
-                  x={0}
-                  y={0}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={etiqH * 0.5}
-                  fontWeight={700}
-                  fill={aFill}
-                >
-                  A
-                </text>
-              </g>
+              <text
+                x={px + etiqW / 2}
+                y={oy + etiqH / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={etiqH * 0.5}
+                fontWeight={700}
+                fill={aFill}
+              >
+                A
+              </text>
             </g>
           );
         })}
