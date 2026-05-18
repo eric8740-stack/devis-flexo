@@ -221,6 +221,14 @@ class OptimisationConfigOut(BaseModel):
     diametre_bobine_mm: int
     laize_liner_mm: float
     sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8"]
+    # Libellé officiel ICE à afficher dans le BAT et le formulaire.
+    # Ex: "0° Extérieur droite avant". Calculé backend (rotation_se.py).
+    sens_enroulement_libelle: str
+    # Rotations à appliquer au A en VUE A (planche presse, sens machine) et
+    # VUE C (bobine fille chez le client). Mapping officiel verrouillé
+    # 18/05/2026 — paires ext/int partagent la même rotation.
+    rotation_vue_a_deg: int
+    rotation_vue_c_deg: int
     # Machines équivalentes (dédoublonnage). Au moins l'élément `machine_id`.
     machines_compatibles: list[int]
     # Noms machines équivalentes — facilité d'affichage UI (au lieu d'IDs).

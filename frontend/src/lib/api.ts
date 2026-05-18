@@ -1037,6 +1037,12 @@ export interface OptimisationConfigOut {
   diametre_bobine_mm: number;
   laize_liner_mm: number;
   sens_enroulement: SensEnroulement;
+  // Libellé officiel ICE à afficher dans le BAT (ex: "0° Extérieur droite avant").
+  sens_enroulement_libelle: string;
+  // Rotations A en VUE A (planche presse) et VUE C (bobine fille client).
+  // Mapping verrouillé 18/05/2026 — paires ext/int partagent même rotation.
+  rotation_vue_a_deg: number;
+  rotation_vue_c_deg: number;
   machines_compatibles: number[];
   noms_machines_compatibles: string[];
   // Souveraineté commerciale

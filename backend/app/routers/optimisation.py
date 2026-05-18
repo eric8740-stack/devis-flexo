@@ -45,6 +45,11 @@ from app.services.optimisation.types import (
     Format,
     OptimisationInput,
 )
+from app.services.rotation_se import (
+    get_libelle_officiel,
+    get_rotation_vue_a,
+    get_rotation_vue_c,
+)
 from app.services.optimisation_loader import (
     OptimisationLoaderError,
     charger_baremes,
@@ -55,6 +60,12 @@ from app.services.optimisation_loader import (
 
 
 router = APIRouter(prefix="/api/optimisation", tags=["optimisation"])
+
+
+def _sens_int(sens_enroulement: str) -> int:
+    """Convertit le code API ('SE1'..'SE8') vers l'entier (1..8) utilisé
+    par le module rotation_se (single source of truth backend)."""
+    return int(sens_enroulement.replace("SE", ""))
 
 
 @router.get(
@@ -390,6 +401,9 @@ def _to_config_out(
         diametre_bobine_mm=diametre,
         laize_liner_mm=round(laize_liner, 2),
         sens_enroulement=sens_enroulement,  # type: ignore[arg-type]
+        sens_enroulement_libelle=get_libelle_officiel(_sens_int(sens_enroulement)),
+        rotation_vue_a_deg=get_rotation_vue_a(_sens_int(sens_enroulement)),
+        rotation_vue_c_deg=get_rotation_vue_c(_sens_int(sens_enroulement)),
         machines_compatibles=list(c.machines_compatibles),
         noms_machines_compatibles=noms_machines,
         # Souveraineté commerciale + lacets

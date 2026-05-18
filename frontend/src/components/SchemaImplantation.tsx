@@ -76,34 +76,15 @@ export function SchemaImplantation({
 // ---------------------------------------------------------------------------
 
 /**
- * Convention métier "X avant" = côté X de l'étiquette pointe vers AVANCE
- * (vers le bas de la VUE A, sens de défilement machine). Le numéro de sens
- * désigne quel côté sort en avant :
- *   Sens 1/5 : droite avant  → A couché tête à gauche (rotation 270°)
- *   Sens 2/6 : gauche avant  → A couché tête à droite (rotation 90°)
- *   Sens 3/7 : pied avant    → A debout normal (rotation 0°)
- *   Sens 4/8 : tête avant    → A renversé tête en bas (rotation 180°)
- * Idem face int ou ext (la face change l'enroulement bobine, pas la
- * rotation visuelle du A en sortie de presse).
+ * Indique si le sens est "intérieur" (faces dedans, étiquettes vues à
+ * travers le liner siliconé translucide → teinte jaune-beige).
+ *
+ * Les ROTATIONS du A sur VUE A et VUE C viennent désormais directement du
+ * backend (`config.rotation_vue_a_deg` / `rotation_vue_c_deg`, single
+ * source of truth dans `services/rotation_se.py`). Plus de mapping local.
  */
-function parseSE(se: SensEnroulement): {
-  rotation: 0 | 90 | 180 | 270;
-  faceInt: boolean;
-} {
-  const map: Record<
-    SensEnroulement,
-    { rotation: 0 | 90 | 180 | 270; faceInt: boolean }
-  > = {
-    SE1: { rotation: 270, faceInt: false }, // droite avant
-    SE2: { rotation: 90, faceInt: false },  // gauche avant
-    SE3: { rotation: 0, faceInt: false },   // pied avant
-    SE4: { rotation: 180, faceInt: false }, // tête avant
-    SE5: { rotation: 270, faceInt: true },
-    SE6: { rotation: 90, faceInt: true },
-    SE7: { rotation: 0, faceInt: true },
-    SE8: { rotation: 180, faceInt: true },
-  };
-  return map[se];
+function isFaceInt(se: SensEnroulement): boolean {
+  return ["SE5", "SE6", "SE7", "SE8"].includes(se);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +247,7 @@ function VuePlaque({
             const py = oy + row * poseH;
             const cxA = px + poseW / 2;
             const cyA = py + poseH / 2;
-            const aRotation = parseSE(config.sens_enroulement).rotation;
+            const aRotation = config.rotation_vue_a_deg;
             return (
               <g key={`pose-${row}-${col}`}>
                 <rect
@@ -554,7 +535,7 @@ function VueBobine({
       <div className="overflow-hidden rounded border border-border bg-white">
         <Image
           src={`/assets/bobines/sens-${idx}.png`}
-          alt={`Bobine ${config.sens_enroulement} — ${labelSE(config.sens_enroulement)}`}
+          alt={`Bobine ${config.sens_enroulement} — ${config.sens_enroulement_libelle}`}
           width={1200}
           height={1200}
           className="h-auto w-full"
@@ -563,13 +544,10 @@ function VueBobine({
         />
       </div>
 
-      {/* Badge SE */}
+      {/* Badge SE — libellé officiel ICE depuis backend */}
       <div className="rounded border border-blue-300 bg-blue-50/50 px-2 py-1">
         <div className="text-xs font-semibold text-blue-900">
-          {senseAffichage(config.sens_enroulement)}
-          <span className="ml-1 font-normal">
-            — {labelSE(config.sens_enroulement).split(" — ")[1] ?? ""}
-          </span>
+          {config.sens_enroulement_libelle}
         </div>
       </div>
 
@@ -643,25 +621,6 @@ function Cote({
   );
 }
 
-function labelSE(se: SensEnroulement): string {
-  const map: Record<SensEnroulement, string> = {
-    SE1: "Sens 1 — 0° Extérieur droite avant",
-    SE2: "Sens 2 — 180° Extérieur gauche avant",
-    SE3: "Sens 3 — 270° Extérieur pied avant",
-    SE4: "Sens 4 — 90° Extérieur tête avant",
-    SE5: "Sens 5 — 0° Intérieur droite avant",
-    SE6: "Sens 6 — 180° Intérieur gauche avant",
-    SE7: "Sens 7 — 270° Intérieur pied avant",
-    SE8: "Sens 8 — 90° Intérieur tête avant",
-  };
-  return map[se];
-}
-
-function senseAffichage(se: SensEnroulement): string {
-  const n = parseInt(se.replace("SE", ""), 10);
-  return `Sens ${n}`;
-}
-
 // ---------------------------------------------------------------------------
 // VUE C — bobine fille déroulée (chez le client)
 // ---------------------------------------------------------------------------
@@ -675,7 +634,7 @@ function VueBobineFille({
   laizeEtiqMm: number;
   devEtiqMm: number;
 }) {
-  const { faceInt } = parseSE(config.sens_enroulement);
+  const faceInt = isFaceInt(config.sens_enroulement);
   const VBW = 720;
   const VBH = 260;
   const NB_ETIQ_AFFICHEES = 5;
@@ -703,8 +662,9 @@ function VueBobineFille({
         Vue C — bobine fille déroulée chez le client
       </figcaption>
       <p className="text-xs text-muted-foreground">
-        Laize liner {config.laize_liner_mm} mm ·{" "}
-        {labelSE(config.sens_enroulement)} · ml total {config.ml_total_m} m
+        Laize liner {config.laize_liner_mm} mm · Sens{" "}
+        {config.sens_enroulement.replace("SE", "")} —{" "}
+        {config.sens_enroulement_libelle} · ml total {config.ml_total_m} m
       </p>
       <svg
         viewBox={`0 0 ${VBW} ${VBH}`}
@@ -752,11 +712,15 @@ function VueBobineFille({
           opacity={0.5}
         />
 
-        {/* VUE C — A TOUJOURS DEBOUT (rotation 0). C'est un schéma de
-            lisibilité commerciale du point de vue client final. Le sens
-            ext/int est porté par la VUE B (image bobine) + le badge SE. */}
+        {/* VUE C — rotation A selon mapping officiel verrouillé 18/05/2026
+            (cf services/rotation_se.py). Référentiel client : défilement
+            horizontal vers la droite. Paires ext/int partagent même
+            rotation (la face dehors/dedans est portée par VUE B). */}
         {Array.from({ length: NB_ETIQ_AFFICHEES }).map((_, i) => {
           const px = ox + i * (etiqW + intervalleDevUnits);
+          const cxA = px + etiqW / 2;
+          const cyA = oy + etiqH / 2;
+          const aRotation = config.rotation_vue_c_deg;
           return (
             <g key={i}>
               <rect
@@ -768,17 +732,19 @@ function VueBobineFille({
                 stroke={etiqStroke}
                 strokeWidth={0.8}
               />
-              <text
-                x={px + etiqW / 2}
-                y={oy + etiqH / 2}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={etiqH * 0.5}
-                fontWeight={700}
-                fill={aFill}
-              >
-                A
-              </text>
+              <g transform={`translate(${cxA} ${cyA}) rotate(${aRotation})`}>
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={etiqH * 0.5}
+                  fontWeight={700}
+                  fill={aFill}
+                >
+                  A
+                </text>
+              </g>
             </g>
           );
         })}
