@@ -532,7 +532,10 @@ function VueBobine({
   // Convention métier flexographique "format laize × dev" :
   //   laize HORIZONTALE (X en haut), dev VERTICAL (Y à droite).
   //   Géométrie : rectangle horizontal si laize > dev, vertical sinon.
-  //   A pivoté selon rotation_vue_c_deg (single source of truth backend).
+  //   A pivoté selon rotation_vue_a_deg : l'étiquette détachée tenue en
+  //   main par le client porte le A dans son orientation imprimée native
+  //   (= VUE A planche presse), pas dans l'orientation de défilement
+  //   bobine fille (= VUE C). Single source of truth backend.
   const CADRE_MAX_PX = 80;
   const cadreScale = CADRE_MAX_PX / Math.max(devEtiqMm, laizeEtiqMm);
   const cadreW = laizeEtiqMm * cadreScale;
@@ -593,7 +596,7 @@ function VueBobine({
             strokeWidth={1}
           />
           <g
-            transform={`translate(${cadreCx} ${cadreCy}) rotate(${config.rotation_vue_c_deg})`}
+            transform={`translate(${cadreCx} ${cadreCy}) rotate(${config.rotation_vue_a_deg})`}
           >
             <text
               x={0}
