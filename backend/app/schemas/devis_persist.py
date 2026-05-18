@@ -5,12 +5,66 @@ du moteur cost_engine). Ici : DevisCreate / DevisUpdate / DevisListItem /
 DevisDetail / DevisListResponse pour les endpoints CRUD /api/devis.
 
 PK Integer (homogène projet) — divergence vs brief UUID assumée Lot 4a.
+
+Sprint 13 avenant : ajout LotProductionCreate / LotProductionRead +
+champs optionnels `lots` et `quantite_totale` sur DevisCreate, et
+`lots_production` sur DevisDetail. Backward-compat : si `lots` est
+None, le devis est créé en mode legacy (mono-config, sans lot).
 """
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class LotProductionCreate(BaseModel):
+    """Body d'un lot de production dans POST /api/devis (Sprint 13 avenant).
+
+    Reflète les champs nécessaires pour créer une row LotProduction. Les
+    résultats calculés (intervalles, score, coût) seront snapshotés par
+    le router à partir des données candidat sélectionné.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cylindre_id: int
+    machine_id: int
+    nb_poses_dev: int = Field(ge=1)
+    nb_poses_laize: int = Field(ge=1)
+    sens_enroulement: int = Field(ge=1, le=8)
+    quantite: int = Field(ge=1)
+    matiere_id: int
+
+    # Optionnels : snapshot des résultats moteur pour PDF / historique.
+    intervalle_dev_reel_mm: Decimal | None = None
+    intervalle_laize_reel_mm: Decimal | None = None
+    largeur_plaque_mm: Decimal | None = None
+    score_optim: float | None = None
+    cout_lot_ht_eur: Decimal | None = None
+
+
+class LotProductionRead(BaseModel):
+    """Représentation lecture d'un lot dans GET /api/devis/{id} (Sprint 13)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ordre: int
+    cylindre_id: int
+    machine_id: int
+    nb_poses_dev: int
+    nb_poses_laize: int
+    sens_enroulement: int
+    quantite: int
+    matiere_id: int
+    intervalle_dev_reel_mm: Decimal | None
+    intervalle_laize_reel_mm: Decimal | None
+    largeur_plaque_mm: Decimal | None
+    score_optim: float | None
+    cout_lot_ht_eur: Decimal | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class DevisCreate(BaseModel):
@@ -19,6 +73,11 @@ class DevisCreate(BaseModel):
     payload_input et payload_output sont validés côté client (déjà passés
     par le moteur cost_engine via /api/cost/calculer). Stockés en JSON
     pour flexibilité MVP.
+
+    Sprint 13 avenant : `lots` et `quantite_totale` sont optionnels.
+    Si fournis ensemble, le devis créé porte N LotProduction et la
+    somme des quantités par lot doit égaler quantite_totale (validé).
+    Si `lots` est None, comportement legacy mono-config inchangé.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -30,6 +89,31 @@ class DevisCreate(BaseModel):
     # Mode matching : cylindre choisi parmi les 3 candidats (UI Lot 4d).
     cylindre_choisi_z: int | None = None
     cylindre_choisi_nb_etiq: int | None = None
+
+    # Sprint 13 avenant — multi-lots (optionnel pour backward-compat).
+    quantite_totale: int | None = Field(None, ge=1)
+    lots: list[LotProductionCreate] | None = Field(None, min_length=1)
+
+    @model_validator(mode="after")
+    def _valider_somme_quantites_lots(self) -> "DevisCreate":
+        """Si des lots sont fournis, leur somme de quantités doit égaler
+        `quantite_totale` (cf brief Sprint 13 avenant section 7).
+
+        `quantite_totale` doit être fourni quand `lots` est fourni
+        (sinon on ne sait pas valider la cohérence).
+        """
+        if self.lots is not None:
+            if self.quantite_totale is None:
+                raise ValueError(
+                    "Multi-lots : quantite_totale obligatoire quand lots est fourni."
+                )
+            total = sum(lot.quantite for lot in self.lots)
+            if total != self.quantite_totale:
+                raise ValueError(
+                    f"Multi-lots : Σ quantités lots ({total}) "
+                    f"!= quantite_totale ({self.quantite_totale})."
+                )
+        return self
 
 
 class DevisUpdate(BaseModel):
@@ -86,6 +170,9 @@ class DevisDetail(BaseModel):
     format_h_mm: Decimal
     format_l_mm: Decimal
     ht_total_eur: Decimal
+    # Sprint 13 avenant — lots de production (liste vide si devis legacy
+    # mono-config).
+    lots_production: list[LotProductionRead] = Field(default_factory=list)
 
 
 class DevisListResponse(BaseModel):
