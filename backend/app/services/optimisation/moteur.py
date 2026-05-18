@@ -242,29 +242,39 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
             if nb_poses_laize_max == 0:
                 continue
 
-            # Adaptation de l'algo CdC § 613 ("max, max-1, max-2") :
-            # quand l'effet banane exclut les variantes les plus larges
-            # (plaque trop grande pour ce cylindre), on descend jusqu'à
-            # trouver la première variante utilisable. Puis on teste
-            # celle-ci + 2 inférieures (pour avoir des alternatives à
-            # arbitrer). Cap pratique : variante ≥ 1.
-            variante_top: int | None = None
-            for v in range(nb_poses_laize_max, 0, -1):
-                il = _calcul_intervalle_laize(
-                    machine.laize_utile_mm, inp.format.largeur_mm, v
-                )
-                if il is None:
+            # Sprint 13 avenant : forçage du nb poses laize. Si l'utilisateur
+            # force N poses laize, on n'évalue que cette variante (skip si
+            # N > nb_poses_laize_max ou si l'intervalle est négatif).
+            if inp.nb_poses_laize_force is not None:
+                if inp.nb_poses_laize_force > nb_poses_laize_max:
                     continue
-                lp = _calcul_largeur_plaque(inp.format.largeur_mm, v, il)
-                z = lookup_developpe_mini(lp, inp.bareme_effet_banane)
-                if cyl.developpe_mm >= z:
-                    variante_top = v
-                    break
-            if variante_top is None:
-                continue  # aucune variante laize ne passe l'effet banane
+                variantes_a_tester = [inp.nb_poses_laize_force]
+            else:
+                # Adaptation de l'algo CdC § 613 ("max, max-1, max-2") :
+                # quand l'effet banane exclut les variantes les plus larges
+                # (plaque trop grande pour ce cylindre), on descend jusqu'à
+                # trouver la première variante utilisable. Puis on teste
+                # celle-ci + 2 inférieures (pour avoir des alternatives à
+                # arbitrer). Cap pratique : variante ≥ 1.
+                variante_top: int | None = None
+                for v in range(nb_poses_laize_max, 0, -1):
+                    il = _calcul_intervalle_laize(
+                        machine.laize_utile_mm, inp.format.largeur_mm, v
+                    )
+                    if il is None:
+                        continue
+                    lp = _calcul_largeur_plaque(inp.format.largeur_mm, v, il)
+                    z = lookup_developpe_mini(lp, inp.bareme_effet_banane)
+                    if cyl.developpe_mm >= z:
+                        variante_top = v
+                        break
+                if variante_top is None:
+                    continue  # aucune variante laize ne passe l'effet banane
+                variantes_a_tester = [
+                    variante_top - d for d in (0, 1, 2) if variante_top - d > 0
+                ]
 
-            for delta in (0, 1, 2):
-                variante = variante_top - delta
+            for variante in variantes_a_tester:
                 if variante <= 0:
                     continue
                 intervalle_laize = _calcul_intervalle_laize(

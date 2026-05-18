@@ -34,7 +34,10 @@ class OptimisationContrainteClient(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    intervalle_dev_min_mm: float = Field(0.0, ge=0, le=20)
+    # Sprint 13 avenant : default 2 mm (typique machine de pose client).
+    # Mettre 0 si pas de contrainte. Sinon, MAX(min imprimeur, min client)
+    # appliqué côté moteur.
+    intervalle_dev_min_mm: float = Field(2.0, ge=0, le=20)
 
 
 class OptimisationCalculerRequest(BaseModel):
@@ -84,6 +87,20 @@ class OptimisationCalculerRequest(BaseModel):
         ge=10,
         le=1000,
         description="Épaisseur totale matière (étiq + liner adhésif), µm",
+    )
+
+    # Sprint 13 avenant : forçage du nb poses laize. None = comportement
+    # standard (le moteur teste max, max-1, max-2). Sinon, le moteur se
+    # bloque sur N poses laize et calcule l'intervalle laize résultant,
+    # ou skippe le candidat si N * largeur > laize_utile.
+    nb_poses_laize_force: int | None = Field(
+        None,
+        ge=1,
+        le=20,
+        description=(
+            "Si renseigné, force le moteur à se bloquer sur N poses laize "
+            "(et calculer l'intervalle laize résultant)."
+        ),
     )
 
     # ---- Souveraineté commerciale (Règle 7) ---------------------------------

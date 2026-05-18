@@ -999,6 +999,8 @@ export interface OptimisationCalculerRequest {
   lacets_asymetriques?: boolean;
   lacet_droit_mm?: number | null;
   lacet_gauche_mm?: number | null;
+  // Sprint 13 avenant : forçage nb poses laize (null = auto).
+  nb_poses_laize_force?: number | null;
 }
 
 export interface OptimisationConfigOut {

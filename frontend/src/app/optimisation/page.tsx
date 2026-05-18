@@ -109,7 +109,17 @@ export default function OptimisationPage() {
   const [intervalleDevMin, setIntervalleDevMin] = useState<string>("2");
   const [nbCouleurs, setNbCouleurs] = useState<string>("4");
   const [quantite, setQuantite] = useState<string>("10000");
-  const [contrainteClientMm, setContrainteClientMm] = useState<string>("0");
+  // Sprint 13 avenant : default 2 mm (typique machine de pose client). 0 si
+  // pas de contrainte client spécifique.
+  const [contrainteClientMm, setContrainteClientMm] = useState<string>("2");
+
+  // Sprint 13 avenant : forçage nb poses laize.
+  // mode "auto" = comportement standard (moteur teste max, max-1, max-2).
+  // mode "force" = blocage sur N poses laize, intervalle laize résultant calculé.
+  const [nbPosesLaizeMode, setNbPosesLaizeMode] = useState<"auto" | "force">(
+    "auto"
+  );
+  const [nbPosesLaizeForce, setNbPosesLaizeForce] = useState<string>("3");
   const [matiereTransparente, setMatiereTransparente] = useState(false);
 
   // BAT — params volatile MVP 9.1
@@ -243,6 +253,10 @@ export default function OptimisationPage() {
         lacets_asymetriques: lacetsAsymetriques,
         lacet_droit_mm: lacetsAsymetriques ? parseFloat(lacetDroit) : null,
         lacet_gauche_mm: lacetsAsymetriques ? parseFloat(lacetGauche) : null,
+        nb_poses_laize_force:
+          nbPosesLaizeMode === "force"
+            ? parseInt(nbPosesLaizeForce, 10)
+            : null,
       });
       setResponse(r);
       if (r.nb_candidats === 0) {
@@ -418,10 +432,52 @@ export default function OptimisationPage() {
                 onChange={(e) => setContrainteClientMm(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                0 si pas de contrainte spécifique. Sinon, on prend le MAX
-                des deux comme minimum effectif.
+                Par défaut 2 mm. Mettre 0 si pas de contrainte. Sinon
+                MAX(min imprimeur, min client) appliqué.
               </p>
             </div>
+
+            {/* Sprint 13 avenant — Nb poses laize Auto/Forcer */}
+            <div className="space-y-2">
+              <Label>Nb poses laize</Label>
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <label className="flex cursor-pointer items-center gap-1">
+                  <input
+                    type="radio"
+                    name="nbPosesLaizeMode"
+                    checked={nbPosesLaizeMode === "auto"}
+                    onChange={() => setNbPosesLaizeMode("auto")}
+                    className="accent-foreground"
+                  />
+                  <span>Auto</span>
+                </label>
+                <label className="flex cursor-pointer items-center gap-1">
+                  <input
+                    type="radio"
+                    name="nbPosesLaizeMode"
+                    checked={nbPosesLaizeMode === "force"}
+                    onChange={() => setNbPosesLaizeMode("force")}
+                    className="accent-foreground"
+                  />
+                  <span>Forcer</span>
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={nbPosesLaizeForce}
+                  onChange={(e) => setNbPosesLaizeForce(e.target.value)}
+                  disabled={nbPosesLaizeMode === "auto"}
+                  className="w-20"
+                />
+                <span className="text-xs text-muted-foreground">poses</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Auto = le moteur teste les variantes optimales. Forcer = se
+                bloque sur N poses laize (intervalle laize calculé).
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label>Ø Mandrin bobine fille (mm)</Label>
               <div className="flex flex-wrap gap-3 text-sm">
