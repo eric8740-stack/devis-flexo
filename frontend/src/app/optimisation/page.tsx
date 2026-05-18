@@ -17,7 +17,9 @@ import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { useToast } from "@/hooks/use-toast";
 import {
   getOptionsDisponibles,
+  listMatieres,
   postOptimisationCalculer,
+  type MatiereOut,
   type OptimisationCalculerResponse,
   type OptimisationConfigOut,
   type OptionDisponible,
@@ -115,6 +117,21 @@ export default function OptimisationPage() {
   const [sensEnroulement, setSensEnroulement] = useState<SensEnroulement>("SE1");
   const [epaisseurMatiere, setEpaisseurMatiere] = useState<string>("150");
 
+  // Souveraineté commerciale + matière
+  const [matieres, setMatieres] = useState<MatiereOut[] | null>(null);
+  const [matiereId, setMatiereId] = useState<number | null>(null);
+  const [forcerEpaisseur, setForcerEpaisseur] = useState(false);
+  const [motifEpaisseur, setMotifEpaisseur] = useState("");
+  const [forcerIntervalleLaize, setForcerIntervalleLaize] = useState(false);
+  const [intervalleLaizeForce, setIntervalleLaizeForce] = useState<string>("5");
+  const [motifIntervalleLaize, setMotifIntervalleLaize] = useState("");
+  const [forcerIntervalleDev, setForcerIntervalleDev] = useState(false);
+  const [intervalleDevForce, setIntervalleDevForce] = useState<string>("2");
+  const [motifIntervalleDev, setMotifIntervalleDev] = useState("");
+  const [lacetsAsymetriques, setLacetsAsymetriques] = useState(false);
+  const [lacetDroit, setLacetDroit] = useState<string>("2.5");
+  const [lacetGauche, setLacetGauche] = useState<string>("2.5");
+
   const [submitting, setSubmitting] = useState(false);
   const [response, setResponse] = useState<OptimisationCalculerResponse | null>(
     null
@@ -124,11 +141,17 @@ export default function OptimisationPage() {
     let cancelled = false;
     (async () => {
       try {
-        const list = await getOptionsDisponibles();
-        if (!cancelled) setOptions(list);
+        const [opts, mats] = await Promise.all([
+          getOptionsDisponibles(),
+          listMatieres(),
+        ]);
+        if (!cancelled) {
+          setOptions(opts);
+          setMatieres(mats);
+        }
       } catch (err) {
         toast({
-          title: "Chargement options impossible",
+          title: "Chargement impossible",
           description:
             err instanceof Error ? err.message : "Erreur inconnue",
           variant: "destructive",
@@ -139,6 +162,21 @@ export default function OptimisationPage() {
       cancelled = true;
     };
   }, [toast]);
+
+  // Quand on sélectionne une matière : auto-fill épaisseur + transparence
+  // (read-only synchronisé, la matière prime sur la saisie manuelle).
+  const matiereSelectionnee = useMemo(
+    () => matieres?.find((m) => m.id === matiereId) ?? null,
+    [matieres, matiereId]
+  );
+  useEffect(() => {
+    if (matiereSelectionnee) {
+      if (matiereSelectionnee.epaisseur_microns) {
+        setEpaisseurMatiere(String(matiereSelectionnee.epaisseur_microns));
+      }
+      setMatiereTransparente(matiereSelectionnee.est_transparent);
+    }
+  }, [matiereSelectionnee]);
 
   const optionsByCategorie = useMemo(() => {
     if (!options) return {};
@@ -184,6 +222,27 @@ export default function OptimisationPage() {
         mandrin_mm: mandrin,
         sens_enroulement: sensEnroulement,
         epaisseur_matiere_um: parseFloat(epaisseurMatiere),
+        // Souveraineté commerciale
+        matiere_id: matiereId,
+        epaisseur_matiere_force_um: forcerEpaisseur
+          ? parseInt(epaisseurMatiere, 10)
+          : null,
+        motif_forcage_epaisseur: forcerEpaisseur ? motifEpaisseur : null,
+        intervalle_laize_force_mm: forcerIntervalleLaize
+          ? parseFloat(intervalleLaizeForce)
+          : null,
+        motif_forcage_intervalle_laize: forcerIntervalleLaize
+          ? motifIntervalleLaize
+          : null,
+        intervalle_dev_force_mm: forcerIntervalleDev
+          ? parseFloat(intervalleDevForce)
+          : null,
+        motif_forcage_intervalle_dev: forcerIntervalleDev
+          ? motifIntervalleDev
+          : null,
+        lacets_asymetriques: lacetsAsymetriques,
+        lacet_droit_mm: lacetsAsymetriques ? parseFloat(lacetDroit) : null,
+        lacet_gauche_mm: lacetsAsymetriques ? parseFloat(lacetGauche) : null,
       });
       setResponse(r);
       if (r.nb_candidats === 0) {
@@ -229,7 +288,7 @@ export default function OptimisationPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 items-end gap-4">
               <div className="space-y-2">
                 <Label htmlFor="laize">Laize (largeur étiquette) — mm</Label>
                 <Input
@@ -255,7 +314,7 @@ export default function OptimisationPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 items-end gap-4">
               <div className="space-y-2">
                 <Label htmlFor="rayon">Rayon angles — mm</Label>
                 <Input
@@ -279,7 +338,7 @@ export default function OptimisationPage() {
                 </label>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 items-end gap-4">
               <div className="space-y-2">
                 <Label htmlFor="nbcouleurs">Nb couleurs impression</Label>
                 <Input
@@ -438,6 +497,48 @@ export default function OptimisationPage() {
               </p>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="matiere">Matière</Label>
+              <select
+                id="matiere"
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={matiereId ?? ""}
+                onChange={(e) =>
+                  setMatiereId(e.target.value ? Number(e.target.value) : null)
+                }
+              >
+                <option value="">— Sélectionner —</option>
+                {(matieres ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.libelle}
+                    {m.epaisseur_microns ? ` (${m.epaisseur_microns} µm)` : ""}
+                  </option>
+                ))}
+              </select>
+              {matiereSelectionnee && (
+                <div className="rounded border border-border bg-muted/30 p-2 text-xs">
+                  <div className="font-medium">{matiereSelectionnee.libelle}</div>
+                  <div className="text-muted-foreground">
+                    {matiereSelectionnee.epaisseur_microns
+                      ? `Épaisseur ${matiereSelectionnee.epaisseur_microns} µm · `
+                      : ""}
+                    {matiereSelectionnee.opacite_pct
+                      ? `Opacité ${matiereSelectionnee.opacite_pct} %`
+                      : ""}
+                    {matiereSelectionnee.est_transparent && (
+                      <span className="ml-1 font-semibold text-amber-900">
+                        · Matière transparente (spot verso activé)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Auto-remplit l&apos;épaisseur + transparence (champs read-only
+                ci-dessous quand matière sélectionnée).
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="epaisseur">Épaisseur matière totale (µm)</Label>
               <Input
                 id="epaisseur"
@@ -447,11 +548,139 @@ export default function OptimisationPage() {
                 max={1000}
                 value={epaisseurMatiere}
                 onChange={(e) => setEpaisseurMatiere(e.target.value)}
+                disabled={matiereSelectionnee !== null && !forcerEpaisseur}
               />
-              <p className="text-xs text-muted-foreground">
-                Étiquette + liner adhésif. Default 150 µm (papier vélin
-                standard). Utilisé pour estimer le ø bobine.
-              </p>
+              {matiereSelectionnee && (
+                <p className="text-xs text-muted-foreground">
+                  Catalogue : {matiereSelectionnee.epaisseur_microns ?? "—"} µm
+                </p>
+              )}
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={forcerEpaisseur}
+                  onChange={(e) => setForcerEpaisseur(e.target.checked)}
+                  disabled={matiereSelectionnee === null}
+                />
+                Forcer une autre valeur (motif obligatoire)
+              </label>
+              {forcerEpaisseur && (
+                <textarea
+                  className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  rows={2}
+                  placeholder="Motif (10 caractères minimum)"
+                  value={motifEpaisseur}
+                  onChange={(e) => setMotifEpaisseur(e.target.value)}
+                />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={forcerIntervalleLaize}
+                  onChange={(e) => setForcerIntervalleLaize(e.target.checked)}
+                />
+                Forcer intervalle laize (Règle 7 souveraineté)
+              </label>
+              {forcerIntervalleLaize && (
+                <>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    value={intervalleLaizeForce}
+                    onChange={(e) => setIntervalleLaizeForce(e.target.value)}
+                  />
+                  <textarea
+                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    rows={2}
+                    placeholder="Motif (10 caractères minimum)"
+                    value={motifIntervalleLaize}
+                    onChange={(e) => setMotifIntervalleLaize(e.target.value)}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={forcerIntervalleDev}
+                  onChange={(e) => setForcerIntervalleDev(e.target.checked)}
+                />
+                Forcer intervalle dev (Règle 7 souveraineté)
+              </label>
+              {forcerIntervalleDev && (
+                <>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    value={intervalleDevForce}
+                    onChange={(e) => setIntervalleDevForce(e.target.value)}
+                  />
+                  <textarea
+                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    rows={2}
+                    placeholder="Motif (10 caractères minimum)"
+                    value={motifIntervalleDev}
+                    onChange={(e) => setMotifIntervalleDev(e.target.value)}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={lacetsAsymetriques}
+                  onChange={(e) => setLacetsAsymetriques(e.target.checked)}
+                />
+                Lacets asymétriques (bobine fille rebobinage spécifique)
+              </label>
+              {!lacetsAsymetriques && (
+                <p className="text-xs text-muted-foreground">
+                  Par défaut symétriques (= intervalle laize / 2 de chaque côté).
+                </p>
+              )}
+              {lacetsAsymetriques && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label htmlFor="lacet-d" className="text-xs">
+                      Lacet droit (mm)
+                    </Label>
+                    <Input
+                      id="lacet-d"
+                      type="number"
+                      step="0.1"
+                      min={0.5}
+                      value={lacetDroit}
+                      onChange={(e) => setLacetDroit(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="lacet-g" className="text-xs">
+                      Lacet gauche (mm)
+                    </Label>
+                    <Input
+                      id="lacet-g"
+                      type="number"
+                      step="0.1"
+                      min={0.5}
+                      value={lacetGauche}
+                      onChange={(e) => setLacetGauche(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

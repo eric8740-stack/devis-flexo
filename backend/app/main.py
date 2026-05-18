@@ -19,6 +19,7 @@ from app.routers import (
     fournisseur,
     ia,
     machine,
+    matiere,
     onboarding,
     operation_finition,
     optimisation,
@@ -80,6 +81,8 @@ app.include_router(optimisation.router)
 app.include_router(ia.router)
 # Sprint 13 post — Paramètres > Options de fabrication (CRUD tenant)
 app.include_router(parametres_options.router)
+# PR souveraineté commerciale — catalogue matières scopé tenant
+app.include_router(matiere.router)
 # 2026-05-16 TEMPORAIRE — endpoint audit prod seeds. À retirer après diagnostic.
 app.include_router(admin_audit.router)
 
