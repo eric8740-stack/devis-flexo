@@ -36,12 +36,14 @@ interface Props {
   config: OptimisationConfigOut;
   laizeEtiqMm: number;
   devEtiqMm: number;
+  mandrinMm: number;
 }
 
 export function SchemaImplantation({
   config,
   laizeEtiqMm,
   devEtiqMm,
+  mandrinMm,
 }: Props) {
   return (
     <div className="rounded-md border border-border bg-muted/30 p-4">
@@ -51,7 +53,12 @@ export function SchemaImplantation({
           laizeEtiqMm={laizeEtiqMm}
           devEtiqMm={devEtiqMm}
         />
-        <VueBobine config={config} />
+        <VueBobine
+          config={config}
+          laizeEtiqMm={laizeEtiqMm}
+          devEtiqMm={devEtiqMm}
+          mandrinMm={mandrinMm}
+        />
       </div>
       <div className="mt-6 border-t border-border pt-4">
         <VueBobineFille
@@ -102,7 +109,7 @@ function VuePlaque({
   config,
   laizeEtiqMm,
   devEtiqMm,
-}: Props) {
+}: Omit<Props, "mandrinMm">) {
   // viewBox compact : on cale sur 460 unités horizontalement et on dérive la
   // hauteur en fonction du ratio Z / laize_papier. Largeur utile réduite
   // à 280 pour laisser de la marge aux cotes externes.
@@ -131,7 +138,7 @@ function VuePlaque({
   return (
     <figure className="space-y-2">
       <figcaption className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Vue A — plaque (vue de dessous, sens machine)
+        Vue A — plaque (sens machine)
       </figcaption>
       <svg
         viewBox={`0 0 ${VBW} ${VBH}`}
@@ -244,16 +251,17 @@ function VuePlaque({
         />
 
         {/* Grille des poses.
-            VUE A = vue DE DESSOUS de la plaque (point de vue de la matière
-            qui passe sous le cylindre). Le A est donc rendu à 180° pour que
-            l'observateur voie ce qu'il verrait s'il regardait sous la
-            presse — convention métier flexo. */}
+            La rotation du A suit le sens d'enroulement choisi (SE1=0°, SE2=180°,
+            SE3=270°, SE4=90°), ce qui aligne la VUE A (plaque) sur la VUE C
+            (bobine fille déroulée chez le client) — le A vu en sortie de
+            presse = le A vu par le client final. */}
         {Array.from({ length: config.nb_poses_dev }).map((_, row) =>
           Array.from({ length: config.nb_poses_laize }).map((__, col) => {
             const px = ox + chuteW + col * poseW;
             const py = oy + row * poseH;
             const cxA = px + poseW / 2;
             const cyA = py + poseH / 2;
+            const aRotation = parseSE(config.sens_enroulement).rotation;
             return (
               <g key={`pose-${row}-${col}`}>
                 <rect
@@ -265,7 +273,7 @@ function VuePlaque({
                   stroke={COULEUR_BLEU}
                   strokeWidth={0.4}
                 />
-                <g transform={`translate(${cxA} ${cyA}) rotate(180)`}>
+                <g transform={`translate(${cxA} ${cyA}) rotate(${aRotation})`}>
                   <text
                     x={0}
                     y={0}
@@ -516,72 +524,115 @@ function VuePlaque({
 // ---------------------------------------------------------------------------
 
 
-function VueBobine({ config }: { config: OptimisationConfigOut }) {
-  // VUE B refondue PR #14 : on utilise désormais directement les
-  // illustrations Canva produites par Eric (style atelier ICE pro,
-  // annotations métier complètes). Plus de SVG paramétrique.
-  // L'image change selon le sens d'enroulement choisi ; les valeurs
-  // dynamiques (Ø bobine, Ø mandrin, laize liner, ml total) sont
-  // affichées dans un cartouche dédié à droite de l'image.
+function VueBobine({
+  config,
+  laizeEtiqMm,
+  devEtiqMm,
+  mandrinMm,
+}: {
+  config: OptimisationConfigOut;
+  laizeEtiqMm: number;
+  devEtiqMm: number;
+  mandrinMm: number;
+}) {
+  // VUE B utilise les illustrations Canva produites par Eric (style atelier
+  // ICE pro). L'image change selon le sens d'enroulement choisi et porte des
+  // annotations a/b/c/d/e/f/X/Y dont les valeurs correspondent au tableau
+  // ci-dessous (cartouche cotes affiché sous l'image, layout cohérent avec
+  // la VUE A à gauche).
   const idx = parseInt(config.sens_enroulement.replace("SE", ""), 10);
   return (
     <figure className="space-y-2">
       <figcaption className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Vue B — bobine livrée
       </figcaption>
-      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-        <div className="relative w-full overflow-hidden rounded border border-border bg-white">
-          <Image
-            src={`/assets/bobines/sens-${idx}.png`}
-            alt={`Bobine ${config.sens_enroulement} — ${labelSE(config.sens_enroulement)}`}
-            width={800}
-            height={800}
-            className="h-auto w-full"
-            sizes="(min-width: 640px) 50vw, 100vw"
-          />
-        </div>
-        <div className="flex flex-col gap-2 text-sm">
-          <div className="rounded border border-blue-300 bg-blue-50/50 p-2">
-            <div className="text-xs font-semibold text-blue-900">
-              {senseAffichage(config.sens_enroulement)}
-            </div>
-            <div className="text-[11px] text-blue-800">
-              {labelSE(config.sens_enroulement).split(" — ")[1] ?? ""}
-            </div>
-          </div>
-          <dl className="space-y-1 text-xs">
-            <Cote
-              label="Ø Diamètre Total Bobine"
-              value={`${config.diametre_bobine_mm} mm`}
-              strong
-            />
-            <Cote
-              label="Laize liner"
-              value={`${config.laize_liner_mm} mm`}
-            />
-            <Cote
-              label="Mètres linéaires totaux"
-              value={`${config.ml_total_m} m`}
-            />
-          </dl>
+      <div className="overflow-hidden rounded border border-border bg-white">
+        <Image
+          src={`/assets/bobines/sens-${idx}.png`}
+          alt={`Bobine ${config.sens_enroulement} — ${labelSE(config.sens_enroulement)}`}
+          width={1200}
+          height={1200}
+          className="h-auto w-full"
+          sizes="(min-width: 1024px) 50vw, 100vw"
+          priority={false}
+        />
+      </div>
+
+      {/* Badge SE */}
+      <div className="rounded border border-blue-300 bg-blue-50/50 px-2 py-1">
+        <div className="text-xs font-semibold text-blue-900">
+          {senseAffichage(config.sens_enroulement)}
+          <span className="ml-1 font-normal">
+            — {labelSE(config.sens_enroulement).split(" — ")[1] ?? ""}
+          </span>
         </div>
       </div>
+
+      {/* Cartouche cotes a/b/c/d/e/f + X/Y (mapping fourni par Eric). */}
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-border bg-white p-2 text-xs sm:grid-cols-3">
+        <Cote
+          letter="a"
+          label="écart entre étiquettes"
+          value={`${config.intervalle_dev_reel_mm} mm`}
+        />
+        <Cote
+          letter="b"
+          label="lacet droit"
+          value={`${config.chute_laterale_reelle_mm} mm`}
+        />
+        <Cote
+          letter="c"
+          label="lacet gauche"
+          value={`${config.chute_laterale_reelle_mm} mm`}
+        />
+        <Cote
+          letter="d"
+          label="laize bobine totale"
+          value={`${config.laize_papier_mm} mm`}
+        />
+        <Cote
+          letter="e"
+          label="Ø Diamètre Total Bobine"
+          value={`${config.diametre_bobine_mm} mm`}
+          strong
+        />
+        <Cote
+          letter="f"
+          label="Ø Mandrin"
+          value={`${mandrinMm} mm`}
+        />
+        <Cote letter="X" label="laize étiquette" value={`${laizeEtiqMm} mm`} />
+        <Cote letter="Y" label="dev étiquette" value={`${devEtiqMm} mm`} />
+        <Cote
+          label="Mètres linéaires totaux"
+          value={`${config.ml_total_m} m`}
+        />
+      </dl>
     </figure>
   );
 }
 
 function Cote({
+  letter,
   label,
   value,
   strong = false,
 }: {
+  letter?: string;
   label: string;
   value: string;
   strong?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 border-b border-border/50 py-0.5">
-      <dt className="text-muted-foreground">{label}</dt>
+    <div className="flex items-baseline justify-between gap-1.5 py-0.5">
+      <dt className="flex items-baseline gap-1 text-muted-foreground">
+        {letter && (
+          <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded bg-blue-100 px-1 text-[10px] font-bold text-blue-900">
+            {letter}
+          </span>
+        )}
+        <span>{label}</span>
+      </dt>
       <dd className={strong ? "font-semibold" : "font-medium"}>{value}</dd>
     </div>
   );
@@ -698,6 +749,9 @@ function VueBobineFille({
 
         {Array.from({ length: NB_ETIQ_AFFICHEES }).map((_, i) => {
           const px = ox + i * (etiqW + intervalleDevUnits);
+          const cxA = px + etiqW / 2;
+          const cyA = oy + etiqH / 2;
+          const aRotation = parseSE(config.sens_enroulement).rotation;
           return (
             <g key={i}>
               <rect
@@ -709,17 +763,19 @@ function VueBobineFille({
                 stroke={etiqStroke}
                 strokeWidth={0.8}
               />
-              <text
-                x={px + etiqW / 2}
-                y={oy + etiqH / 2}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={etiqH * 0.5}
-                fontWeight={700}
-                fill={aFill}
-              >
-                A
-              </text>
+              <g transform={`translate(${cxA} ${cyA}) rotate(${aRotation})`}>
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={etiqH * 0.5}
+                  fontWeight={700}
+                  fill={aFill}
+                >
+                  A
+                </text>
+              </g>
             </g>
           );
         })}

@@ -527,6 +527,7 @@ export default function OptimisationPage() {
           response={response}
           laizeEtiq={parseFloat(laize)}
           devEtiq={parseFloat(dev)}
+          mandrin={mandrin}
         />
       )}
     </main>
@@ -541,10 +542,12 @@ function ResultsSection({
   response,
   laizeEtiq,
   devEtiq,
+  mandrin,
 }: {
   response: OptimisationCalculerResponse;
   laizeEtiq: number;
   devEtiq: number;
+  mandrin: number;
 }) {
   return (
     <section className="space-y-4">
@@ -584,6 +587,7 @@ function ResultsSection({
               rank={idx + 1}
               laizeEtiq={laizeEtiq}
               devEtiq={devEtiq}
+              mandrin={mandrin}
             />
           ))}
         </div>
@@ -597,11 +601,13 @@ function ConfigCard({
   rank,
   laizeEtiq,
   devEtiq,
+  mandrin,
 }: {
   config: OptimisationConfigOut;
   rank: number;
   laizeEtiq: number;
   devEtiq: number;
+  mandrin: number;
 }) {
   const qualiteColor: Record<string, string> = {
     parfait: "bg-emerald-100 text-emerald-900",
@@ -720,6 +726,7 @@ function ConfigCard({
             config={config}
             laizeEtiqMm={laizeEtiq}
             devEtiqMm={devEtiq}
+            mandrinMm={mandrin}
           />
         </div>
       </CardContent>
