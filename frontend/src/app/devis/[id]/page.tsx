@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DevisResult } from "@/components/DevisResult";
+import { DevisResultMultiLots } from "@/components/devis/DevisResultMultiLots";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -132,6 +133,32 @@ export default function DevisDetailPage() {
     );
   }
 
+  // Brief #32 commit 4 — détection mode multi-lots vs legacy mono-config.
+  // Critère de détection : présence de lots_production (créés par le
+  // workflow optim) OU payload_output.mode === "multi-lots" (posé par
+  // le cost_engine_aggregator au POST). Si l'un des deux → DevisResultMultiLots.
+  // Sinon → DevisResult legacy (cost_engine mono-config V1a-style).
+  const payloadOutput = devis.payload_output as Record<string, unknown>;
+  const isMultiLots =
+    (devis.lots_production?.length ?? 0) > 0 ||
+    payloadOutput?.mode === "multi-lots";
+
+  const pdfUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/devis/${devis.id}/pdf`;
+
+  if (isMultiLots) {
+    return (
+      <main className="container mx-auto max-w-5xl p-4 sm:p-8">
+        <DevisResultMultiLots
+          devis={devis}
+          pdfUrl={pdfUrl}
+          onDupliquer={handleDuplicate}
+          onSupprimer={handleDelete}
+        />
+      </main>
+    );
+  }
+
+  // Legacy mono-config — comportement préservé pour les anciens devis.
   // Le payload_output stocké est exactement la sortie /api/cost/calculer →
   // on peut le passer tel quel à DevisResult (Union DevisOutput | DevisOutputMatching).
   const calculResult = devis.payload_output as unknown as DevisCalculResult;
