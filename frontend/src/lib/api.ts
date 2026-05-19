@@ -1385,17 +1385,21 @@ export const toggleActifCylindre = (id: number) =>
   });
 
 // ---------------------------------------------------------------------------
-// Brief #29 — Paramètres parc : porte-clichés (sleeves)
+// Brief #30 — Paramètres parc : porte-clichés (cyls engrenage synchronisés)
 // ---------------------------------------------------------------------------
+// Refonte vs Brief #29 : schéma porté sur machine_id + cylindre_id + quantite
+// (et non plus sur marque/modele/laize_utile_mm/matiere — interprétation
+// métier corrigée, cf docs/Brief_CC_30_PorteCliche_UI_BoutonDevis.md).
 
 export interface PorteCliche {
   id: number;
-  reference: string;
-  marque: string | null;
-  modele: string | null;
-  laize_utile_mm: string;
-  diametre_interieur_mm: string | null;
-  matiere: string | null;
+  machine_id: number;
+  machine_nom: string;
+  machine_nb_couleurs: number | null;
+  cylindre_id: number;
+  cylindre_nb_dents: number;
+  cylindre_developpe_mm: string;
+  quantite: number;
   notes: string | null;
   actif: boolean;
   created_at: string;
@@ -1403,22 +1407,28 @@ export interface PorteCliche {
 }
 
 export interface PorteClicheCreatePayload {
-  reference: string;
-  marque?: string | null;
-  modele?: string | null;
-  laize_utile_mm: number;
-  diametre_interieur_mm?: number | null;
-  matiere?: string | null;
+  machine_id: number;
+  cylindre_id: number;
+  // Si non fourni, le backend pose default = machine.nb_groupes_couleurs.
+  quantite?: number;
   notes?: string | null;
   actif?: boolean;
 }
 
-export type PorteClicheUpdatePayload = Partial<PorteClicheCreatePayload>;
+export interface PorteClicheUpdatePayload {
+  quantite?: number;
+  notes?: string | null;
+  actif?: boolean;
+}
 
-export const listPorteCliches = (actif: boolean | null = true) => {
+export const listPorteCliches = (
+  options: { actif?: boolean | null; machine_id?: number } = {}
+) => {
+  const { actif = true, machine_id } = options;
   const params = new URLSearchParams();
   if (actif === false) params.set("actif", "false");
   else if (actif === null) params.set("actif", "");
+  if (machine_id !== undefined) params.set("machine_id", String(machine_id));
   return apiFetch<PorteCliche[]>(
     `/api/porte-cliches${params.toString() ? `?${params}` : ""}`
   );
