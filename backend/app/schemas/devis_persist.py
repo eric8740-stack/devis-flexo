@@ -215,3 +215,39 @@ class DevisListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+# ---------------------------------------------------------------------------
+# Brief #33 — endpoint POST /api/devis/preview-couts
+# ---------------------------------------------------------------------------
+# Calcule brut/réduction/net sans persister. Sert au recalcul live de
+# l'étape 4 chiffrage (toggle options, ajustement marge/réduction).
+
+
+class PreviewCoutsIn(BaseModel):
+    """Body POST /api/devis/preview-couts (Brief #33)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # payload_input : contexte saisie (laize/dev, options, marge override).
+    payload_input: dict
+    lots: list[LotProductionCreate] = Field(min_length=1)
+    reduction_pct: Decimal = Field(default=Decimal(0), ge=0, le=100)
+
+
+class PreviewCoutsOut(BaseModel):
+    """Réponse POST /api/devis/preview-couts.
+
+    `cout_brut_ht` = somme du cost_engine_aggregator sans réduction.
+    `cout_net_ht` = brut × (1 - reduction_pct/100).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cout_brut_ht_eur: Decimal
+    reduction_pct: Decimal
+    reduction_eur: Decimal
+    cout_net_ht_eur: Decimal
+    nb_lots: int
+    # Note pour transparence si le chiffrage auto a échoué (mode dégradé).
+    chiffrage_erreur: str | None = None
