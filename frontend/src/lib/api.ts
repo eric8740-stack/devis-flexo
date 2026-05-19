@@ -1047,6 +1047,8 @@ export interface OptimisationConfigOut {
   rotation_vue_c_deg: number;
   machines_compatibles: number[];
   noms_machines_compatibles: string[];
+  // Brief #28 : badge informationnel UI étape 2. True si ≤ 80 dents.
+  petit_cylindre: boolean;
   // Souveraineté commerciale
   intervalle_laize_recommande_mm: number;
   intervalle_laize_applique_mm: number;

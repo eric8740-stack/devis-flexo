@@ -13,15 +13,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { useToast } from "@/hooks/use-toast";
 import {
   getOptionsDisponibles,
   listMatieres,
   postOptimisationCalculer,
   type MatiereOut,
-  type OptimisationCalculerResponse,
-  type OptimisationConfigOut,
   type OptionDisponible,
   type SensEnroulement,
 } from "@/lib/api";
@@ -175,9 +172,9 @@ function OptimisationPoseSaisie() {
   const [lacetGauche, setLacetGauche] = useState<string>("2.5");
 
   const [submitting, setSubmitting] = useState(false);
-  const [response, setResponse] = useState<OptimisationCalculerResponse | null>(
-    null
-  );
+  // Brief #28 : `response` state retiré — l'étape 2 (OptimisationPoseCandidats)
+  // affiche désormais TOUS les candidats via le store ; plus aucun rendu
+  // inline en étape saisie.
 
   useEffect(() => {
     let cancelled = false;
@@ -243,7 +240,6 @@ function OptimisationPoseSaisie() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setResponse(null);
     try {
       const r = await postOptimisationCalculer({
         format: {
@@ -290,7 +286,6 @@ function OptimisationPoseSaisie() {
             ? parseInt(nbPosesLaizeForce, 10)
             : null,
       });
-      setResponse(r);
       if (r.nb_candidats === 0) {
         toast({
           title: "Aucune configuration viable",
@@ -849,240 +844,6 @@ function OptimisationPoseSaisie() {
         </div>
       </form>
 
-      {response && (
-        <ResultsSection
-          response={response}
-          laizeEtiq={parseFloat(laize)}
-          devEtiq={parseFloat(dev)}
-          mandrin={mandrin}
-        />
-      )}
     </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Section résultats
-// ---------------------------------------------------------------------------
-
-function ResultsSection({
-  response,
-  laizeEtiq,
-  devEtiq,
-  mandrin,
-}: {
-  response: OptimisationCalculerResponse;
-  laizeEtiq: number;
-  devEtiq: number;
-  mandrin: number;
-}) {
-  return (
-    <section className="space-y-4">
-      <header className="flex items-baseline justify-between">
-        <h2 className="text-xl font-bold">
-          Top {response.nb_candidats} configuration(s)
-        </h2>
-        <span className="text-sm text-muted-foreground">
-          Intervalle dev min appliqué :{" "}
-          <strong>{response.intervalle_dev_min_applique_mm} mm</strong>
-        </span>
-      </header>
-
-      {response.message_contrainte_client && (
-        <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
-          {response.message_contrainte_client}
-        </div>
-      )}
-
-      {response.message_filtrage && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          {response.message_filtrage}
-        </div>
-      )}
-
-      {response.nb_candidats === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Aucune configuration viable. Élargissez le parc machines/cylindres,
-          ou retirez des options qui exigent des modules absents.
-        </p>
-      ) : (
-        <div className="grid gap-4">
-          {response.configurations.map((c, idx) => (
-            <ConfigCard
-              key={`${c.cylindre_id}-${c.nb_poses_dev}-${c.nb_poses_laize}-${idx}`}
-              config={c}
-              rank={idx + 1}
-              laizeEtiq={laizeEtiq}
-              devEtiq={devEtiq}
-              mandrin={mandrin}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ConfigCard({
-  config,
-  rank,
-  laizeEtiq,
-  devEtiq,
-  mandrin,
-}: {
-  config: OptimisationConfigOut;
-  rank: number;
-  laizeEtiq: number;
-  devEtiq: number;
-  mandrin: number;
-}) {
-  const qualiteColor: Record<string, string> = {
-    parfait: "bg-emerald-100 text-emerald-900",
-    bien: "bg-lime-100 text-lime-900",
-    complique: "bg-amber-100 text-amber-900",
-    mauvais: "bg-orange-100 text-orange-900",
-    critique: "bg-red-100 text-red-900",
-    inconnu: "bg-gray-100 text-gray-900",
-  };
-  const color = qualiteColor[config.qualite_echenillage] ?? "bg-gray-100";
-
-  return (
-    <Card className={rank === 1 ? "border-2 border-foreground" : ""}>
-      <CardHeader>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-3">
-            <CardTitle className="text-lg">#{rank}</CardTitle>
-            <span
-              className={`rounded px-2 py-0.5 text-xs font-medium ${color}`}
-            >
-              {config.qualite_echenillage}
-            </span>
-          </div>
-          <span className="text-sm text-muted-foreground">
-            Score : <strong>{config.score.toFixed(1)}</strong>
-          </span>
-        </div>
-        <CardDescription>
-          <strong>Cylindre {config.nb_dents_cylindre} dents</strong>
-          {" · "}Z = {config.z_cylindre_mm} mm · Compatible avec{" "}
-          <strong>
-            {config.noms_machines_compatibles.length > 0
-              ? config.noms_machines_compatibles.join(", ")
-              : `machine #${config.machine_id}`}
-          </strong>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-2 text-sm">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Pose
-          </h4>
-          <Line
-            label="Poses laize × dev"
-            value={`${config.nb_poses_laize} × ${config.nb_poses_dev} = ${config.nb_poses_total} étiquettes / tour`}
-            strong
-          />
-          <Line
-            label="Intervalle dev"
-            value={`${config.intervalle_dev_reel_mm} mm`}
-          />
-          <Line
-            label="Intervalle laize"
-            value={`${config.intervalle_laize_reel_mm} mm`}
-          />
-          <Line
-            label="Laize plaque"
-            value={`${config.laize_plaque_mm} mm`}
-          />
-          {config.consolidation_atteinte && (
-            <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-900">
-              ✓ Consolidation atteinte
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-2 text-sm">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Matière & bobine
-          </h4>
-          <Line
-            label="Laize papier"
-            value={`${config.laize_papier_mm} mm`}
-            strong
-          />
-          <Line
-            label="Chute latérale (chaque côté)"
-            value={`${config.chute_laterale_reelle_mm} mm`}
-          />
-          <Line
-            label="Mètres linéaires total"
-            value={`${config.ml_total_m} m`}
-          />
-          <Line label="m² consommé" value={`${config.m2_consomme} m²`} />
-          <Line
-            label="Rendement matière"
-            value={`${config.rendement_pct}%`}
-            strong
-          />
-          <Line
-            label="ø bobine estimé"
-            value={`${config.diametre_bobine_mm} mm`}
-          />
-          <Line
-            label="Laize liner (vue client)"
-            value={`${config.laize_liner_mm} mm`}
-          />
-          <Line
-            label="Sens d'enroulement"
-            value={formatSensEnroulement(config.sens_enroulement)}
-          />
-        </div>
-
-        <div className="lg:col-span-2 text-xs text-muted-foreground">
-          <span className="font-semibold">Coefs cumulés —</span> vitesse ×
-          {config.coef_vitesse_final.toFixed(3)} / gâche ×
-          {config.coef_gache_final.toFixed(3)} · confort rayon ×
-          {config.coef_confort_rayon.toFixed(2)} · options vit ×
-          {config.coef_vitesse_options.toFixed(2)} / gâche ×
-          {config.coef_gache_options.toFixed(2)}
-        </div>
-
-        {/* Schéma BAT — 3 vues (plaque + bobine + bobine fille) */}
-        <div className="lg:col-span-2">
-          <SchemaImplantation
-            config={config}
-            laizeEtiqMm={laizeEtiq}
-            devEtiqMm={devEtiq}
-            mandrinMm={mandrin}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * Convertit un code interne SE1..SE8 en libellé flexo affiché ("Sens 1 — 0°
- * Extérieur · droite avant"). Code interne préservé pour la BDD/API.
- */
-function formatSensEnroulement(code: SensEnroulement): string {
-  const opt = SE_OPTIONS.find((o) => o.code === code);
-  return opt ? `${opt.affichage} — ${opt.label}` : code;
-}
-
-function Line({
-  label,
-  value,
-  strong = false,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={strong ? "font-semibold" : "font-medium"}>{value}</span>
-    </div>
   );
 }
