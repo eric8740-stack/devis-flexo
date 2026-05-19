@@ -3,12 +3,20 @@
 /**
  * Étape 3 — Détail des lots sélectionnés + édition matière par lot + visuel BAT.
  *
- * Sprint 13 avenant. Affiche une card par lot sélectionné en étape 2,
- * avec un sélecteur matière obligatoire et le visuel BAT généré par le
- * composant SchemaImplantation réutilisé tel quel (SACRED).
+ * Sprint 13 avenant + Brief #28. Affiche une card par lot sélectionné en
+ * étape 2, avec un sélecteur matière obligatoire et le visuel BAT généré
+ * par le composant `SchemaImplantation` (Vue A + Vue B + Vue C) :
  *
- * Le bouton "Valider et créer le devis" est désactivé tant qu'un lot n'a
- * pas de matière sélectionnée.
+ *   ⚠️ SACRED — le composant `SchemaImplantation` est réutilisé 1:1, sans
+ *   modification de son rendu (SVG, layout, positions des A, rotations,
+ *   vignettes, légendes). Brief #28 §11. Les data du candidat sélectionné
+ *   sont passées en props au composant tel quel.
+ *
+ * Multi-lots métier : chaque lot a SA matière, indépendante des autres
+ * lots du devis (LOT 1 peut être PP couché 80g, LOT 2 PET blanc 50µ).
+ * Pas de matière "globale" au niveau devis. Validation : le bouton
+ * "Valider et créer le devis" est désactivé tant qu'un lot n'a pas de
+ * matière sélectionnée (FK NOT NULL sur lot_production.matiere_id).
  */
 import { useEffect, useState } from "react";
 
