@@ -14,6 +14,7 @@ from app.routers import (
     client,
     complexe,
     cost,
+    cylindre,
     devis,
     entreprise,
     fournisseur,
@@ -83,6 +84,7 @@ app.include_router(ia.router)
 app.include_router(parametres_options.router)
 # PR souveraineté commerciale — catalogue matières scopé tenant
 app.include_router(matiere.router)
+app.include_router(cylindre.router)  # Brief #29 — CRUD parc cylindres
 # 2026-05-16 TEMPORAIRE — endpoint audit prod seeds. À retirer après diagnostic.
 app.include_router(admin_audit.router)
 
