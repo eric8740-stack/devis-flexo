@@ -160,6 +160,11 @@ class ConfigurationPose:
     # [machine_id] par le moteur, fusionné par `_dedoublonner_configs`.
     machines_compatibles: list[int] = field(default_factory=list)
 
+    # Brief #28 : informationnel pur — True si nb_dents ≤ 80 (developpe_mm
+    # ≤ 254). Pas de blocage ni de pénalité de score ; sert juste à
+    # afficher un badge "Petit cylindre" discret côté UI étape 2.
+    petit_cylindre: bool = False
+
     @property
     def coef_vitesse_final(self) -> float:
         """Coefficient vitesse cumulé (CdC § 758)."""

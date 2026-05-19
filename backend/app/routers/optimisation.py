@@ -450,6 +450,8 @@ def _to_config_out(
         rotation_vue_c_deg=get_rotation_vue_c(_sens_int(sens_enroulement)),
         machines_compatibles=list(c.machines_compatibles),
         noms_machines_compatibles=noms_machines,
+        # Brief #28 : badge informationnel petit cylindre (UI étape 2).
+        petit_cylindre=c.petit_cylindre,
         # Souveraineté commerciale + lacets
         intervalle_laize_recommande_mm=round(intervalle_laize_recommande_mm, 2),
         intervalle_laize_applique_mm=round(intervalle_laize_applique_mm, 2),

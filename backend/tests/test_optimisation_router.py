@@ -358,42 +358,55 @@ def test_cas_metier_eric_etiquette_laize100_dev80_sur_cyl_104dents(
     body = r.json()
     assert body["nb_candidats"] >= 1, "Au moins une config viable attendue"
 
-    # Top 1 doit être sur le cylindre 330.2 mm (104 dents), 4×2 poses
+    # Brief #28 : avec banane retiré, le moteur explore toutes les variantes
+    # laize physiquement possibles. Sur ce cas (cyl 330.2 + format 100×80 +
+    # machine 320 laize_utile), 3 poses laize est désormais retournée et
+    # peut surpasser 2 poses au score. Le cas métier "4×2 sur cyl 104"
+    # reste néanmoins présent dans le set de candidats — vérifié par scan.
+    config_4x2 = next(
+        (
+            c for c in body["configurations"]
+            if c["nb_poses_dev"] == 4 and c["nb_poses_laize"] == 2
+        ),
+        None,
+    )
+    assert config_4x2 is not None, (
+        "La config 4×2 sur cyl 104 dents doit rester dans les candidats."
+    )
+    # Sanity sur l'intervalle dev (calculé sur dev = 80, indépendant du nb_poses_laize).
+    assert abs(config_4x2["intervalle_dev_reel_mm"] - 2.55) < 0.01, (
+        f"Intervalle dev attendu ~2.55 mm, obtenu {config_4x2['intervalle_dev_reel_mm']}"
+    )
+    assert config_4x2["qualite_echenillage"] == "parfait"
+    # Top 1 reste sur le cylindre 104 dents (330.2 mm), 4 poses dev, mais
+    # peut désormais être 4×3 plutôt que 4×2 (palier consolidation 3 poses).
     top1 = body["configurations"][0]
     assert top1["nb_poses_dev"] == 4, (
-        f"Attendu 4 poses dev, obtenu {top1['nb_poses_dev']}. "
-        "Vérifier que les cylindres sont seedés en mm réels (pas dents)."
+        f"Attendu 4 poses dev en top1, obtenu {top1['nb_poses_dev']}."
     )
-    assert top1["nb_poses_laize"] == 2, (
-        f"Attendu 2 poses laize, obtenu {top1['nb_poses_laize']}."
-    )
-    assert top1["nb_poses_total"] == 8
-    assert abs(top1["intervalle_dev_reel_mm"] - 2.55) < 0.01, (
-        f"Intervalle dev attendu ~2.55 mm, obtenu {top1['intervalle_dev_reel_mm']}"
-    )
-    assert top1["qualite_echenillage"] == "parfait"
 
-    # PR #9.1 — champs BAT enrichis dans la réponse
+    # PR #9.1 — champs BAT enrichis dans la réponse (vérifiés sur la
+    # config 4×2 que le brief métier fige, indépendamment du top du tri).
     # laize_plaque = 2 × 100 + 1 × 5 = 205 mm
-    assert top1["laize_plaque_mm"] == 205.0
+    assert config_4x2["laize_plaque_mm"] == 205.0
     # laize_papier = ceil((205 + 2×10) / 10) × 10 = 230 mm
-    assert top1["laize_papier_mm"] == 230.0
+    assert config_4x2["laize_papier_mm"] == 230.0
     # chute réelle = (230 − 205) / 2 = 12.5 mm
-    assert top1["chute_laterale_reelle_mm"] == 12.5
+    assert config_4x2["chute_laterale_reelle_mm"] == 12.5
     # Z cylindre = 330.2 mm (104 dents)
-    assert top1["z_cylindre_mm"] == 330.2
-    # Nomenclature ICE — nombre de dents exposé pour affichage UI
-    assert top1["nb_dents_cylindre"] == 104
+    assert config_4x2["z_cylindre_mm"] == 330.2
+    # Nomenclature : nombre de dents exposé pour affichage UI
+    assert config_4x2["nb_dents_cylindre"] == 104
     # ml_total = ceil(10000 / 8) × 330.2 / 1000 = 1250 × 330.2 / 1000 = 412.75
-    assert abs(top1["ml_total_m"] - 412.75) < 0.01
+    assert abs(config_4x2["ml_total_m"] - 412.75) < 0.01
     # Rendement ≈ 84.27 %
-    assert abs(top1["rendement_pct"] - 84.27) < 0.1
+    assert abs(config_4x2["rendement_pct"] - 84.27) < 0.1
     # ø bobine estimation entre 250-310 mm (épaisseur default 150 µm)
-    assert 250 <= top1["diametre_bobine_mm"] <= 320
+    assert 250 <= config_4x2["diametre_bobine_mm"] <= 320
     # laize liner = 100 + 2×2.5 = 105 mm (default tenant)
-    assert top1["laize_liner_mm"] == 105.0
+    assert config_4x2["laize_liner_mm"] == 105.0
     # SE1 par défaut
-    assert top1["sens_enroulement"] == "SE1"
+    assert config_4x2["sens_enroulement"] == "SE1"
     # Au moins 1 machine compatible (dédoublonnage peut en agréger plus)
     assert len(top1["machines_compatibles"]) >= 1
 

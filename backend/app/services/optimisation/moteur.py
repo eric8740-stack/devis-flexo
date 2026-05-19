@@ -42,7 +42,6 @@ from app.services.optimisation.regles.echenillage import (
 )
 from app.services.optimisation.regles.effet_banane import (
     lookup_developpe_mini,
-    valide_effet_banane,
 )
 from app.services.optimisation.types import (
     ConfigurationPose,
@@ -250,29 +249,12 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
                     continue
                 variantes_a_tester = [inp.nb_poses_laize_force]
             else:
-                # Adaptation de l'algo CdC § 613 ("max, max-1, max-2") :
-                # quand l'effet banane exclut les variantes les plus larges
-                # (plaque trop grande pour ce cylindre), on descend jusqu'à
-                # trouver la première variante utilisable. Puis on teste
-                # celle-ci + 2 inférieures (pour avoir des alternatives à
-                # arbitrer). Cap pratique : variante ≥ 1.
-                variante_top: int | None = None
-                for v in range(nb_poses_laize_max, 0, -1):
-                    il = _calcul_intervalle_laize(
-                        machine.laize_utile_mm, inp.format.largeur_mm, v
-                    )
-                    if il is None:
-                        continue
-                    lp = _calcul_largeur_plaque(inp.format.largeur_mm, v, il)
-                    z = lookup_developpe_mini(lp, inp.bareme_effet_banane)
-                    if cyl.developpe_mm >= z:
-                        variante_top = v
-                        break
-                if variante_top is None:
-                    continue  # aucune variante laize ne passe l'effet banane
-                variantes_a_tester = [
-                    variante_top - d for d in (0, 1, 2) if variante_top - d > 0
-                ]
+                # Brief #28 : on explore TOUTES les variantes physiquement
+                # faisables (de nb_poses_laize_max à 1). L'ancien cap top-3
+                # et le filtre dur effet banane sont retirés — la souveraineté
+                # commerciale revient à l'utilisateur via les filtres UI
+                # (score, machine, badge "petit cylindre" purement informatif).
+                variantes_a_tester = list(range(nb_poses_laize_max, 0, -1))
 
             for variante in variantes_a_tester:
                 if variante <= 0:
@@ -289,15 +271,12 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
                     inp.format.largeur_mm, variante, intervalle_laize
                 )
 
-                # Filtre dur effet banane (et capture du Z mini pour audit)
+                # Brief #28 : effet banane n'est PLUS un filtre dur. On garde
+                # le calcul du Z mini pour l'exposer en sortie (audit + badge
+                # UI informationnel via `petit_cylindre`).
                 z_mini = lookup_developpe_mini(
                     largeur_plaque, inp.bareme_effet_banane
                 )
-                fb = valide_effet_banane(
-                    cyl, largeur_plaque, inp.bareme_effet_banane
-                )
-                if not fb.ok:
-                    continue
 
                 # Compensation (bonus optionnel)
                 comp = evaluer_compensation(
@@ -345,6 +324,9 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
                         "intervalle_laize_souhaitable_mm"
                     ],
                     disposition_poses="alignee",
+                    # Brief #28 : badge UI informationnel (≤ 80 dents ↔
+                    # developpe_mm ≤ 254). Aucun impact sur le score.
+                    petit_cylindre=cyl.developpe_mm <= 254.0,
                 )
 
                 config.score = _calcul_score(config, palier_echen["score"])
