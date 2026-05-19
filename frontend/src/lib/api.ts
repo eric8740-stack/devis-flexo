@@ -894,6 +894,31 @@ export const duplicateDevis = (id: number) =>
   apiFetch<DevisDetail>(`/api/devis/${id}/duplicate`, { method: "POST" });
 
 // ---------------------------------------------------------------------------
+// Brief #33 — preview-couts (recalcul live étape 4 sans persister)
+// ---------------------------------------------------------------------------
+
+export interface PreviewCoutsRequest {
+  payload_input: Json;
+  lots: LotProductionCreatePayload[];
+  reduction_pct?: number | string;
+}
+
+export interface PreviewCoutsResponse {
+  cout_brut_ht_eur: string;
+  reduction_pct: string;
+  reduction_eur: string;
+  cout_net_ht_eur: string;
+  nb_lots: number;
+  chiffrage_erreur: string | null;
+}
+
+export const previewCoutsDevis = (data: PreviewCoutsRequest) =>
+  apiFetch<PreviewCoutsResponse>("/api/devis/preview-couts", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+// ---------------------------------------------------------------------------
 // Sprint 12 Lot S12-D : Administration (admin only — get_current_admin)
 // ---------------------------------------------------------------------------
 

@@ -26,7 +26,8 @@ import type {
   SensEnroulement,
 } from "@/lib/api";
 
-export type EtapeOptim = "saisie" | "candidats" | "detail";
+// Brief #33 — étape 4 chiffrage ajoutée (options globales, marge, réduction).
+export type EtapeOptim = "saisie" | "candidats" | "detail" | "chiffrage";
 
 export interface ParamsSaisie {
   laize: string;
@@ -83,6 +84,7 @@ interface OptimisationPoseContextValue {
     mandrin: number,
   ) => void;
   goDetail: () => void;
+  goChiffrage: () => void;
 
   // Contexte saisie nécessaire aux étapes 2/3 (validation somme,
   // affichage récap, props composant visuel).
@@ -98,6 +100,19 @@ interface OptimisationPoseContextValue {
   setMatiereLot: (id_candidat: string, matiere_id: number) => void;
 
   sommeQuantitesLots: number;
+
+  // Brief #33 — étape 4 chiffrage : options globales + marge + réduction.
+  optionsCodes: string[];
+  toggleOption: (code: string) => void;
+  margeOverridePct: string;
+  setMargeOverridePct: (v: string) => void;
+  reductionPct: string;
+  setReductionPct: (v: string) => void;
+
+  // Brief #33 — mode édition : si défini, on PUT au lieu de POST.
+  devisExistantId: number | null;
+  devisExistantNumero: string | null;
+  setModeEdition: (id: number, numero: string) => void;
 }
 
 const OptimisationPoseContext =
@@ -111,6 +126,15 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
   const [laizeEtiqMm, setLaizeEtiqMm] = useState<number>(0);
   const [devEtiqMm, setDevEtiqMm] = useState<number>(0);
   const [mandrinMm, setMandrinMm] = useState<number>(76);
+
+  // Brief #33 — étape 4 state.
+  const [optionsCodes, setOptionsCodes] = useState<string[]>([]);
+  const [margeOverridePct, setMargeOverridePct] = useState<string>("");
+  const [reductionPct, setReductionPct] = useState<string>("0");
+  const [devisExistantId, setDevisExistantId] = useState<number | null>(null);
+  const [devisExistantNumero, setDevisExistantNumero] = useState<string | null>(
+    null
+  );
 
   const goSaisie = useCallback(() => {
     setEtape("saisie");
@@ -135,6 +159,18 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     []
   );
   const goDetail = useCallback(() => setEtape("detail"), []);
+  const goChiffrage = useCallback(() => setEtape("chiffrage"), []);
+
+  const toggleOption = useCallback((code: string) => {
+    setOptionsCodes((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  }, []);
+
+  const setModeEdition = useCallback((id: number, numero: string) => {
+    setDevisExistantId(id);
+    setDevisExistantNumero(numero);
+  }, []);
 
   const toggleSelection = useCallback(
     (candidat: OptimisationConfigOut) => {
@@ -194,6 +230,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       goSaisie,
       goCandidats,
       goDetail,
+      goChiffrage,
       quantiteTotale,
       laizeEtiqMm,
       devEtiqMm,
@@ -204,12 +241,22 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setQuantiteLot,
       setMatiereLot,
       sommeQuantitesLots,
+      optionsCodes,
+      toggleOption,
+      margeOverridePct,
+      setMargeOverridePct,
+      reductionPct,
+      setReductionPct,
+      devisExistantId,
+      devisExistantNumero,
+      setModeEdition,
     }),
     [
       etape,
       goSaisie,
       goCandidats,
       goDetail,
+      goChiffrage,
       quantiteTotale,
       laizeEtiqMm,
       devEtiqMm,
@@ -220,6 +267,13 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setQuantiteLot,
       setMatiereLot,
       sommeQuantitesLots,
+      optionsCodes,
+      toggleOption,
+      margeOverridePct,
+      reductionPct,
+      devisExistantId,
+      devisExistantNumero,
+      setModeEdition,
     ]
   );
 

@@ -23,6 +23,7 @@ import {
   type SensEnroulement,
 } from "@/lib/api";
 
+import { OptimisationChiffrage } from "./_components/OptimisationChiffrage";
 import { OptimisationPoseCandidats } from "./_components/OptimisationPoseCandidats";
 import { OptimisationPoseDetailLots } from "./_components/OptimisationPoseDetailLots";
 import {
@@ -117,6 +118,7 @@ function OptimisationPageInner() {
       {etape === "saisie" && <OptimisationPoseSaisie />}
       {etape === "candidats" && <OptimisationPoseCandidats />}
       {etape === "detail" && <OptimisationPoseDetailLots />}
+      {etape === "chiffrage" && <OptimisationChiffrage />}
     </>
   );
 }
