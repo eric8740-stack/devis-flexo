@@ -1,28 +1,37 @@
-"""Modèle PorteCliche — Brief #29 (paramètres parc).
+"""Modèle PorteCliche — refonte métier Brief #30.
 
-Sémantique métier : un porte-cliché (sleeve / plate mounting cylinder) est
-le support physique monté sur le cylindre porteur machine. Il porte le
-cliché flexo. Distinct du `CylindreMagnetique` qui représente le développé
-(nb_dents × 3.175 mm).
+Un porte-cliché en flexo étroite est un cylindre métallique avec engrenage
+**dent par dent identique** au cylindre magnétique. On y colle adhésif +
+cliché polymère. Synchronisation mécanique par engrenage entre le porte-
+cliché et le cylindre magnétique → 1 PC montable par couple (machine ×
+cyl mag), N exemplaires identiques = nombre de couleurs de la machine.
 
-Réutilisable d'un job à l'autre, indépendant du développé. Catalogue par
-imprimerie (tenant), multi-tenant strict via `entreprise_id` (CASCADE).
-Référence unique par entreprise (UniqueConstraint).
+Cardinalité métier : unique par (entreprise_id, machine_id, cylindre_id).
+La `quantite` représente combien d'exemplaires identiques du PC sont
+montés simultanément sur la machine (default = nb_groupes_couleurs de
+la machine).
 
-Soft delete uniformisé (`actif: bool`, convention Sprint 9 v2) — pas de
-suppression dure pour préserver d'éventuelles FK historiques futures.
+Historique :
+- Brief #29 (PR #29) : modèle erroné basé sur sleeves modernes (marque/
+  modele/laize_utile_mm/matiere) — interprétation métier incorrecte.
+- Brief #30 (cette refonte) : schéma corrigé. Migration drop l'ancienne
+  table avec ses 3 seeds absurdes (PC-220 Rotec, PC-330 DuPont Cyrel
+  Fast, PC-410 Flint) et recrée le bon schéma + reseed 21 cyl × 3
+  machines actives en compte demo.
+
+Convention FK (cohérente avec LotProduction Sprint 13) :
+  - `machine_id` → `machine_imprimerie.id` (table d'optim Sprint 13)
+  - `cylindre_id` → `cylindre_magnetique.id`
 """
 from datetime import datetime
-from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
-    String,
     Text,
     UniqueConstraint,
     func,
@@ -33,41 +42,46 @@ from app.db import Base
 
 
 class PorteCliche(Base):
+    """Porte-cliché (cylindre engrenage synchronisé au cyl magnétique).
+
+    Unique par (entreprise_id, machine_id, cylindre_id). Soft delete via
+    `actif=False` (préserve toute FK historique future).
+    """
+
     __tablename__ = "porte_cliche"
     __table_args__ = (
-        UniqueConstraint(
-            "entreprise_id", "reference", name="uq_porte_cliche_reference_entreprise"
-        ),
         Index("ix_porte_cliche_entreprise", "entreprise_id"),
+        UniqueConstraint(
+            "entreprise_id",
+            "machine_id",
+            "cylindre_id",
+            name="uq_porte_cliche_entreprise_machine_cyl",
+        ),
+        CheckConstraint("quantite >= 0", name="ck_porte_cliche_quantite_positive"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    # Sprint 12-C multi-tenant — scope par entreprise.
     entreprise_id: Mapped[int] = mapped_column(
         ForeignKey("entreprise.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
+    )
+    machine_id: Mapped[int] = mapped_column(
+        ForeignKey("machine_imprimerie.id"), nullable=False
+    )
+    cylindre_id: Mapped[int] = mapped_column(
+        ForeignKey("cylindre_magnetique.id"), nullable=False
     )
 
-    # Référence interne (ex: "PC-220", "Sleeve-330"). Unique par entreprise.
-    reference: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Nombre d'exemplaires identiques du PC montés simultanément sur la
+    # machine. Default applicatif côté CRUD = machine.nb_groupes_couleurs.
+    quantite: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Métadonnées libres pour faciliter l'inventaire physique.
-    marque: Mapped[str | None] = mapped_column(String(80))
-    modele: Mapped[str | None] = mapped_column(String(80))
-
-    # Caractéristiques techniques.
-    laize_utile_mm: Mapped[Decimal] = mapped_column(
-        Numeric(6, 2), nullable=False
-    )
-    diametre_interieur_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
-
-    # Matière du sleeve (polyuréthane / carbone / acier / autre — texte libre).
-    matiere: Mapped[str | None] = mapped_column(String(40))
     notes: Mapped[str | None] = mapped_column(Text)
 
-    actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    actif: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
