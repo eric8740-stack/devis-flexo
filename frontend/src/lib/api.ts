@@ -775,6 +775,24 @@ export interface DevisListResponse {
   pages: number;
 }
 
+// Sprint 13 avenant — multi-lots production. Si `lots` fourni avec
+// `quantite_totale`, le devis est créé avec N LotProduction (cascade).
+// Validation côté backend : Σ qté lots == quantite_totale (422 sinon).
+export interface LotProductionCreatePayload {
+  cylindre_id: number;
+  machine_id: number;
+  nb_poses_dev: number;
+  nb_poses_laize: number;
+  sens_enroulement: number;
+  quantite: number;
+  matiere_id: number;
+  intervalle_dev_reel_mm?: string | null;
+  intervalle_laize_reel_mm?: string | null;
+  largeur_plaque_mm?: string | null;
+  score_optim?: number | null;
+  cout_lot_ht_eur?: string | null;
+}
+
 export interface DevisCreate {
   payload_input: Json;
   payload_output: Json;
@@ -782,6 +800,9 @@ export interface DevisCreate {
   statut?: DevisStatut;
   cylindre_choisi_z?: number | null;
   cylindre_choisi_nb_etiq?: number | null;
+  // Multi-lots (optionnel, backward-compat)
+  quantite_totale?: number;
+  lots?: LotProductionCreatePayload[];
 }
 
 export interface DevisUpdate {
