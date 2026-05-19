@@ -20,6 +20,7 @@ from app.models.option_fabrication import OptionFabrication
 from app.models.outil_decoupe import OutilDecoupe
 from app.models.partenaire_st import PartenaireST
 from app.models.photo_production import PHOTO_TYPE_ETAPES, PhotoProduction
+from app.models.porte_cliche import PorteCliche
 from app.models.rapport_qualite_production import RapportQualiteProduction
 from app.models.tarif_encre import TarifEncre
 from app.models.tarif_poste import TarifPoste
@@ -57,6 +58,8 @@ __all__ = [
     "OperationFinition",
     "OutilDecoupe",
     "PartenaireST",
+    # Brief #29 — paramètres parc (sleeves / porte-clichés)
+    "PorteCliche",
     "TarifEncre",
     "TarifPoste",
     "TempsOperationStandard",
