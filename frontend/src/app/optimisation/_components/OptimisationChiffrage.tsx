@@ -250,25 +250,46 @@ export function OptimisationChiffrage() {
   };
 
   return (
-    <section className="space-y-5">
+    <section className="mx-auto max-w-6xl space-y-5 p-6">
       {enModeEdition && devisExistantNumero && (
-        <div className="rounded-lg border-l-4 border-l-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
-          <strong>Édition du devis {devisExistantNumero}</strong> — tu
-          modifies un devis existant. La validation finale fera un
-          <em> PUT</em> qui remplace les lots et recalcule le chiffrage.
+        <div className="rounded-lg border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-50 via-amber-50/80 to-white px-4 py-3 text-sm text-amber-900 shadow-sm">
+          <strong>✎ Édition du devis {devisExistantNumero}</strong> — tu
+          modifies un devis existant. À la validation, je remplace tes
+          lots et recalcule le chiffrage en gardant le même numéro.
         </div>
       )}
+
+      {/* Stepper visuel 4/4 — pos brief #33 §9bis (design joyeux). */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
+          ✓ Saisie
+        </span>
+        <span className="text-muted-foreground">›</span>
+        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
+          ✓ Candidats
+        </span>
+        <span className="text-muted-foreground">›</span>
+        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
+          ✓ Lots & matières
+        </span>
+        <span className="text-muted-foreground">›</span>
+        <span className="rounded-full bg-gradient-to-r from-blue-700 to-amber-600 px-3 py-0.5 font-semibold text-white shadow-sm">
+          ④ Chiffrage
+        </span>
+      </div>
+
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">
-            Étape 4 — Chiffrage{" "}
-            {enModeEdition && devisExistantNumero
-              ? `· édition ${devisExistantNumero}`
-              : ""}
+          <h2
+            className="bg-gradient-to-r from-blue-800 to-amber-700 bg-clip-text text-3xl font-bold text-transparent"
+            style={{ fontFamily: "Fraunces, serif" }}
+          >
+            💰 Chiffrage final
           </h2>
           <p className="text-sm text-muted-foreground">
-            Ajuste les options globales, la marge et la réduction
-            commerciale. Le récap brut/net se recalcule en direct.
+            Ajuste tes options globales, ta marge et ta réduction
+            commerciale. Le récap brut/net se rafraîchit tout seul à
+            chaque clic — pas besoin de revalider.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={goDetail}>
@@ -280,11 +301,12 @@ export function OptimisationChiffrage() {
         {/* --- Options de fabrication globales --- */}
         <Card className="border-l-4 border-l-blue-500 lg:col-span-2">
           <CardHeader>
-            <CardTitle>Options de fabrication globales</CardTitle>
+            <CardTitle>⚙ Options de fabrication globales</CardTitle>
             <CardDescription>
-              Cochées au niveau devis (s&apos;appliquent à tous les lots). Le
-              chiffrage moteur consommera les codes au prochain itération —
-              elles sont snapshotées dans le payload pour traçabilité.
+              Coche celles qui s&apos;appliquent au devis entier (tous les
+              lots). Le moteur consommera ces codes à la prochaine itération
+              — pour l&apos;instant je les snapshote dans le payload pour la
+              traçabilité.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -335,11 +357,10 @@ export function OptimisationChiffrage() {
         {/* --- Marge override --- */}
         <Card className="border-l-4 border-l-amber-500">
           <CardHeader>
-            <CardTitle>Marge override</CardTitle>
+            <CardTitle>📈 Marge override</CardTitle>
             <CardDescription>
-              Optionnel — surcharge le % de marge appliqué par le moteur de
-              chiffrage. Laisse vide pour conserver la marge par défaut du
-              barème.
+              Optionnel — surcharge la marge du barème pour ce devis. Laisse
+              vide si la marge par défaut te convient.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -353,9 +374,10 @@ export function OptimisationChiffrage() {
               placeholder="(défaut barème)"
               value={margeOverridePct}
               onChange={(e) => setMargeOverridePct(e.target.value)}
+              className="text-lg font-semibold"
             />
             <p className="text-xs text-muted-foreground">
-              Valeur typique 30-60 % flexo étiquettes.
+              Typique flexo étiquettes : 30-60 %.
             </p>
           </CardContent>
         </Card>
@@ -363,10 +385,10 @@ export function OptimisationChiffrage() {
         {/* --- Réduction commerciale --- */}
         <Card className="border-l-4 border-l-emerald-500">
           <CardHeader>
-            <CardTitle>Réduction commerciale</CardTitle>
+            <CardTitle>🎁 Réduction commerciale</CardTitle>
             <CardDescription>
-              Remise appliquée sur le total brut. Stockée séparément du
-              moteur de chiffrage pour traçabilité commerciale.
+              La remise que tu accordes au client par-dessus le brut. Stockée
+              à part pour qu&apos;elle reste traçable côté commercial.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -379,22 +401,33 @@ export function OptimisationChiffrage() {
               max={100}
               value={reductionPct}
               onChange={(e) => setReductionPct(e.target.value)}
+              className="text-lg font-semibold"
             />
             <p className="text-xs text-muted-foreground">
-              0 % = aucune remise. 100 % max.
+              0 % = pas de remise. 100 % max.
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* --- Récap hero gradient bleu→or --- */}
-      <div className="rounded-lg border-2 border-blue-300 bg-gradient-to-br from-blue-100/60 via-white to-amber-100/60 p-6 shadow-sm">
+      {/* --- Récap hero gradient bleu→or (§9bis brief #33) --- */}
+      <div className="relative overflow-hidden rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-100/70 via-white to-amber-100/70 p-8 shadow-lg">
+        <div className="absolute right-4 top-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+          💡 Recalcul live
+        </div>
+        <p className="mb-4 text-center text-xs uppercase tracking-widest text-muted-foreground">
+          {selection.length} lot{selection.length > 1 ? "s" : ""} ·{" "}
+          {quantiteTotale.toLocaleString("fr-FR")} étiquettes au total
+        </p>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="text-center">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               Coût brut HT
             </p>
-            <p className="mt-1 text-2xl font-bold text-blue-900">
+            <p
+              className="mt-1 text-2xl font-bold text-blue-900"
+              style={{ fontFamily: "Fraunces, serif" }}
+            >
               {previewLoading
                 ? "…"
                 : preview
@@ -406,7 +439,10 @@ export function OptimisationChiffrage() {
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               Réduction
             </p>
-            <p className="mt-1 text-2xl font-bold text-emerald-700">
+            <p
+              className="mt-1 text-2xl font-bold text-emerald-700"
+              style={{ fontFamily: "Fraunces, serif" }}
+            >
               {previewLoading
                 ? "…"
                 : preview
@@ -414,16 +450,17 @@ export function OptimisationChiffrage() {
                   : "—"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {preview
-                ? `${formaterEuros(preview.reduction_pct)} %`
-                : ""}
+              {preview ? `${formaterEuros(preview.reduction_pct)} %` : ""}
             </p>
           </div>
           <div className="text-center">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               Coût net HT
             </p>
-            <p className="mt-1 bg-gradient-to-r from-blue-700 to-amber-700 bg-clip-text text-3xl font-extrabold text-transparent">
+            <p
+              className="mt-1 bg-gradient-to-r from-blue-700 to-amber-700 bg-clip-text text-4xl font-extrabold text-transparent"
+              style={{ fontFamily: "Fraunces, serif" }}
+            >
               {previewLoading
                 ? "…"
                 : preview
@@ -478,6 +515,12 @@ export function OptimisationChiffrage() {
             )}
           </Button>
         </div>
+        {!enModeEdition && (
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            Une fois validé, je te redirige sur la page détail pour
+            l&apos;imprimer, le dupliquer ou repartir d&apos;ici.
+          </p>
+        )}
       </div>
     </section>
   );
