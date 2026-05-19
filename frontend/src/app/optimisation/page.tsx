@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
+  getDevisDetail,
   getOptionsDisponibles,
   listMatieres,
   postOptimisationCalculer,
@@ -112,7 +114,72 @@ export default function OptimisationPage() {
 }
 
 function OptimisationPageInner() {
-  const { etape } = useOptimisationPose();
+  const { etape, hydrateFromDevisExistant } = useOptimisationPose();
+  const searchParams = useSearchParams();
+  const devisIdParam = searchParams.get("devis_id");
+  const { toast } = useToast();
+
+  const [hydrationLoading, setHydrationLoading] = useState(false);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Brief #33 commit 3 — détection mode édition via ?devis_id=X. Fetch
+  // le devis et hydrate le store (selection + candidats + état étape 4
+  // + bascule sur "chiffrage" ouverte par défaut).
+  useEffect(() => {
+    if (!devisIdParam || hydrated || hydrationLoading) return;
+    const id = parseInt(devisIdParam, 10);
+    if (Number.isNaN(id)) {
+      setHydrationError("Identifiant de devis invalide dans l'URL.");
+      return;
+    }
+    setHydrationLoading(true);
+    getDevisDetail(id)
+      .then((devis) => {
+        if (!devis.lots_production || devis.lots_production.length === 0) {
+          // Devis legacy mono-config (sans lots) : on ne peut pas éditer
+          // via /optimisation. Redirection clean vers la page détail.
+          setHydrationError(
+            `Le devis ${devis.numero} est un devis legacy mono-config ; édite-le depuis sa page détail (rubrique manuelle).`
+          );
+          return;
+        }
+        hydrateFromDevisExistant(devis);
+        setHydrated(true);
+      })
+      .catch((err) => {
+        setHydrationError(
+          err instanceof Error ? err.message : "Chargement du devis impossible"
+        );
+        toast({
+          title: "Édition impossible",
+          description:
+            err instanceof Error ? err.message : "Erreur inconnue",
+          variant: "destructive",
+        });
+      })
+      .finally(() => setHydrationLoading(false));
+  }, [devisIdParam, hydrated, hydrationLoading, hydrateFromDevisExistant, toast]);
+
+  if (devisIdParam && hydrationLoading) {
+    return (
+      <main className="mx-auto max-w-6xl space-y-4 p-6">
+        <p className="text-sm text-muted-foreground">
+          Chargement du devis #{devisIdParam}…
+        </p>
+      </main>
+    );
+  }
+  if (devisIdParam && hydrationError) {
+    return (
+      <main className="mx-auto max-w-6xl space-y-4 p-6">
+        <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          {hydrationError}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <>
       {etape === "saisie" && <OptimisationPoseSaisie />}

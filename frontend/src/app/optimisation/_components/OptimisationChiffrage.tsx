@@ -248,6 +248,13 @@ export function OptimisationChiffrage() {
 
   return (
     <section className="space-y-5">
+      {enModeEdition && devisExistantNumero && (
+        <div className="rounded-lg border-l-4 border-l-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+          <strong>Édition du devis {devisExistantNumero}</strong> — tu
+          modifies un devis existant. La validation finale fera un
+          <em> PUT</em> qui remplace les lots et recalcule le chiffrage.
+        </div>
+      )}
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold">
