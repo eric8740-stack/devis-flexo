@@ -1316,3 +1316,108 @@ export async function fetchIAPhotoBlob(image_key: string): Promise<string> {
   const blob = await r.blob();
   return URL.createObjectURL(blob);
 }
+
+// ---------------------------------------------------------------------------
+// Brief #29 — Paramètres parc : cylindres
+// ---------------------------------------------------------------------------
+
+export interface CylindreParc {
+  id: number;
+  nb_dents: number;
+  developpe_mm: string;
+  actif: boolean;
+  notes: string | null;
+  date_creation: string;
+}
+
+export interface CylindreCreatePayload {
+  nb_dents: number;
+  actif?: boolean;
+  notes?: string | null;
+}
+
+export type CylindreUpdatePayload = Partial<CylindreCreatePayload>;
+
+export const listCylindres = (actif: boolean | null = true) => {
+  const params = new URLSearchParams();
+  if (actif === false) params.set("actif", "false");
+  else if (actif === null) params.set("actif", "");
+  return apiFetch<CylindreParc[]>(
+    `/api/cylindres${params.toString() ? `?${params}` : ""}`
+  );
+};
+export const createCylindre = (data: CylindreCreatePayload) =>
+  apiFetch<CylindreParc>("/api/cylindres", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateCylindre = (id: number, data: CylindreUpdatePayload) =>
+  apiFetch<CylindreParc>(`/api/cylindres/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+export const deleteCylindre = (id: number) =>
+  apiFetch<void>(`/api/cylindres/${id}`, { method: "DELETE" });
+export const toggleActifCylindre = (id: number) =>
+  apiFetch<CylindreParc>(`/api/cylindres/${id}/toggle-actif`, {
+    method: "POST",
+  });
+
+// ---------------------------------------------------------------------------
+// Brief #29 — Paramètres parc : porte-clichés (sleeves)
+// ---------------------------------------------------------------------------
+
+export interface PorteCliche {
+  id: number;
+  reference: string;
+  marque: string | null;
+  modele: string | null;
+  laize_utile_mm: string;
+  diametre_interieur_mm: string | null;
+  matiere: string | null;
+  notes: string | null;
+  actif: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PorteClicheCreatePayload {
+  reference: string;
+  marque?: string | null;
+  modele?: string | null;
+  laize_utile_mm: number;
+  diametre_interieur_mm?: number | null;
+  matiere?: string | null;
+  notes?: string | null;
+  actif?: boolean;
+}
+
+export type PorteClicheUpdatePayload = Partial<PorteClicheCreatePayload>;
+
+export const listPorteCliches = (actif: boolean | null = true) => {
+  const params = new URLSearchParams();
+  if (actif === false) params.set("actif", "false");
+  else if (actif === null) params.set("actif", "");
+  return apiFetch<PorteCliche[]>(
+    `/api/porte-cliches${params.toString() ? `?${params}` : ""}`
+  );
+};
+export const createPorteCliche = (data: PorteClicheCreatePayload) =>
+  apiFetch<PorteCliche>("/api/porte-cliches", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updatePorteCliche = (
+  id: number,
+  data: PorteClicheUpdatePayload
+) =>
+  apiFetch<PorteCliche>(`/api/porte-cliches/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+export const deletePorteCliche = (id: number) =>
+  apiFetch<void>(`/api/porte-cliches/${id}`, { method: "DELETE" });
+export const toggleActifPorteCliche = (id: number) =>
+  apiFetch<PorteCliche>(`/api/porte-cliches/${id}/toggle-actif`, {
+    method: "POST",
+  });

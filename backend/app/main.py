@@ -14,6 +14,7 @@ from app.routers import (
     client,
     complexe,
     cost,
+    cylindre,
     devis,
     entreprise,
     fournisseur,
@@ -26,6 +27,7 @@ from app.routers import (
     outil_decoupe,
     parametres_options,
     partenaire_st,
+    porte_cliche,
     tarif_poste,
 )
 from app.services.cost_engine import CostEngineError
@@ -83,6 +85,8 @@ app.include_router(ia.router)
 app.include_router(parametres_options.router)
 # PR souveraineté commerciale — catalogue matières scopé tenant
 app.include_router(matiere.router)
+app.include_router(cylindre.router)  # Brief #29 — CRUD parc cylindres
+app.include_router(porte_cliche.router)  # Brief #29 — CRUD porte-clichés
 # 2026-05-16 TEMPORAIRE — endpoint audit prod seeds. À retirer après diagnostic.
 app.include_router(admin_audit.router)
 
