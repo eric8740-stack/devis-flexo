@@ -183,7 +183,12 @@ export function DevisResultMultiLots({
             size="lg"
             className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg"
           >
-            <Link href={`/devis/${devis.id}/edit`}>✎ Modifie ton devis</Link>
+            {/* Brief #33 commit 4 — redirige vers /optimisation?devis_id=X
+                pour ouvrir le workflow 4 étapes en mode édition (étape 4
+                ouverte par défaut, hydratée via getDevisDetail). */}
+            <Link href={`/optimisation?devis_id=${devis.id}`}>
+              ✎ Modifie ton devis
+            </Link>
           </Button>
         </div>
       </section>
