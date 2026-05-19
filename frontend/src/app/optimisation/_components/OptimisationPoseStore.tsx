@@ -142,18 +142,23 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setSelection((prev) => {
         const exist = prev.find((s) => s.id_candidat === id);
         if (exist) return prev.filter((s) => s.id_candidat !== id);
+        // Patch #31 — auto-fill du 1er lot avec la quantité totale du
+        // devis. Cas le plus fréquent : utilisateur veut un seul lot
+        // sur la qté totale, on évite la friction du "saisir 10000".
+        // 2ème lot et suivants → quantite=0 (user saisit la répartition).
+        const quantiteAuto = prev.length === 0 ? quantiteTotale : 0;
         return [
           ...prev,
           {
             id_candidat: id,
             candidat,
-            quantite: 0,
+            quantite: quantiteAuto,
             matiere_id: null,
           },
         ];
       });
     },
-    []
+    [quantiteTotale]
   );
 
   const setQuantiteLot = useCallback(
