@@ -59,11 +59,13 @@ def _onboard_tenant_minimal():
     """Onboarde via l'API : 6 cylindres représentatifs + 2 machines +
     options minimales + barèmes (toujours 4).
 
-    Valeurs mm = dents × 3.175 (cf. fix Cas B du 2026-05-16) :
-    72→228.6, 96→304.8, 104→330.2, 112→355.6, 128→406.4, 144→457.2.
+    Brief #28 : 72 dents retiré du parc compte demo. On utilise désormais
+    80 dents (254 mm) pour exercer le cas "petit cylindre" en remplacement.
+    Valeurs mm = dents × 3.175 :
+    80→254.0, 96→304.8, 104→330.2, 112→355.6, 128→406.4, 144→457.2.
     """
     payload = {
-        "cylindres_developpes_mm": [228.6, 304.8, 330.2, 355.6, 406.4, 457.2],
+        "cylindres_developpes_mm": [254.0, 304.8, 330.2, 355.6, 406.4, 457.2],
         "machines_codes": ["mark_andy_2200", "omet_xflex_330"],
         "matieres_codes": [],
         "options_codes": ["vernis_selectif", "dorure_chaud"],

@@ -22,31 +22,32 @@ from decimal import Decimal
 from typing import Any
 
 # ============================================================================
-# 1. CYLINDRES MAGNÉTIQUES — 19 standards ICE (CdC ligne 948)
+# 1. CYLINDRES MAGNÉTIQUES — 21 standards parc compte demo (Brief #28)
 # ============================================================================
-# Parc ICE Étiquettes (Eric, 28 ans). Couvre 72 → 144 dents (≈ 229 → 457 mm
-# développé physique) pour étiquettes standard.
+# Parc flexo étiquettes standard. Couvre 80 → 187 dents (≈ 254 → 594 mm
+# développé physique).
 # `nb_pc_*` (poses de chaque format PC) = 0 par défaut : l'imprimerie
 # saisit son inventaire après. Le développé seul suffit au moteur
 # d'optimisation pour scorer.
-# Nomenclature ICE : les imprimeurs désignent un cylindre par son **nombre
-# de dents** (pas son développé physique). La conversion vers le développé
-# circonférentiel utilise un pas de 3.175 mm/dent (standard flexo).
+# Nomenclature métier : les imprimeurs désignent un cylindre par son
+# **nombre de dents** (pas son développé physique). La conversion vers le
+# développé circonférentiel utilise un pas de 3.175 mm/dent (standard flexo).
 #
-# Les valeurs ci-dessous (72, 80, ..., 144) sont des DENTS. Le moteur
-# d'optimisation, lui, travaille en mm (Z = circonférence physique du
-# cylindre). On expose donc deux constantes :
+# Les valeurs ci-dessous sont des DENTS. Le moteur d'optimisation travaille
+# en mm (Z = circonférence physique du cylindre). On expose donc deux
+# constantes :
 #   - CYLINDRES_STANDARD_DENTS : nomenclature métier (source de vérité)
 #   - CYLINDRES_STANDARD_MM     : valeurs converties pour la BDD et le moteur
 #
-# Cas réel 100×80 mm : avec cyl 104 dents = 330.2 mm, dev étiquette = 80,
-# intervalle = 2 mm → N = floor(330.2 / 82) = 4 poses dev, intervalle
-# réel = 330.2/4 − 80 = 2.55 mm (cohérent avec l'Excel métier d'Eric).
+# Brief #28 (fix workflow étape 2) :
+#   - Retirés du parc : 72, 90, 103 (en prod : préservés en actif=False
+#     via migration data pour ne pas casser les FK devis historiques).
+#   - Ajoutés : 101, 106, 120, 148, 187.
 DENTS_TO_MM_FACTOR: Decimal = Decimal("3.175")
 
 CYLINDRES_STANDARD_DENTS: list[int] = [
-    72, 80, 82, 84, 86, 88, 90, 92, 96, 98,
-    103, 104, 112, 116, 128, 132, 134, 136, 144,
+    80, 82, 84, 86, 88, 92, 96, 98, 101, 104, 106,
+    112, 116, 120, 128, 132, 134, 136, 144, 148, 187,
 ]
 
 # Développés physiques en mm, dérivés des dents. Source de vérité pour la
@@ -541,10 +542,10 @@ def get_bareme_by_code(code: str) -> dict[str, Any] | None:
 
 
 # Sanity checks au chargement (fail fast si désynchro)
-assert len(CYLINDRES_STANDARD_DENTS) == 19, (
-    f"19 cylindres attendus, {len(CYLINDRES_STANDARD_DENTS)} trouvés"
+assert len(CYLINDRES_STANDARD_DENTS) == 21, (
+    f"21 cylindres attendus, {len(CYLINDRES_STANDARD_DENTS)} trouvés"
 )
-assert len(CYLINDRES_STANDARD_MM) == 19, (
+assert len(CYLINDRES_STANDARD_MM) == 21, (
     "CYLINDRES_STANDARD_MM doit être dérivé des dents — incohérence."
 )
 assert all(c > 200 for c in CYLINDRES_STANDARD_MM), (

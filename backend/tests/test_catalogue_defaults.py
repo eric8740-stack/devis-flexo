@@ -36,14 +36,16 @@ def test_cylindres_count_and_range():
     (5 cylindres avec dev=72/96/104/112/144 au lieu de mm réels). On
     sépare maintenant explicitement les deux représentations.
     """
-    # Dents : nomenclature ICE inchangée.
-    assert len(CYLINDRES_STANDARD_DENTS) == 19
-    assert min(CYLINDRES_STANDARD_DENTS) == 72
-    assert max(CYLINDRES_STANDARD_DENTS) == 144
-    assert len(set(CYLINDRES_STANDARD_DENTS)) == 19
+    # Brief #28 : parc compte demo = 21 cylindres (80..187 dents).
+    # 72 retiré (hors parc), 90/103 désactivés via migration data
+    # `e8a1c2d5f6b9` côté prod ; ici on teste les défauts en mémoire.
+    assert len(CYLINDRES_STANDARD_DENTS) == 21
+    assert min(CYLINDRES_STANDARD_DENTS) == 80
+    assert max(CYLINDRES_STANDARD_DENTS) == 187
+    assert len(set(CYLINDRES_STANDARD_DENTS)) == 21
 
     # mm : dérivés des dents (×3.175), source de vérité pour la BDD et le moteur.
-    assert len(CYLINDRES_STANDARD_MM) == 19
+    assert len(CYLINDRES_STANDARD_MM) == 21
     # Sanity : aucun n'est en deçà de 200 mm (sinon retour Cas B).
     assert all(c > 200 for c in CYLINDRES_STANDARD_MM)
     # Conversion stable : valeur reconstructible depuis les dents.
@@ -167,7 +169,7 @@ def test_all_data_is_json_serializable():
     assert len(serialized) > 1000  # sanity : un payload de 5 catalogues n'est pas vide
     # Round-trip — vérifie qu'on récupère bien les mêmes longueurs
     reloaded = json.loads(serialized)
-    assert len(reloaded["cylindres"]) == 19
+    assert len(reloaded["cylindres"]) == 21  # Brief #28 : parc 21 cyls
     assert len(reloaded["machines"]) == 3
     assert len(reloaded["matieres"]) == 30
     assert len(reloaded["options"]) == 20

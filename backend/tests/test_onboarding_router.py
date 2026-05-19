@@ -63,7 +63,7 @@ def test_get_catalogue_defaults_renvoie_tous_les_catalogues():
     r = client.get("/api/onboarding/catalogue-defaults")
     assert r.status_code == 200
     body = r.json()
-    assert len(body["cylindres_developpes_mm"]) == 19
+    assert len(body["cylindres_developpes_mm"]) == 21  # Brief #28 : parc 21 cyls
     assert len(body["machines"]) == 3
     assert len(body["matieres"]) == 30
     assert len(body["options"]) == 20
@@ -107,10 +107,12 @@ def test_status_true_apres_onboarding(cleanup_tenant_rows):
 
 
 def test_post_initialiser_catalogues_happy_path(cleanup_tenant_rows):
-    # Valeurs mm réelles = dents × 3.175 (cf. fix Cas B). 72→228.6, 96→304.8,
-    # 104→330.2, 144→457.2.
+    # Brief #28 : 72 retiré du parc compte demo (228.6 mm n'est plus valide).
+    # On utilise 254.0 (80 dents) comme cyl bas de gamme pour exercer le cas
+    # "petit cylindre". Autres valeurs mm = dents × 3.175 :
+    # 80→254.0, 96→304.8, 104→330.2, 144→457.2.
     payload = {
-        "cylindres_developpes_mm": [228.6, 304.8, 330.2, 457.2],
+        "cylindres_developpes_mm": [254.0, 304.8, 330.2, 457.2],
         "machines_codes": ["mark_andy_2200", "omet_xflex_330"],
         "matieres_codes": ["PAP_COUCHE_BRILL_80", "BOPP_TRANSP_50"],
         "options_codes": ["vernis_selectif", "dorure_chaud", "numerotation"],

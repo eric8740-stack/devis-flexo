@@ -45,7 +45,7 @@ def cleanup_and_onboard():
 def _onboard_tenant_minimal_avec_matieres():
     """Idem onboarding minimal mais avec 2 matières (1 transparente + 1 opaque)."""
     payload = {
-        "cylindres_developpes_mm": [228.6, 304.8, 330.2, 355.6, 406.4, 457.2],
+        "cylindres_developpes_mm": [254.0, 304.8, 330.2, 355.6, 406.4, 457.2],
         "machines_codes": ["mark_andy_2200", "omet_xflex_330"],
         "matieres_codes": ["BOPP_TRANSP_50", "PAP_COUCHE_BRILL_80"],
         "options_codes": ["vernis_selectif"],
