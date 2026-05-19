@@ -35,6 +35,10 @@ export function OptimisationPoseCandidats() {
 
   const [scoreFiltre, setScoreFiltre] = useState(true);
   const [machineFiltre, setMachineFiltre] = useState<number | null>(null);
+  // Brief #28 : toggle "Grouper par cylindre" — collapse les variantes
+  // laize secondaires d'un même cylindre, ne montre que la meilleure
+  // (premier rencontré, donc le mieux scoré puisque tri DESC).
+  const [grouperParCyl, setGrouperParCyl] = useState(false);
 
   const machinesDispo = useMemo(() => {
     const ids = new Set<number>();
@@ -47,12 +51,21 @@ export function OptimisationPoseCandidats() {
   }, [candidats]);
 
   const candidatsAffiches = useMemo(() => {
-    return candidats.filter((c) => {
+    const filtres = candidats.filter((c) => {
       if (scoreFiltre && c.score < SCORE_SEUIL_DEFAULT) return false;
       if (machineFiltre !== null && c.machine_id !== machineFiltre) return false;
       return true;
     });
-  }, [candidats, scoreFiltre, machineFiltre]);
+    if (!grouperParCyl) return filtres;
+    // Collapse par cylindre_id : on ne garde que la meilleure variante
+    // (premier rencontré dans le tri DESC).
+    const vus = new Set<number>();
+    return filtres.filter((c) => {
+      if (vus.has(c.cylindre_id)) return false;
+      vus.add(c.cylindre_id);
+      return true;
+    });
+  }, [candidats, scoreFiltre, machineFiltre, grouperParCyl]);
 
   const sommeOK = sommeQuantitesLots === quantiteTotale && selection.length > 0;
   const ecart = sommeQuantitesLots - quantiteTotale;
@@ -100,6 +113,15 @@ export function OptimisationPoseCandidats() {
             ))}
           </select>
         </label>
+        <label className="flex cursor-pointer items-center gap-1">
+          <input
+            type="checkbox"
+            checked={grouperParCyl}
+            onChange={(e) => setGrouperParCyl(e.target.checked)}
+            className="h-4 w-4 accent-foreground"
+          />
+          <span>Grouper par cylindre</span>
+        </label>
         <span className="ml-auto text-xs text-muted-foreground">
           {candidatsAffiches.length} affichées
         </span>
@@ -118,6 +140,7 @@ export function OptimisationPoseCandidats() {
               <th className="px-2 py-2">Δ laize</th>
               <th className="px-2 py-2">Score</th>
               <th className="px-2 py-2">Sens</th>
+              <th className="px-2 py-2">Info</th>
               <th className="px-2 py-2">Quantité du lot</th>
             </tr>
           </thead>
@@ -167,6 +190,16 @@ export function OptimisationPoseCandidats() {
                     {c.sens_enroulement_libelle}
                   </td>
                   <td className="px-2 py-2">
+                    {c.petit_cylindre && (
+                      <span
+                        title="Cylindre de petit diamètre — vérifier visuellement la planéité du tirage si tu doutes"
+                        className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-900"
+                      >
+                        ℹ️ Petit cylindre
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2">
                     {coche && (
                       <Input
                         type="number"
@@ -185,7 +218,7 @@ export function OptimisationPoseCandidats() {
             })}
             {candidatsAffiches.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-2 py-4 text-center text-sm text-muted-foreground">
+                <td colSpan={10} className="px-2 py-4 text-center text-sm text-muted-foreground">
                   Aucune configuration ne correspond aux filtres.
                 </td>
               </tr>

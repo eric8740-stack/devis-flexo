@@ -155,20 +155,27 @@ def test_tous_candidats_viables_retournes_tries_par_score_desc():
 # ---------------------------------------------------------------------------
 
 
-def test_effet_banane_exclut_cyl_trop_petit():
-    """Cyl 228.6 mm (72 dents) + format laize 200 → effet banane exclut.
-    Avec largeur 200 et laize_utile 330, variante max = 1 ; plaque = 200 mm
-    → Z mini ICE = 304.8 mm. Cyl 228.6 < 304.8 → exclu."""
+def test_petit_cylindre_non_exclu_badge_informationnel():
+    """Brief #28 : l'effet banane n'est PLUS un filtre dur. Un petit cyl
+    (≤ 80 dents = 254 mm) avec une plaque large est désormais proposé
+    avec un badge informationnel `petit_cylindre=True`, plutôt que d'être
+    exclu d'office. La souveraineté commerciale revient à l'utilisateur.
+
+    Cas test : cyl 254 mm (80 dents) + format laize 200 → variante max = 1.
+    Auparavant : Z mini > 254 → exclu. Désormais : proposé + badge."""
     inp = _input_base(
-        cylindres=[Cylindre(id=1, developpe_mm=228.6)],
+        cylindres=[Cylindre(id=1, developpe_mm=254.0)],
         machines=[_machine_xflex()],  # laize 330
         format=Format(hauteur_mm=50, largeur_mm=200),
     )
     out = optimiser_pose(inp)
-    # 0 configs viables — l'unique variante laize impose un Z mini > 228.6.
-    assert out.nb_candidats == 0
-    assert out.message_filtrage is not None
-    assert "éliminé" in out.message_filtrage
+    assert out.nb_candidats >= 1, (
+        "Le petit cylindre doit apparaître désormais (banane retiré)."
+    )
+    c = out.configurations[0]
+    assert c.petit_cylindre is True
+    # Pas de pénalité de score liée au petit cylindre — c'est purement informatif.
+    assert c.score > 0
 
 
 def test_capacite_couleurs_filtre_machine():

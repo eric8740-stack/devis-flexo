@@ -251,6 +251,11 @@ class OptimisationConfigOut(BaseModel):
     # Noms machines équivalentes — facilité d'affichage UI (au lieu d'IDs).
     noms_machines_compatibles: list[str]
 
+    # Brief #28 : badge UI informationnel (≤ 80 dents). Pur affichage, sans
+    # impact sur le score ni le tri. L'utilisateur garde la souveraineté
+    # commerciale — il décide de cocher ou pas la ligne.
+    petit_cylindre: bool = False
+
     # ---- Souveraineté commerciale (Règle 7) — écho des forçages ------------
     # Valeurs "recommandées par le moteur" vs "appliquées effectivement".
     # Le frontend les compare pour afficher l'écart le cas échéant.
