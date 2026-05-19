@@ -45,7 +45,12 @@ class LotProductionCreate(BaseModel):
 
 
 class LotProductionRead(BaseModel):
-    """Représentation lecture d'un lot dans GET /api/devis/{id} (Sprint 13)."""
+    """Représentation lecture d'un lot dans GET /api/devis/{id} (Sprint 13).
+
+    Brief #32 commit 3 : enrichi avec les jointures les plus utiles pour
+    l'UI (machine_nom, cylindre_nb_dents, matiere_libelle, rotation_se
+    pour visuel) afin d'éviter N+1 côté frontend.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,6 +70,17 @@ class LotProductionRead(BaseModel):
     cout_lot_ht_eur: Decimal | None
     created_at: datetime
     updated_at: datetime
+
+    # Brief #32 — joints pour l'UI multi-lots. Défauts à None pour
+    # rester rétro-compatible avec les rows historiques (créées sans
+    # population des joints, par exemple via migration).
+    machine_nom: str | None = None
+    cylindre_nb_dents: int | None = None
+    cylindre_developpe_mm: Decimal | None = None
+    matiere_libelle: str | None = None
+    sens_enroulement_libelle: str | None = None
+    rotation_vue_a_deg: int | None = None
+    rotation_vue_c_deg: int | None = None
 
 
 class DevisCreate(BaseModel):

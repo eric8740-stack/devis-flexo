@@ -80,6 +80,11 @@ def _extract_denormalised_fields(
 def _attach_relation_names(devis: Devis, db: Session) -> Devis:
     """Pose des attributs dynamiques `client_nom` / `machine_nom` sur le
     Devis avant sérialisation Pydantic from_attributes.
+
+    Brief #32 commit 3 : enrichit aussi chaque lot_production avec ses
+    joints (machine_nom, cylindre_nb_dents, matiere_libelle,
+    sens_enroulement_libelle, rotation_vue_a/c_deg) pour permettre
+    `DevisResultMultiLots` côté UI sans N+1.
     """
     machine = db.get(Machine, devis.machine_id)
     setattr(devis, "machine_nom", machine.nom if machine else "")
@@ -92,7 +97,50 @@ def _attach_relation_names(devis: Devis, db: Session) -> Devis:
         )
     else:
         setattr(devis, "client_nom", None)
+
+    # Brief #32 — enrichissement des lots avec joints UI.
+    for lot in devis.lots_production:
+        _enrichir_lot_pour_read(lot, db)
     return devis
+
+
+def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
+    """Pose les attributs dynamiques sur le lot avant sérialisation
+    Pydantic (jointures machine/cylindre/matière + rotation_se).
+    """
+    # Imports locaux pour éviter import circulaire au chargement du module.
+    from app.models import Matiere
+    from app.services.rotation_se import (
+        get_libelle_officiel,
+        get_rotation_vue_a,
+        get_rotation_vue_c,
+    )
+
+    machine_imp = db.get(MachineImprimerie, lot.machine_id)
+    setattr(
+        lot,
+        "machine_nom",
+        machine_imp.nom if machine_imp else f"Machine #{lot.machine_id}",
+    )
+    cyl = db.get(CylindreMagnetique, lot.cylindre_id)
+    if cyl is not None:
+        setattr(lot, "cylindre_developpe_mm", cyl.developpe_mm)
+        # 1 dent = 3.175 mm (DENTS_TO_MM_FACTOR catalogue_defaults).
+        setattr(
+            lot,
+            "cylindre_nb_dents",
+            int(round(float(cyl.developpe_mm) / 3.175)),
+        )
+    else:
+        setattr(lot, "cylindre_developpe_mm", None)
+        setattr(lot, "cylindre_nb_dents", None)
+    mat = db.get(Matiere, lot.matiere_id)
+    setattr(lot, "matiere_libelle", mat.libelle if mat else None)
+    # Rotation_se : single source of truth, mappings verrouillés.
+    sens = lot.sens_enroulement if 1 <= lot.sens_enroulement <= 8 else 1
+    setattr(lot, "sens_enroulement_libelle", get_libelle_officiel(sens))
+    setattr(lot, "rotation_vue_a_deg", get_rotation_vue_a(sens))
+    setattr(lot, "rotation_vue_c_deg", get_rotation_vue_c(sens))
 
 
 # ---------------------------------------------------------------------------
