@@ -36,40 +36,46 @@ export default function MonParcPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Mon parc</h1>
-        <p className="text-sm text-muted-foreground">
+      {/* Header coloré (Brief #30 §8) : éclat accent + sous-titre tutoyé. */}
+      <header className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/60 via-amber-50/40 to-white p-6 shadow-sm">
+        <h1 className="bg-gradient-to-r from-blue-800 to-amber-700 bg-clip-text text-3xl font-bold text-transparent">
+          Mon parc
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           Tes cylindres magnétiques et tes porte-clichés. Tu peux en ajouter,
           désactiver les anciens, réactiver à volonté. Pas besoin de tout
-          configurer — un parc prêt à l&apos;emploi t&apos;a été pré-rempli.
+          configurer — un parc prêt à l&apos;emploi t&apos;a été pré-rempli ✨
         </p>
       </header>
 
+      {/* Tabs avec underline gradient pour le tab actif. */}
       <div className="flex gap-1 border-b border-border">
-        <button
-          type="button"
-          onClick={() => switchOnglet("cylindres")}
-          className={
-            "rounded-t-md px-4 py-2 text-sm font-medium transition-colors " +
-            (onglet === "cylindres"
-              ? "border-b-2 border-blue-700 text-blue-900"
-              : "text-muted-foreground hover:text-foreground")
-          }
-        >
-          🔧 Mes cylindres
-        </button>
-        <button
-          type="button"
-          onClick={() => switchOnglet("porte-cliches")}
-          className={
-            "rounded-t-md px-4 py-2 text-sm font-medium transition-colors " +
-            (onglet === "porte-cliches"
-              ? "border-b-2 border-blue-700 text-blue-900"
-              : "text-muted-foreground hover:text-foreground")
-          }
-        >
-          📐 Mes porte-clichés
-        </button>
+        {(["cylindres", "porte-cliches"] as const).map((key) => {
+          const actif = onglet === key;
+          const label =
+            key === "cylindres" ? "🔧 Mes cylindres" : "📐 Mes porte-clichés";
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => switchOnglet(key)}
+              className={
+                "relative rounded-t-md px-4 py-2 text-sm font-medium transition-colors " +
+                (actif
+                  ? "text-blue-900"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              {label}
+              {actif && (
+                <span
+                  className="absolute inset-x-0 -bottom-px h-0.5 rounded-t bg-gradient-to-r from-blue-700 to-amber-600"
+                  aria-hidden="true"
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {onglet === "cylindres" && <CylindresOnglet />}
