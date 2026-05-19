@@ -844,6 +844,11 @@ export interface DevisUpdate {
   statut?: DevisStatut;
   cylindre_choisi_z?: number | null;
   cylindre_choisi_nb_etiq?: number | null;
+  // Brief #32 commit 2 — réduction commerciale (0..100).
+  reduction_pct?: number;
+  // Brief #32 — replace les lots si fourni (recalcul cost_engine côté CRUD).
+  quantite_totale?: number;
+  lots?: LotProductionCreatePayload[];
 }
 
 export interface ListDevisParams {
