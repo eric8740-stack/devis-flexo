@@ -765,6 +765,38 @@ export interface DevisDetail {
   format_h_mm: string;
   format_l_mm: string;
   ht_total_eur: string;
+  // Brief #32 — réduction commerciale (0..100, défaut 0).
+  reduction_pct?: string;
+  // Brief #32 — lots de production (vide si devis legacy mono-lot).
+  lots_production?: LotProductionRead[];
+}
+
+// Brief #32 — représentation lecture d'un lot de production (joints UI).
+export interface LotProductionRead {
+  id: number;
+  ordre: number;
+  cylindre_id: number;
+  machine_id: number;
+  nb_poses_dev: number;
+  nb_poses_laize: number;
+  sens_enroulement: number;
+  quantite: number;
+  matiere_id: number;
+  intervalle_dev_reel_mm: string | null;
+  intervalle_laize_reel_mm: string | null;
+  largeur_plaque_mm: string | null;
+  score_optim: number | null;
+  cout_lot_ht_eur: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joints backend Brief #32 commit 3
+  machine_nom: string | null;
+  cylindre_nb_dents: number | null;
+  cylindre_developpe_mm: string | null;
+  matiere_libelle: string | null;
+  sens_enroulement_libelle: string | null;
+  rotation_vue_a_deg: number | null;
+  rotation_vue_c_deg: number | null;
 }
 
 export interface DevisListResponse {
@@ -812,6 +844,11 @@ export interface DevisUpdate {
   statut?: DevisStatut;
   cylindre_choisi_z?: number | null;
   cylindre_choisi_nb_etiq?: number | null;
+  // Brief #32 commit 2 — réduction commerciale (0..100).
+  reduction_pct?: number;
+  // Brief #32 — replace les lots si fourni (recalcul cost_engine côté CRUD).
+  quantite_totale?: number;
+  lots?: LotProductionCreatePayload[];
 }
 
 export interface ListDevisParams {

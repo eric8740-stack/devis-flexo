@@ -134,17 +134,15 @@ export function OptimisationPoseDetailLots() {
       const devis = await createDevis(payload);
       toast({
         title: "Devis créé ✓",
-        description: `Devis ${devis.numero} créé avec ${selection.length} lot(s). Tu le retrouves dans la liste.`,
+        description: `Devis ${devis.numero} créé avec ${selection.length} lot(s) — direction ta page détail.`,
       });
-      // Patch #31 — redirect vers la liste des devis (et non /devis/{id}).
-      // Le détail d'un devis multi-lots nécessite un rendu spécifique qui
-      // n'existe pas encore : la page /devis/{id} utilise `DevisResult` qui
-      // attend `payload_output.postes` (mode mono cost_engine standard).
-      // Notre payload_output multi-lots est minimal (pas de postes calculés)
-      // → DevisResult plantait au render avec "client-side exception".
-      // Redirect liste = chemin user safe ; le rendu détail multi-lots fait
-      // l'objet d'un brief dédié (hors scope patch #31).
-      router.push("/devis");
+      // Brief #32 commit 6 — retrait du workaround patch #31. La page
+      // détail /devis/{id} détecte désormais les devis multi-lots (commit 4)
+      // et rend `DevisResultMultiLots` (commit 3) au lieu de `DevisResult`
+      // legacy qui plantait sur `payload_output.postes` manquant.
+      // Le devis sort aussi chiffré automatiquement via cost_engine_aggregator
+      // (commit 1), donc le récap total HT est rempli.
+      router.push(`/devis/${devis.id}`);
     } catch (err) {
       toast({
         title: "Création du devis impossible",

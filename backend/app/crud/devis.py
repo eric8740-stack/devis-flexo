@@ -7,14 +7,29 @@ liste paginée d'éviter le parsing JSON ligne par ligne.
 Lors d'un duplicate, on copie le devis source en forçant statut='brouillon'
 et en générant un nouveau numéro via numero_devis_service.
 """
+import logging
+import math
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import Client, Devis, LotProduction, Machine
+from app.models import (
+    Client,
+    Complexe,
+    CylindreMagnetique,
+    Devis,
+    LotProduction,
+    Machine,
+    MachineImprimerie,
+)
+from app.schemas.devis import DevisInput
 from app.schemas.devis_persist import DevisCreate, DevisUpdate
+from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.numero_devis_service import generate_next_numero
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +80,11 @@ def _extract_denormalised_fields(
 def _attach_relation_names(devis: Devis, db: Session) -> Devis:
     """Pose des attributs dynamiques `client_nom` / `machine_nom` sur le
     Devis avant sérialisation Pydantic from_attributes.
+
+    Brief #32 commit 3 : enrichit aussi chaque lot_production avec ses
+    joints (machine_nom, cylindre_nb_dents, matiere_libelle,
+    sens_enroulement_libelle, rotation_vue_a/c_deg) pour permettre
+    `DevisResultMultiLots` côté UI sans N+1.
     """
     machine = db.get(Machine, devis.machine_id)
     setattr(devis, "machine_nom", machine.nom if machine else "")
@@ -77,7 +97,50 @@ def _attach_relation_names(devis: Devis, db: Session) -> Devis:
         )
     else:
         setattr(devis, "client_nom", None)
+
+    # Brief #32 — enrichissement des lots avec joints UI.
+    for lot in devis.lots_production:
+        _enrichir_lot_pour_read(lot, db)
     return devis
+
+
+def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
+    """Pose les attributs dynamiques sur le lot avant sérialisation
+    Pydantic (jointures machine/cylindre/matière + rotation_se).
+    """
+    # Imports locaux pour éviter import circulaire au chargement du module.
+    from app.models import Matiere
+    from app.services.rotation_se import (
+        get_libelle_officiel,
+        get_rotation_vue_a,
+        get_rotation_vue_c,
+    )
+
+    machine_imp = db.get(MachineImprimerie, lot.machine_id)
+    setattr(
+        lot,
+        "machine_nom",
+        machine_imp.nom if machine_imp else f"Machine #{lot.machine_id}",
+    )
+    cyl = db.get(CylindreMagnetique, lot.cylindre_id)
+    if cyl is not None:
+        setattr(lot, "cylindre_developpe_mm", cyl.developpe_mm)
+        # 1 dent = 3.175 mm (DENTS_TO_MM_FACTOR catalogue_defaults).
+        setattr(
+            lot,
+            "cylindre_nb_dents",
+            int(round(float(cyl.developpe_mm) / 3.175)),
+        )
+    else:
+        setattr(lot, "cylindre_developpe_mm", None)
+        setattr(lot, "cylindre_nb_dents", None)
+    mat = db.get(Matiere, lot.matiere_id)
+    setattr(lot, "matiere_libelle", mat.libelle if mat else None)
+    # Rotation_se : single source of truth, mappings verrouillés.
+    sens = lot.sens_enroulement if 1 <= lot.sens_enroulement <= 8 else 1
+    setattr(lot, "sens_enroulement_libelle", get_libelle_officiel(sens))
+    setattr(lot, "rotation_vue_a_deg", get_rotation_vue_a(sens))
+    setattr(lot, "rotation_vue_c_deg", get_rotation_vue_c(sens))
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +213,14 @@ def create_devis(
     Sprint 13 avenant : si `data.lots` est fourni, crée N LotProduction
     rattachés au devis (ordre 1..N). La validation `Σ qté == quantite_totale`
     est déjà faite par le validator Pydantic de DevisCreate.
+
+    Brief #32 commit 1 : pour les devis multi-lots, chiffrage automatique
+    via cost_engine_aggregator. Le payload_output minimal envoyé par le
+    workflow optim (placeholder prix=0) est ÉCRASÉ par le résultat du
+    cost_engine — devis sort avec prix réel + détail par lot. Si la
+    reconstruction des DevisInput échoue (champs manquants, complexe
+    introuvable), fallback gracieux : devis créé avec prix=0 + note
+    "chiffrage à compléter via /devis/[id]/edit".
     """
     denorm = _extract_denormalised_fields(data.payload_input, data.payload_output)
     numero = generate_next_numero(db)
@@ -169,6 +240,7 @@ def create_devis(
     db.flush()  # On a besoin de devis.id avant de créer les lots.
 
     # Sprint 13 avenant — lots de production (cascade depuis devis.id).
+    lots_persistes: list[LotProduction] = []
     if data.lots:
         for ordre, lot_in in enumerate(data.lots, start=1):
             lot = LotProduction(
@@ -189,25 +261,245 @@ def create_devis(
                 cout_lot_ht_eur=lot_in.cout_lot_ht_eur,
             )
             db.add(lot)
+            lots_persistes.append(lot)
+
+        db.flush()  # lots ont leurs ids
+
+        # Brief #32 commit 1 — chiffrage cost_engine automatique.
+        _chiffrer_devis_multilots(
+            db, devis, lots_persistes, data.payload_input, entreprise_id
+        )
 
     db.commit()
     db.refresh(devis)
     return _attach_relation_names(devis, db)
 
 
+def _chiffrer_devis_multilots(
+    db: Session,
+    devis: Devis,
+    lots: list[LotProduction],
+    payload_input: dict[str, Any],
+    entreprise_id: int,
+) -> None:
+    """Brief #32 commit 1 — chiffrage automatique d'un devis multi-lots
+    via cost_engine_aggregator.
+
+    Construit un DevisInput "best effort" par lot avec defaults métier
+    (1er complexe/machine legacy du tenant si non fournis) et appelle
+    l'aggregator. En cas d'échec (validation Pydantic, exception cost
+    engine), fallback gracieux : on ne casse PAS la création du devis
+    — on laisse le payload_output minimal initial + on log un warning.
+    L'utilisateur pourra finaliser le chiffrage via /devis/[id]/edit.
+
+    SACRED : aucune modification de la logique cost_engine. L'aggregator
+    appelle MoteurDevis N fois (1 fois par lot) sans toucher au calcul.
+    """
+    try:
+        devis_inputs = [
+            _construire_devis_input_pour_lot(
+                lot, payload_input, db, entreprise_id
+            )
+            for lot in lots
+        ]
+        cout_agrege = calculer_devis_multilots(db, entreprise_id, devis_inputs)
+    except Exception as exc:
+        logger.warning(
+            "Chiffrage automatique multi-lots impossible pour devis %s : %s. "
+            "Devis créé en brouillon, à finaliser via /devis/[id]/edit.",
+            devis.numero,
+            exc,
+        )
+        # Note dans payload_output pour transparence côté UI.
+        po = dict(devis.payload_output)
+        po["chiffrage_auto_erreur"] = str(exc)
+        po["note"] = (
+            "Chiffrage indisponible automatiquement — finalise via "
+            "Modifier ce devis."
+        )
+        devis.payload_output = po
+        return
+
+    # Mise à jour des résultats côté Devis + LotProduction.
+    devis.ht_total_eur = cout_agrege.prix_vente_ht_total_eur
+    po = dict(devis.payload_output)
+    po["mode"] = "multi-lots"
+    po["prix_vente_ht_eur"] = str(cout_agrege.prix_vente_ht_total_eur)
+    po["cout_revient_total_eur"] = str(cout_agrege.cout_revient_total_eur)
+    po["nb_lots"] = cout_agrege.nb_lots
+    po["details_par_lot"] = [
+        {
+            "ordre": detail.ordre,
+            "prix_vente_ht_eur": str(detail.prix_vente_ht_eur),
+            "cout_revient_eur": str(detail.cout_revient_eur),
+            "details": detail.details,
+        }
+        for detail in cout_agrege.details_par_lot
+    ]
+    po["note"] = "Devis créé depuis optimisation multi-lots, chiffrage automatique."
+    devis.payload_output = po
+
+    # Persistance cout_lot_ht_eur sur chaque LotProduction (champ existant).
+    for lot, detail in zip(lots, cout_agrege.details_par_lot):
+        lot.cout_lot_ht_eur = detail.prix_vente_ht_eur
+
+
+def _construire_devis_input_pour_lot(
+    lot: LotProduction,
+    payload_input: dict[str, Any],
+    db: Session,
+    entreprise_id: int,
+) -> DevisInput:
+    """Reconstruit un DevisInput valide pour cost_engine à partir d'un
+    LotProduction + le contexte saisie (payload_input).
+
+    Stratégie 'best effort' :
+    - `complexe_id` : 1er complexe actif du tenant (le payload_input
+      du workflow optim ne le porte pas ; un brief futur pourra mapper
+      `lot.matiere_id` → complexe approprié pour plus de précision).
+    - `machine_id` (Machine legacy, cost_engine) : 1ère Machine legacy
+      active du tenant. Distincte de `lot.machine_id` qui pointe vers
+      `machine_imprimerie` (modèle optim Sprint 13).
+    - `laize_utile_mm` : depuis lot.machine (machine_imprimerie).
+    - `ml_total` : calculé depuis quantite + poses + développé cylindre.
+    - format_etiquette_* : depuis payload_input (saisie étape 1).
+    - nb_poses_largeur/developpement : depuis lot.
+    - nb_couleurs_par_type : {} (default — cost_engine tolère vide).
+
+    Raise ValueError si données minimales indisponibles (no complexe, etc.).
+    """
+    complexe = (
+        db.query(Complexe)
+        .filter_by(entreprise_id=entreprise_id)
+        .order_by(Complexe.id)
+        .first()
+    )
+    if complexe is None:
+        raise ValueError(
+            f"Aucun complexe actif pour entreprise_id={entreprise_id}. "
+            "Onboarding incomplet — impossible de chiffrer."
+        )
+
+    machine_legacy = (
+        db.query(Machine)
+        .filter_by(entreprise_id=entreprise_id)
+        .order_by(Machine.id)
+        .first()
+    )
+    if machine_legacy is None:
+        raise ValueError(
+            f"Aucune machine legacy pour entreprise_id={entreprise_id}."
+        )
+
+    # Données depuis le cylindre magnétique du lot (développé) + machine
+    # d'impression (laize utile) — modèles Sprint 13.
+    cyl = db.get(CylindreMagnetique, lot.cylindre_id)
+    machine_imp = db.get(MachineImprimerie, lot.machine_id)
+    if cyl is None or machine_imp is None:
+        raise ValueError(
+            f"Cyl ({lot.cylindre_id}) ou machine imprimerie ({lot.machine_id}) "
+            "introuvable — FK cassée."
+        )
+
+    nb_poses_total = lot.nb_poses_dev * lot.nb_poses_laize
+    # ml_total = nombre de tours nécessaires × développé cyl. On considère
+    # 1 tour = nb_poses_total étiquettes (pas d'assouplissement gâche ici,
+    # le cost_engine ajoutera sa marge de roulage).
+    nb_tours = math.ceil(lot.quantite / nb_poses_total)
+    developpe_m = float(cyl.developpe_mm) / 1000.0
+    ml_total = max(1, math.ceil(nb_tours * developpe_m))
+
+    # Format étiquette : depuis payload_input ou defaults DevisInput.
+    format_l = int(payload_input.get("format_etiquette_largeur_mm", 60))
+    format_h = int(payload_input.get("format_etiquette_hauteur_mm", 40))
+
+    return DevisInput(
+        complexe_id=complexe.id,
+        laize_utile_mm=int(machine_imp.laize_utile_mm or 320),
+        ml_total=ml_total,
+        nb_couleurs_par_type={},
+        machine_id=machine_legacy.id,
+        format_etiquette_largeur_mm=format_l,
+        format_etiquette_hauteur_mm=format_h,
+        nb_poses_largeur=lot.nb_poses_laize,
+        nb_poses_developpement=lot.nb_poses_dev,
+        forme_speciale=False,
+        mode_calcul="manuel",
+    )
+
+
 def update_devis(
     db: Session, devis_id: int, data: DevisUpdate
 ) -> Devis | None:
+    """Update partiel d'un devis (PUT /api/devis/{id} avec exclude_unset).
+
+    Brief #32 commit 2 :
+    - Support `reduction_pct` (0..100 %) — appliquée par-dessus
+      payload_output.prix_vente_ht_eur (brut), pas de mutation du brut.
+    - Support `lots` éditables : si `lots` fourni, remplace TOUS les lots
+      existants (delete cascade) + insert news + recalcul cost_engine
+      via aggregator (cf POST flow).
+    """
     devis = db.get(Devis, devis_id)
     if devis is None:
         return None
     fields = data.model_dump(exclude_unset=True)
+
+    # Brief #32 — lots éditables. Si fourni, replace + recalcul cost_engine.
+    lots_in = fields.pop("lots", None)
+    quantite_totale_in = fields.pop("quantite_totale", None)
+    if lots_in is not None:
+        # Validation cohérence somme (déjà partiellement faite côté Pydantic
+        # DevisCreate mais DevisUpdate accepte les 2 séparément).
+        if quantite_totale_in is None:
+            raise ValueError(
+                "Multi-lots update : quantite_totale obligatoire quand lots fourni."
+            )
+        somme = sum(lot["quantite"] for lot in lots_in)
+        if somme != quantite_totale_in:
+            raise ValueError(
+                f"Multi-lots update : Σ quantités ({somme}) != totale "
+                f"({quantite_totale_in})."
+            )
+        # Replace lots (cascade=all,delete-orphan supprime les anciens
+        # automatiquement à la commit).
+        for ancien in list(devis.lots_production):
+            db.delete(ancien)
+        db.flush()
+        nouveaux_lots: list[LotProduction] = []
+        for ordre, lot_dict in enumerate(lots_in, start=1):
+            lot = LotProduction(
+                devis_id=devis.id,
+                entreprise_id=devis.entreprise_id,
+                ordre=ordre,
+                cylindre_id=lot_dict["cylindre_id"],
+                machine_id=lot_dict["machine_id"],
+                nb_poses_dev=lot_dict["nb_poses_dev"],
+                nb_poses_laize=lot_dict["nb_poses_laize"],
+                sens_enroulement=lot_dict["sens_enroulement"],
+                quantite=lot_dict["quantite"],
+                matiere_id=lot_dict["matiere_id"],
+                intervalle_dev_reel_mm=lot_dict.get("intervalle_dev_reel_mm"),
+                intervalle_laize_reel_mm=lot_dict.get("intervalle_laize_reel_mm"),
+                largeur_plaque_mm=lot_dict.get("largeur_plaque_mm"),
+                score_optim=lot_dict.get("score_optim"),
+                cout_lot_ht_eur=lot_dict.get("cout_lot_ht_eur"),
+            )
+            db.add(lot)
+            nouveaux_lots.append(lot)
+        db.flush()
+        # Recalcul cost_engine_aggregator avec les nouveaux lots.
+        _chiffrer_devis_multilots(
+            db, devis, nouveaux_lots, devis.payload_input, devis.entreprise_id
+        )
+
     # Si payload_input ou payload_output changent, on re-dérive dénormalisés.
     if "payload_input" in fields or "payload_output" in fields:
         new_input = fields.get("payload_input", devis.payload_input)
         new_output = fields.get("payload_output", devis.payload_output)
         denorm = _extract_denormalised_fields(new_input, new_output)
         fields.update(denorm)
+
     for field, value in fields.items():
         setattr(devis, field, value)
     db.commit()
