@@ -797,6 +797,8 @@ export interface LotProductionRead {
   sens_enroulement_libelle: string | null;
   rotation_vue_a_deg: number | null;
   rotation_vue_c_deg: number | null;
+  // Brief #33 — snapshot visuel JSON (null pour lots historiques).
+  payload_visuel: Json | null;
 }
 
 export interface DevisListResponse {
@@ -823,6 +825,9 @@ export interface LotProductionCreatePayload {
   largeur_plaque_mm?: string | null;
   score_optim?: number | null;
   cout_lot_ht_eur?: string | null;
+  // Brief #33 — snapshot visuel pour rejouer SchemaImplantation (laize
+  // papier, liner, chute latérale, diamètre bobine, lacets, rotations).
+  payload_visuel?: Json | null;
 }
 
 export interface DevisCreate {

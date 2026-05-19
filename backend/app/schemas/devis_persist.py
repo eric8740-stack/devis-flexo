@@ -43,6 +43,11 @@ class LotProductionCreate(BaseModel):
     score_optim: float | None = None
     cout_lot_ht_eur: Decimal | None = None
 
+    # Brief #33 — snapshot visuel pour SchemaImplantation par lot (laize
+    # papier, liner, chute latérale, diamètre bobine, lacets, rotations).
+    # Stocké tel quel en JSONB côté DB.
+    payload_visuel: dict | None = None
+
 
 class LotProductionRead(BaseModel):
     """Représentation lecture d'un lot dans GET /api/devis/{id} (Sprint 13).
@@ -81,6 +86,10 @@ class LotProductionRead(BaseModel):
     sens_enroulement_libelle: str | None = None
     rotation_vue_a_deg: int | None = None
     rotation_vue_c_deg: int | None = None
+
+    # Brief #33 — snapshot visuel JSON (laize papier, liner, chute latérale,
+    # diamètre bobine, lacets...). Null pour lots historiques.
+    payload_visuel: dict | None = None
 
 
 class DevisCreate(BaseModel):

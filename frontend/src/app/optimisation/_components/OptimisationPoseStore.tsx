@@ -124,14 +124,19 @@ interface OptimisationPoseContextValue {
 }
 
 /**
- * Reconstruit un OptimisationConfigOut minimal à partir d'un
- * LotProductionRead. Les joints Brief #32 (machine_nom, cylindre_nb_dents,
- * rotation_vue_a_deg…) sont propagés ; les champs métier non snapshotés
- * (z_mini_effet_banane, coefs, ml_total…) sont mis à des défauts neutres
- * — le chiffrage live de l'étape 4 n'a pas besoin de ces champs (utilise
- * uniquement cylindre/machine/poses/sens/intervalles).
+ * Reconstruit un OptimisationConfigOut à partir d'un LotProductionRead.
+ *
+ * Brief #33 commit 5 — si `lot.payload_visuel` est présent (snapshot
+ * complet du candidat à la création), on l'utilise directement : le
+ * visuel SchemaImplantation sera fidèle au moment de la création. Sinon
+ * (lots historiques antérieurs au brief), on reconstruit un fallback
+ * minimal à partir des joints Brief #32 — visuel approximatif (laize
+ * papier, chute latérale, ø bobine seront à 0).
  */
 function _lotToCandidatPartiel(lot: LotProductionRead): OptimisationConfigOut {
+  if (lot.payload_visuel && typeof lot.payload_visuel === "object") {
+    return lot.payload_visuel as unknown as OptimisationConfigOut;
+  }
   return {
     cylindre_id: lot.cylindre_id,
     machine_id: lot.machine_id,

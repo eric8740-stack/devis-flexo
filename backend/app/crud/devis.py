@@ -259,6 +259,7 @@ def create_devis(
                 largeur_plaque_mm=lot_in.largeur_plaque_mm,
                 score_optim=lot_in.score_optim,
                 cout_lot_ht_eur=lot_in.cout_lot_ht_eur,
+                payload_visuel=lot_in.payload_visuel,
             )
             db.add(lot)
             lots_persistes.append(lot)
@@ -559,6 +560,7 @@ def update_devis(
                 largeur_plaque_mm=lot_dict.get("largeur_plaque_mm"),
                 score_optim=lot_dict.get("score_optim"),
                 cout_lot_ht_eur=lot_dict.get("cout_lot_ht_eur"),
+                payload_visuel=lot_dict.get("payload_visuel"),
             )
             db.add(lot)
             nouveaux_lots.append(lot)

@@ -153,6 +153,9 @@ export function OptimisationChiffrage() {
         intervalle_laize_reel_mm: String(s.candidat.intervalle_laize_reel_mm),
         largeur_plaque_mm: String(s.candidat.largeur_plaque_mm),
         score_optim: s.candidat.score,
+        // Brief #33 commit 5 — snapshot complet du candidat pour rejouer
+        // SchemaImplantation côté UI sans recalcul moteur.
+        payload_visuel: s.candidat as unknown as Record<string, unknown>,
       })),
     [selection]
   );
