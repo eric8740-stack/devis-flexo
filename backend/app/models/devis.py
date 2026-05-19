@@ -97,6 +97,14 @@ class Devis(Base):
         ForeignKey("machine.id"), nullable=False
     )
 
+    # Brief #32 commit 2 — réduction commerciale (0..100 %), appliquée
+    # par-dessus le prix_vente_ht_eur calculé par le cost_engine. Le
+    # champ ne change pas `ht_total_eur` (qui reste le brut) — l'UI
+    # affiche les deux pour transparence (brut + après remise).
+    reduction_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, server_default="0", default=Decimal(0)
+    )
+
     # Sprint 13 avenant — lots de production multi-lots (N lots par devis).
     # Cascade delete : la suppression d'un devis emporte ses lots.
     lots_production: Mapped[list["LotProduction"]] = relationship(

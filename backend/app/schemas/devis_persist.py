@@ -117,7 +117,11 @@ class DevisCreate(BaseModel):
 
 
 class DevisUpdate(BaseModel):
-    """Body PUT /api/devis/{id} — partial update via exclude_unset."""
+    """Body PUT /api/devis/{id} — partial update via exclude_unset.
+
+    Brief #32 commit 2 : ajout `reduction_pct` (0..100 %) + `lots`
+    optionnel (si fourni, recalcule cost_engine_aggregator côté CRUD).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -127,6 +131,16 @@ class DevisUpdate(BaseModel):
     statut: Literal["brouillon", "valide"] | None = None
     cylindre_choisi_z: int | None = None
     cylindre_choisi_nb_etiq: int | None = None
+
+    # Brief #32 — réduction commerciale (0..100). Le brut reste dans
+    # `payload_output.prix_vente_ht_eur` ; l'UI calcule l'après-remise.
+    reduction_pct: Decimal | None = Field(None, ge=0, le=100)
+
+    # Brief #32 — lots éditables. Si fourni, replace TOUS les lots du
+    # devis (delete cascade existing + insert news), puis recalcule
+    # cost_engine_aggregator.
+    quantite_totale: int | None = Field(None, ge=1)
+    lots: list[LotProductionCreate] | None = Field(None, min_length=1)
 
 
 class DevisListItem(BaseModel):
@@ -170,6 +184,8 @@ class DevisDetail(BaseModel):
     format_h_mm: Decimal
     format_l_mm: Decimal
     ht_total_eur: Decimal
+    # Brief #32 — réduction commerciale (default 0, voir CRUD).
+    reduction_pct: Decimal = Decimal(0)
     # Sprint 13 avenant — lots de production (liste vide si devis legacy
     # mono-config).
     lots_production: list[LotProductionRead] = Field(default_factory=list)

@@ -383,16 +383,75 @@ def _construire_devis_input_pour_lot(
 def update_devis(
     db: Session, devis_id: int, data: DevisUpdate
 ) -> Devis | None:
+    """Update partiel d'un devis (PUT /api/devis/{id} avec exclude_unset).
+
+    Brief #32 commit 2 :
+    - Support `reduction_pct` (0..100 %) — appliquée par-dessus
+      payload_output.prix_vente_ht_eur (brut), pas de mutation du brut.
+    - Support `lots` éditables : si `lots` fourni, remplace TOUS les lots
+      existants (delete cascade) + insert news + recalcul cost_engine
+      via aggregator (cf POST flow).
+    """
     devis = db.get(Devis, devis_id)
     if devis is None:
         return None
     fields = data.model_dump(exclude_unset=True)
+
+    # Brief #32 — lots éditables. Si fourni, replace + recalcul cost_engine.
+    lots_in = fields.pop("lots", None)
+    quantite_totale_in = fields.pop("quantite_totale", None)
+    if lots_in is not None:
+        # Validation cohérence somme (déjà partiellement faite côté Pydantic
+        # DevisCreate mais DevisUpdate accepte les 2 séparément).
+        if quantite_totale_in is None:
+            raise ValueError(
+                "Multi-lots update : quantite_totale obligatoire quand lots fourni."
+            )
+        somme = sum(lot["quantite"] for lot in lots_in)
+        if somme != quantite_totale_in:
+            raise ValueError(
+                f"Multi-lots update : Σ quantités ({somme}) != totale "
+                f"({quantite_totale_in})."
+            )
+        # Replace lots (cascade=all,delete-orphan supprime les anciens
+        # automatiquement à la commit).
+        for ancien in list(devis.lots_production):
+            db.delete(ancien)
+        db.flush()
+        nouveaux_lots: list[LotProduction] = []
+        for ordre, lot_dict in enumerate(lots_in, start=1):
+            lot = LotProduction(
+                devis_id=devis.id,
+                entreprise_id=devis.entreprise_id,
+                ordre=ordre,
+                cylindre_id=lot_dict["cylindre_id"],
+                machine_id=lot_dict["machine_id"],
+                nb_poses_dev=lot_dict["nb_poses_dev"],
+                nb_poses_laize=lot_dict["nb_poses_laize"],
+                sens_enroulement=lot_dict["sens_enroulement"],
+                quantite=lot_dict["quantite"],
+                matiere_id=lot_dict["matiere_id"],
+                intervalle_dev_reel_mm=lot_dict.get("intervalle_dev_reel_mm"),
+                intervalle_laize_reel_mm=lot_dict.get("intervalle_laize_reel_mm"),
+                largeur_plaque_mm=lot_dict.get("largeur_plaque_mm"),
+                score_optim=lot_dict.get("score_optim"),
+                cout_lot_ht_eur=lot_dict.get("cout_lot_ht_eur"),
+            )
+            db.add(lot)
+            nouveaux_lots.append(lot)
+        db.flush()
+        # Recalcul cost_engine_aggregator avec les nouveaux lots.
+        _chiffrer_devis_multilots(
+            db, devis, nouveaux_lots, devis.payload_input, devis.entreprise_id
+        )
+
     # Si payload_input ou payload_output changent, on re-dérive dénormalisés.
     if "payload_input" in fields or "payload_output" in fields:
         new_input = fields.get("payload_input", devis.payload_input)
         new_output = fields.get("payload_output", devis.payload_output)
         denorm = _extract_denormalised_fields(new_input, new_output)
         fields.update(denorm)
+
     for field, value in fields.items():
         setattr(devis, field, value)
     db.commit()
