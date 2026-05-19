@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brief CC #28 — Fix workflow étape 2 + parc cylindres + suppression filtre banane</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:wght@600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+  :root {
+    --bg: #fef8ea; --paper: #ffffff; --ink: #1a2238; --ink-soft: #3a4458;
+    --accent: #1a52a3; --accent-soft: #d8e4f5;
+    --gold: #c79a3a; --gold-soft: #f5e9c8;
+    --green: #2d7a4f; --green-soft: #d8efdf;
+    --red: #b53838; --red-soft: #f5d8d8;
+    --purple: #6b4a9e; --purple-soft: #e8dff5;
+    --code-bg: #1a2238; --code-text: #e8e4d0;
+    --border: #d6cba0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Atkinson Hyperlegible', sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.65;
+    padding: 0; font-size: 15px;
+  }
+  .page {
+    max-width: 1000px; margin: 0 auto; padding: 40px 50px;
+    background: var(--paper); box-shadow: 0 0 30px rgba(0,0,0,0.08);
+  }
+  h1, h2, h3, h4 { font-family: 'Fraunces', serif; color: var(--ink); line-height: 1.2; }
+  h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: 4px; }
+  .subtitle { font-size: 1rem; color: var(--ink-soft); font-style: italic; margin-bottom: 30px; }
+  h2 {
+    font-size: 1.45rem; font-weight: 700; color: var(--accent);
+    margin-top: 36px; margin-bottom: 14px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--border);
+  }
+  h3 { font-size: 1.15rem; font-weight: 700; color: var(--ink); margin-top: 22px; margin-bottom: 10px; }
+  h4 { font-size: 1rem; font-weight: 700; color: var(--ink-soft); margin-top: 14px; margin-bottom: 6px; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--gold-soft); color: var(--ink);
+    padding: 1px 5px; border-radius: 3px; font-size: 0.88em;
+  }
+  pre {
+    background: var(--code-bg); color: var(--code-text);
+    padding: 14px 18px; border-radius: 6px; overflow-x: auto;
+    margin: 10px 0 14px 0; font-size: 0.85em;
+  }
+  pre code { background: transparent; color: var(--code-text); padding: 0; font-size: 1em; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.93em;
+  }
+  th, td {
+    text-align: left; padding: 8px 10px;
+    border-bottom: 1px solid var(--border); vertical-align: top;
+  }
+  th { background: var(--accent-soft); font-weight: 700; }
+  .header-block {
+    background: var(--gold-soft); border-left: 4px solid var(--gold);
+    padding: 14px 20px; border-radius: 4px; margin-bottom: 24px;
+  }
+  .box { padding: 14px 18px; border-radius: 6px; margin: 14px 0; border-left: 4px solid; }
+  .box-label { font-family: 'Fraunces', serif; font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
+  .box-green { background: var(--green-soft); border-color: var(--green); }
+  .box-green .box-label { color: var(--green); }
+  .box-gold { background: var(--gold-soft); border-color: var(--gold); }
+  .box-gold .box-label { color: var(--gold); }
+  .box-blue { background: var(--accent-soft); border-color: var(--accent); }
+  .box-blue .box-label { color: var(--accent); }
+  .box-purple { background: var(--purple-soft); border-color: var(--purple); }
+  .box-purple .box-label { color: var(--purple); }
+  .sacred {
+    background: var(--red-soft); border: 2px solid var(--red);
+    border-radius: 8px; padding: 16px 22px; margin: 18px 0;
+  }
+  .sacred-label {
+    font-family: 'Fraunces', serif; color: var(--red);
+    font-weight: 800; font-size: 1rem;
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  .ascii-frame {
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 14px 18px; border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.82em;
+    white-space: pre; overflow-x: auto; margin: 12px 0; line-height: 1.4;
+  }
+  .badge {
+    display: inline-block; font-size: 0.72rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 10px; margin-left: 6px;
+    text-transform: uppercase; letter-spacing: 0.05em; vertical-align: middle;
+  }
+  .badge-new { background: var(--green-soft); color: var(--green); }
+  .badge-fix { background: var(--gold-soft); color: var(--gold); }
+  .badge-refacto { background: var(--accent-soft); color: var(--accent); }
+  .badge-sacred { background: var(--red-soft); color: var(--red); }
+  .diff-add { color: var(--green); font-weight: 700; }
+  .diff-del { color: var(--red); font-weight: 700; text-decoration: line-through; }
+  .diff-keep { color: var(--ink-soft); }
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; padding: 30px; max-width: 100%; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Brief CC #28 — Fix workflow étape 2 + data</h1>
+  <p class="subtitle">Sprint 13 avenant · correctif PR #27 · 4 fixes regroupés en 1 PR · ~12h</p>
+
+  <div class="header-block">
+    <p style="margin-bottom: 8px"><strong>📦 Repo</strong> : <code>devis-flexo</code> (cwd local)</p>
+    <p style="margin-bottom: 8px"><strong>🌳 Branche</strong> : <code>fix/optim-pose-workflow-etape2</code> depuis <code>main</code> = <code>0a52b90</code></p>
+    <p style="margin-bottom: 8px"><strong>📋 Réf brief initial</strong> : <code>docs/Brief_CC_RefonteOptimPose_Multilots_Sprint13_v3.html</code> sections 2 (workflow) + 4 (étape 2 et 3)</p>
+    <p style="margin: 0"><strong>🎯 Objectif</strong> : la PR #27 a livré l'UI étape 2 avec fiches techniques Vue A/B/C empilées au lieu du tableau compact multi-sélection spécifié. De plus, le filtre effet banane bloque le moteur sur les multi-poses laize. Ce brief corrige 4 points en 1 PR.</p>
+  </div>
+
+  <h2>1. Constat — PR #27 vs spec brief v3</h2>
+
+  <table>
+    <thead><tr><th>Spec brief v3</th><th>Livré PR #27</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Étape 2 = <strong>tableau compact</strong> avec checkboxes + quantité par ligne</td>
+        <td>❌ 26 fiches techniques complètes empilées</td>
+      </tr>
+      <tr>
+        <td>Étape 2 = <strong>multi-sélection</strong>, validation Σ qté = total</td>
+        <td>❌ Pas de multi-sélection visible</td>
+      </tr>
+      <tr>
+        <td>Visuels Vue A/B/C <strong>uniquement étape 3</strong></td>
+        <td>❌ Visuels sur les 26 candidats en étape 2</td>
+      </tr>
+      <tr>
+        <td>Étape 3 = édition matière + récap agrégé</td>
+        <td>❌ Pas d'étape 3 distincte</td>
+      </tr>
+      <tr>
+        <td>Moteur explore TOUTES les combinaisons faisables</td>
+        <td>❌ Filtre effet banane bloque les multi-poses laize sur petits cylindres</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Le code des fiches Vue A/B/C <strong>est conservé tel quel</strong> (composant SACRED intouchable) — seul le moment où elles s'affichent change : étape 3 uniquement, sur lignes cochées.</p>
+
+  <h2>2. Périmètre — 4 fixes en 1 PR</h2>
+
+  <table>
+    <thead><tr><th>#</th><th>Fix</th><th>Charge</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>1</strong></td>
+        <td>Data parc cylindres : champ <code>actif: bool</code> + migration + seed compte demo (21 cyl) <span class="badge badge-fix">FIX</span></td>
+        <td>2-3h</td>
+      </tr>
+      <tr>
+        <td><strong>2</strong></td>
+        <td>Logique : <strong>supprimer filtre effet banane</strong> + badge info discret côté UI <span class="badge badge-fix">FIX</span></td>
+        <td>2-3h</td>
+      </tr>
+      <tr>
+        <td><strong>3</strong></td>
+        <td>UI étape 2 : tableau compact multi-sélect (suppr fiches Vue A/B/C empilées) <span class="badge badge-refacto">REFACTO</span></td>
+        <td>4-5h</td>
+      </tr>
+      <tr>
+        <td><strong>4</strong></td>
+        <td>UI étape 3 : fiches Vue A/B/C <strong>uniquement</strong> sur lignes cochées (composant existant SACRED réutilisé) <span class="badge badge-refacto">REFACTO</span></td>
+        <td>3-4h</td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Total</strong></td>
+        <td><strong>~12h</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Fix #1 — Data parc cylindres</h2>
+
+  <h3>Parc cible (21 cylindres actifs compte demo)</h3>
+
+<pre><code>80, 82, 84, 86, 88, 92, 96, 98, 101, 104, 106, 112, 116, 120, 128, 132, 134, 136, 144, 148, 187</code></pre>
+
+  <p>Développé calculé : <code>Z (mm) = nb_dents × 3,175</code></p>
+
+  <h3>Diff vs parc actuel prod</h3>
+
+  <table>
+    <thead><tr><th>Action</th><th>Cylindres (nb dents)</th><th>Stratégie</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>❌ Désactiver</td>
+        <td><span class="diff-del">90, 103</span></td>
+        <td>Passer <code>actif=False</code> (suppression douce, FK des devis historiques préservées)</td>
+      </tr>
+      <tr>
+        <td>✅ Ajouter</td>
+        <td><span class="diff-add">101, 106, 120, 148, 187</span></td>
+        <td>Insert en <code>actif=True</code></td>
+      </tr>
+      <tr>
+        <td>✓ Inchangés actifs</td>
+        <td><span class="diff-keep">80, 82, 84, 86, 88, 92, 96, 98, 104, 112, 116, 128, 132, 134, 136, 144</span></td>
+        <td>Aucun changement</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Modèle <code>Cylindre</code> — ajout champ <code>actif</code></h3>
+
+<pre><code># backend/app/models/cylindre.py
+
+class Cylindre(Base):
+    __tablename__ = "cylindres"
+    # ... champs existants
+    actif = Column(Boolean, nullable=False, default=True, server_default="true")</code></pre>
+
+  <h3>Migration Alembic</h3>
+
+<pre><code>alembic revision -m "add_cylindre_actif_field_and_seed_parc_compte_demo"
+
+# Up :
+op.add_column('cylindres',
+    sa.Column('actif', sa.Boolean(), nullable=False, server_default=sa.true())
+)
+# Désactivations (préservation FK)
+op.execute("""
+    UPDATE cylindres
+    SET actif=false
+    WHERE entreprise_id=1 AND nb_dents IN (90, 103)
+""")
+# Insertions parc compte demo
+op.execute("""
+    INSERT INTO cylindres (entreprise_id, nb_dents, developpe_mm, actif, created_at, updated_at)
+    SELECT 1, nb_dents, nb_dents * 3.175, true, NOW(), NOW()
+    FROM (VALUES (101), (106), (120), (148), (187)) AS t(nb_dents)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM cylindres
+        WHERE entreprise_id=1 AND nb_dents = t.nb_dents
+    )
+""")
+# Idempotent : si déjà inséré (rollback/replay), pas de doublon
+
+# Down :
+op.execute("DELETE FROM cylindres WHERE entreprise_id=1 AND nb_dents IN (101, 106, 120, 148, 187)")
+op.execute("UPDATE cylindres SET actif=true WHERE entreprise_id=1 AND nb_dents IN (90, 103)")
+op.drop_column('cylindres', 'actif')</code></pre>
+
+  <h3>Filtrage dans le moteur d'optim</h3>
+
+<pre><code># backend/app/services/optimisation_pose.py (ou équivalent)
+
+def lister_cylindres_optim(db, entreprise_id):
+    """Renvoie uniquement les cylindres actifs pour l'optimisation."""
+    return db.query(Cylindre).filter(
+        Cylindre.entreprise_id == entreprise_id,
+        Cylindre.actif == True,  # ← NEW filtre
+    ).order_by(Cylindre.nb_dents).all()</code></pre>
+
+  <h2>4. Fix #2 — Suppression filtre effet banane</h2>
+
+  <div class="box box-gold">
+    <div class="box-label">— Décision métier</div>
+    <p style="margin: 0">Le moteur explore <strong>TOUTES</strong> les combinaisons physiquement faisables (laize plaque ≤ laize utile machine, dev ≥ Δ min). Aucun blocage ni pénalité de score liés à l'effet banane. Souveraineté commerciale : l'utilisateur voit tout, il décide.</p>
+  </div>
+
+  <h3>4.1 Backend — retirer le filtre/pénalité</h3>
+
+  <p>À identifier dans le code (probablement dans <code>backend/app/services/optimisation_pose.py</code> ou <code>cost_engine.py</code>) :</p>
+
+  <ul>
+    <li>Toute condition du type <code>if nb_dents &lt; SEUIL: skip / penalize</code></li>
+    <li>Tout calcul <code>z_mini_effet_banane</code> qui bloque l'ajout d'un candidat</li>
+    <li>Toute pénalité de score appliquée pour petit cylindre</li>
+  </ul>
+
+  <p><strong>Procédure</strong> :</p>
+
+  <ol>
+    <li>Grep <code>banane</code>, <code>z_mini</code>, <code>effet</code> dans <code>backend/app/services/</code></li>
+    <li>Lister les occurrences trouvées dans le commit message du fix #2</li>
+    <li>Retirer la logique bloquante (filtre + pénalité de score)</li>
+    <li>Conserver <strong>uniquement</strong> les filtres physiques durs (laize plaque ≤ laize utile machine, intervalle dev min, etc.)</li>
+  </ol>
+
+  <div class="sacred">
+    <div class="sacred-label">⚠️ Sacred — cost_engine</div>
+    <p style="margin: 0">Les valeurs EXACT V1a (1 449,09 € + 6,92 €/1000), V1b (1 921,09 €), V1b silhouette (2 109,89 €), V7a (6,85 €/1000), V8a-e <strong>doivent rester intactes</strong>. Si le filtre banane est dans <code>cost_engine</code>, vérifier que sa suppression ne change AUCUNE des valeurs EXACT par lot. Si doute → STOP et validation responsable produit.</p>
+  </div>
+
+  <h3>4.2 Backend — exposer <code>petit_cylindre: bool</code> dans la réponse candidat</h3>
+
+<pre><code># Schema Pydantic Candidat
+class CandidatOptim(BaseModel):
+    # ... champs existants
+    petit_cylindre: bool  # True si nb_dents <= 80, sinon False
+
+# Côté service
+candidat.petit_cylindre = candidat.cylindre.nb_dents <= 80</code></pre>
+
+  <p>Champ purement informatif — n'impacte ni le score ni le tri.</p>
+
+  <h3>4.3 UI — badge discret</h3>
+
+  <p>Sur les lignes du tableau étape 2 où <code>petit_cylindre = true</code>, afficher un badge discret en fin de ligne :</p>
+
+  <div class="ascii-frame">┌──┬──────┬────────┬───────┬──────┬──────┬─────┬──────────────┬─────────┐
+│☐ │ Cyl  │Machine │Poses  │ Δdev │Δlaize│Score│ Info         │Quantité │
+├──┼──────┼────────┼───────┼──────┼──────┼─────┼──────────────┼─────────┤
+│☐ │104   │MA 2200 │ 2×4=8 │ 2.55 │  5   │ 100 │              │ [    ]  │
+│☐ │ 80   │MA 2200 │ 1×3=3 │ 4.67 │  0   │  32 │ ℹ️ Petit cyl │ [    ]  │ ← badge
+│☐ │ 88   │MA 2200 │ 1×3=3 │ 6.78 │  0   │  10 │              │ [    ]  │
+└──┴──────┴────────┴───────┴──────┴──────┴─────┴──────────────┴─────────┘</div>
+
+  <h4>Règles d'affichage du badge</h4>
+
+  <ul>
+    <li><code>nb_dents ≤ 80</code> → badge <strong>ℹ️ Petit cylindre</strong> (couleur info, pas warning)</li>
+    <li><code>nb_dents &gt; 80</code> → pas de badge</li>
+    <li>Style : neutre (bleu info ou gris), pas alarmiste. C'est une info, pas un warning</li>
+    <li>Tooltip au tap mobile (pas au survol) : "Cylindre de petit diamètre — vérifier visuellement la planéité du tirage si tu doutes"</li>
+  </ul>
+
+  <h2>5. Fix #3 — UI étape 2 (tableau compact)</h2>
+
+  <h3>Spec UI</h3>
+
+  <div class="ascii-frame">┌──── ÉTAPE 2 ─ Tous candidats viables ─────────────────────────────────┐
+│ Format 100×80 · qté totale 15 000 · Δ dev min effectif 2 mm           │
+│ [ ← Modifier la saisie ]                                              │
+│                                                                       │
+│ Filtres :  [Score ≥ 30 ✓]  [Machine: toutes ▼]  [Grouper par cyl □]   │
+│                                                                       │
+│ N configurations viables (triées par score DESC) :                    │
+│ ┌──┬──────┬────────┬───────┬──────┬──────┬─────┬───────────┬───────┐  │
+│ │☐ │ Cyl  │Machine │ Poses │ Δdev │Δlaize│Score│ Info      │ Qté   │  │
+│ ├──┼──────┼────────┼───────┼──────┼──────┼─────┼───────────┼───────┤  │
+│ │☑ │104   │MA 2200 │ 2×4=8 │ 2.55 │  5   │ 100 │           │[10000]│  │
+│ │☐ │104   │MA 2200 │ 1×4=4 │ 2.55 │  0   │ 100 │           │       │  │
+│ │☑ │132   │MA 2200 │ 2×5=10│ 3.82 │  5   │  85 │           │[ 5000]│  │
+│ │☐ │132   │MA 2200 │ 1×5=5 │ 3.82 │  0   │  85 │           │       │  │
+│ │☐ │ 80   │MA 2200 │ 1×3=3 │ 4.67 │  0   │  32 │ℹ Petit cyl│       │  │
+│ │☐ │ 80   │MA 2200 │ 2×3=6 │ 4.67 │  5   │  32 │ℹ Petit cyl│       │  │
+│ │…                                                                  │  │
+│ └──┴──────┴────────┴───────┴──────┴──────┴─────┴───────────┴───────┘  │
+│                                                                       │
+│ Σ sélectionné : 15 000 / 15 000 ✅                                    │
+│ [ Continuer avec ces 2 lots → ]                                       │
+└───────────────────────────────────────────────────────────────────────┘</div>
+
+  <h3>Règles UI étape 2</h3>
+
+  <ul>
+    <li>Chaque ligne = 1 combinaison unique <code>(cylindre × machine × nb_poses_dev × nb_poses_laize)</code></li>
+    <li>Un même cylindre peut apparaître plusieurs fois avec différentes variantes laize/dev</li>
+    <li>Tri par score DESC par défaut</li>
+    <li>Filtre <strong>Score ≥ 30</strong> activé par défaut, désactivable (chip cliquable)</li>
+    <li>Filtre Machine : dropdown multi-select</li>
+    <li>Toggle "Grouper par cylindre" : collapse les variantes secondaires, badge <code>+N variantes</code> cliquable</li>
+    <li>Multi-sélection via checkbox, chaque ligne cochée révèle input quantité</li>
+    <li>Validation : <code>Σ qté lots == qté totale</code>. Bouton "Continuer" désactivé tant que ≠</li>
+    <li>Mobile : scroll horizontal pour colonnes lointaines, pas de virtualisation tant que &lt; 200 lignes</li>
+    <li><strong>AUCUNE fiche technique Vue A/B/C affichée à ce stade</strong></li>
+  </ul>
+
+  <h3>Refonte composant</h3>
+
+  <p>Le composant <code>OptimisationPoseCandidats.tsx</code> existe déjà mais affiche des fiches détaillées. Refonte complète :</p>
+
+<pre><code>// frontend/app/optimisation/_components/OptimisationPoseCandidats.tsx
+// AVANT : map sur candidats → render &lt;FicheCandidatDetaillee /&gt; avec Vue A/B/C
+// APRÈS : render &lt;TableauCandidats /&gt; (lignes compactes, checkboxes, qté)
+
+// Le composant FicheCandidatDetaillee (avec Vue A/B/C) n'est PAS supprimé.
+// Il est conservé pour utilisation en étape 3 uniquement.</code></pre>
+
+  <h2>6. Fix #4 — UI étape 3 (fiches Vue A/B/C sur lignes cochées)</h2>
+
+  <h3>Spec UI</h3>
+
+  <div class="ascii-frame">┌──── ÉTAPE 3 ─ Détail lots cochés ──────────────────────────────────┐
+│ [ ← Retour aux candidats ]                                         │
+│                                                                    │
+│ ┌─ LOT 1 ────────────────────────────────────────────────────────┐ │
+│ │ Cyl 104 · MA 2200 · 2×4=8 poses · 10 000 étiq                  │ │
+│ │ Matière : [PP couché 80g/m²     ▼] *obligatoire*               │ │
+│ │ ┌──────────────────────────────────────────────────────────┐   │ │
+│ │ │  Fiche technique Vue A / Vue B / Vue C                   │   │ │
+│ │ │  (composant SACRED réutilisé tel quel, props candidat 1) │   │ │
+│ │ └──────────────────────────────────────────────────────────┘   │ │
+│ │ Coût lot HT : 1 234,56 €                                       │ │
+│ └────────────────────────────────────────────────────────────────┘ │
+│                                                                    │
+│ ┌─ LOT 2 ────────────────────────────────────────────────────────┐ │
+│ │ Cyl 132 · MA 2200 · 2×5=10 poses · 5 000 étiq                  │ │
+│ │ Matière : [PET blanc 50µ        ▼] *obligatoire*               │ │
+│ │ [Fiche technique Vue A / Vue B / Vue C — composant SACRED]     │ │
+│ │ Coût lot HT : 687,23 €                                         │ │
+│ └────────────────────────────────────────────────────────────────┘ │
+│                                                                    │
+│ ════════════════════════════════════════════════════════════════════│
+│ COÛT TOTAL DEVIS HT : 1 921,79 €                                   │
+│ [ ← Retour candidats ] [ Valider et créer le devis ]               │
+└────────────────────────────────────────────────────────────────────┘</div>
+
+  <h3>Règles UI étape 3</h3>
+
+  <ul>
+    <li>1 card par lot coché en étape 2, dans l'ordre saisi</li>
+    <li><strong>Réutilisation 1:1</strong> du composant <code>FicheCandidatDetaillee</code> (ou nom équivalent) avec ses Vue A/B/C — composant SACRED, aucune modif du rendu</li>
+    <li>Matière obligatoire par lot (FK NOT NULL) — bouton "Valider" désactivé tant qu'un lot n'a pas de matière</li>
+    <li>Récap agrégé en bas : coût total HT = somme(cout_lot_ht)</li>
+    <li>Pas de modification du nb_poses_laize ou cylindre en étape 3 — pour changer, retour étape 2</li>
+  </ul>
+
+  <h2>7. Sacred Invariants — INTOUCHABLES</h2>
+
+  <div class="sacred">
+    <div class="sacred-label">⚠️ STOP et validation responsable produit obligatoire si nécessaire</div>
+    <ul style="margin: 0">
+      <li>Logique <code>cost_engine</code> : aucune modification. Si le filtre banane y est, sa suppression doit préserver les valeurs EXACT V1a, V1b, V1b silhouette, V7a, V8a-e par lot</li>
+      <li>Composant visuel Vue A + Vue B + Vue C + cadre étiquette unitaire : <strong>RÉUTILISÉ TEL QUEL</strong>. SVG/canvas, layout, positions des A, rotations, vignettes — aucune modification du rendu</li>
+      <li>Convention 8 sens enroulement et mapping <code>rotation_se.py</code></li>
+      <li>Compte demo <code>entreprise_id=1</code> : <strong>aucune suppression dure</strong> des cylindres existants (utiliser <code>actif=False</code>)</li>
+      <li>Auth JWT et multi-tenant strict (<code>get_or_404_scoped</code>)</li>
+      <li>Migrations Alembic obligatoires</li>
+    </ul>
+  </div>
+
+  <h2>8. Endpoints à vérifier / adapter</h2>
+
+  <table>
+    <thead><tr><th>Méthode</th><th>Route</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>POST</code></td>
+        <td><code>/optimisation/calculer</code></td>
+        <td>Vérifier : filtre <code>actif=True</code> sur cylindres + suppression filtre banane + ajout champ <code>petit_cylindre</code> dans réponse</td>
+      </tr>
+      <tr>
+        <td><code>GET</code></td>
+        <td><code>/cylindres</code> (admin/seed)</td>
+        <td>Vérifier : filtre <code>actif</code> en paramètre query (defaut <code>true</code>)</td>
+      </tr>
+      <tr>
+        <td><code>GET</code></td>
+        <td><code>/optimisation/candidats/{id}/visuel</code></td>
+        <td>Inchangé (utilisé par étape 3)</td>
+      </tr>
+      <tr>
+        <td><code>POST</code></td>
+        <td><code>/devis</code></td>
+        <td>Inchangé (payload multi-lots déjà OK)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>9. Composants frontend impactés</h2>
+
+  <table>
+    <thead><tr><th>Fichier</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>OptimisationPoseCandidats.tsx</code></td>
+        <td><span class="badge badge-refacto">REFACTO COMPLET</span> Passer de fiches Vue A/B/C empilées à tableau compact multi-sélect (checkboxes + qté + filtres)</td>
+      </tr>
+      <tr>
+        <td><code>OptimisationPoseDetailLots.tsx</code></td>
+        <td><span class="badge badge-fix">FIX</span> Vérifier que les cards lots affichent bien le composant fiche Vue A/B/C SACRED réutilisé tel quel</td>
+      </tr>
+      <tr>
+        <td><code>FicheCandidatDetaillee.tsx</code> (ou nom équivalent)</td>
+        <td><span class="badge badge-sacred">SACRED</span> AUCUNE modification du rendu Vue A/B/C — réutilisation 1:1</td>
+      </tr>
+      <tr>
+        <td><code>OptimisationPoseStore.tsx</code></td>
+        <td><span class="badge badge-fix">FIX</span> Vérifier que le state machine 3 étapes fonctionne bien : <code>saisie → candidats → detail</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>10. Tests</h2>
+
+  <div class="box box-purple">
+    <div class="box-label">— Baseline cible : 710 + 7 nouveaux ≈ 717 passed</div>
+    <p style="margin: 0">pytest reste vert à chaque commit.</p>
+  </div>
+
+<pre><code># backend/tests/
+
+test_cylindre_actif.py
+  - test_seed_compte_demo_21_cylindres_actifs
+  - test_cylindres_desactives_pas_dans_optim
+  - test_cylindres_desactives_conserves_pour_fk
+
+test_optimisation_sans_filtre_banane.py
+  - test_petits_cylindres_apparaissent_dans_candidats
+  - test_petits_cylindres_multi_poses_laize_proposes  # ← le cas bloqué actuellement
+  - test_aucune_penalite_score_pour_petit_cylindre
+  - test_champ_petit_cylindre_renvoye_dans_reponse
+
+test_cost_engine_non_regression.py
+  - test_valeurs_EXACT_V1a_V1b_V7a_V8a_preservees  # après suppression filtre banane
+</code></pre>
+
+  <h2>11. Commit plan (5 commits cohérents, 1 PR)</h2>
+
+<pre><code>git checkout main
+git pull
+git checkout -b fix/optim-pose-workflow-etape2
+
+# Commit 1 — Data parc cylindres
+feat(cylindre): champ actif + migration + seed parc compte demo (21 cyl)
+
+# Commit 2 — Suppression filtre banane backend
+fix(optim): supprimer filtre effet banane bloquant + exposer champ petit_cylindre
+
+# Commit 3 — UI étape 2 refonte
+refactor(optim/ui): étape 2 tableau compact multi-sélect (fiches Vue A/B/C retirées)
+
+# Commit 4 — UI étape 3 fiches sur cochées
+refactor(optim/ui): étape 3 affiche composant fiche Vue A/B/C SACRED sur lots cochés uniquement
+
+# Commit 5 — Tests
+test(optim): 7 nouveaux tests parc cylindres + suppression filtre banane + non-régression cost_engine
+
+# Pas de Co-Authored-By dans aucun commit
+# pytest vert à chaque commit
+# Pas de push avant validation du responsable produit</code></pre>
+
+  <h2>12. Hors-scope explicite</h2>
+
+  <ul>
+    <li>❌ Refonte du composant fiche Vue A/B/C — SACRED, intouchable</li>
+    <li>❌ Modification logique <code>cost_engine</code> hors retrait du filtre banane (si présent)</li>
+    <li>❌ Modification mapping rotation <code>rotation_se.py</code></li>
+    <li>❌ Refonte modèle <code>LotProduction</code> (déjà OK depuis PR #25)</li>
+    <li>❌ Modification endpoints <code>/devis</code> (déjà OK depuis PR #26)</li>
+    <li>❌ Génération PDF devis (Sprint 17)</li>
+  </ul>
+
+  <h2>13. Antipatterns à éviter</h2>
+
+  <ul>
+    <li>❌ Re-rendre les fiches Vue A/B/C en étape 2 même partiellement</li>
+    <li>❌ Conserver une pénalité de score pour petit cylindre</li>
+    <li>❌ Conserver un filtre dur qui exclut les multi-poses laize sur petits cylindres</li>
+    <li>❌ Faire un badge alarmiste (rouge "⚠️ DANGER") pour les petits cylindres — info neutre uniquement</li>
+    <li>❌ Supprimer durement les cylindres 90 et 103 (FK historique)</li>
+    <li>❌ Modifier le rendu du composant fiche Vue A/B/C</li>
+    <li>❌ Refactor "bonus" hors scope du brief</li>
+    <li>❌ Co-Authored-By dans un commit</li>
+    <li>❌ Push automatique sans validation du responsable produit</li>
+  </ul>
+
+  <h2>14. Critères d'acceptation</h2>
+
+  <div class="box box-green">
+    <div class="box-label">— PR mergeable quand :</div>
+    <ol style="margin: 0">
+      <li>Parc cylindres compte demo = exactement 21 actifs (liste ci-dessus)</li>
+      <li>Cylindres 90 et 103 toujours en DB mais <code>actif=false</code></li>
+      <li>Cylindre 132 conservé actif (NE PAS désactiver)</li>
+      <li>Le moteur d'optim renvoie des candidats multi-poses laize sur petits cylindres (≤ 88 dents) — actuellement bloqué</li>
+      <li>Aucune pénalité de score pour petit cylindre (les scores reflètent uniquement la qualité d'optimisation matière/intervalles)</li>
+      <li>UI étape 2 = tableau compact, AUCUNE fiche Vue A/B/C visible</li>
+      <li>UI étape 2 = checkboxes + input qté par ligne + validation Σ = total</li>
+      <li>UI étape 3 = N cards lots cochés avec fiche Vue A/B/C SACRED réutilisée + édition matière obligatoire</li>
+      <li>Badge ℹ️ "Petit cylindre" visible sur lignes ≤ 80 dents en étape 2, neutre (pas alarmiste)</li>
+      <li>Valeurs EXACT cost_engine préservées (tests non-régression OK)</li>
+      <li>pytest vert : 710 + 7 ≈ 717 passed, 0 failed</li>
+      <li>Multi-tenant strict préservé : un user d'autre entreprise ne voit pas les cylindres compte demo</li>
+      <li>Migration Alembic réversible (up + down testés)</li>
+      <li>Pas de régression Sprint 1-13</li>
+    </ol>
+  </div>
+
+  <h2>15. Démarrage</h2>
+
+  <div class="box box-gold">
+    <div class="box-label">— Première séquence</div>
+<pre style="margin: 0">cd ~/projets/devis-flexo
+git checkout main && git pull
+git checkout -b fix/optim-pose-workflow-etape2
+
+# Copier ce brief dans docs/
+cp ~/Downloads/Brief_CC_28_Fix_Workflow_Etape2.html docs/
+git add docs/Brief_CC_28_Fix_Workflow_Etape2.html
+git commit -m "docs: ajout brief #28 fix workflow étape 2 + parc cylindres"
+
+# Démarrer par le commit 1 — data parc cylindres
+# Puis suivre l'ordre 1 → 5
+# pytest vert à chaque commit
+# Pas de push avant validation du responsable produit</pre>
+  </div>
+
+  <p style="margin-top: 30px; padding: 18px; background: var(--accent-soft); border-radius: 6px; text-align: center; font-size: 1rem;">
+    <strong>Brief CC #28 — ~12h dev solo</strong><br>
+    4 fixes regroupés · 1 PR · pytest vert à chaque commit · SACRED préservés
+  </p>
+
+</div>
+</body>
+</html>
