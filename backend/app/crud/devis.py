@@ -259,6 +259,7 @@ def create_devis(
                 largeur_plaque_mm=lot_in.largeur_plaque_mm,
                 score_optim=lot_in.score_optim,
                 cout_lot_ht_eur=lot_in.cout_lot_ht_eur,
+                payload_visuel=lot_in.payload_visuel,
             )
             db.add(lot)
             lots_persistes.append(lot)
@@ -273,6 +274,71 @@ def create_devis(
     db.commit()
     db.refresh(devis)
     return _attach_relation_names(devis, db)
+
+
+def preview_couts_multilots(
+    db: Session,
+    entreprise_id: int,
+    lots_data: list[dict[str, Any]],
+    payload_input: dict[str, Any],
+    reduction_pct: Decimal,
+) -> dict[str, Any]:
+    """Brief #33 commit 1 — preview live des coûts sans persister.
+
+    Reconstruit des LotProduction transitoires (sans db.add), construit
+    les DevisInputs via le helper existant, appelle l'aggregator et
+    applique la réduction commerciale. Retourne brut/net pour live update
+    de l'étape 4 chiffrage.
+
+    En cas d'échec (validation Pydantic, complexe manquant), retourne un
+    payload avec `chiffrage_erreur` non null et brut=0 pour permettre à
+    l'UI de gérer le mode dégradé.
+    """
+    # Construit des LotProduction transitoires (non persistés) pour
+    # réutiliser `_construire_devis_input_pour_lot()` qui les attend.
+    lots_transitoires: list[LotProduction] = [
+        LotProduction(
+            entreprise_id=entreprise_id,
+            ordre=idx + 1,
+            cylindre_id=ld["cylindre_id"],
+            machine_id=ld["machine_id"],
+            nb_poses_dev=ld["nb_poses_dev"],
+            nb_poses_laize=ld["nb_poses_laize"],
+            sens_enroulement=ld["sens_enroulement"],
+            quantite=ld["quantite"],
+            matiere_id=ld["matiere_id"],
+        )
+        for idx, ld in enumerate(lots_data)
+    ]
+
+    try:
+        devis_inputs = [
+            _construire_devis_input_pour_lot(
+                lot, payload_input, db, entreprise_id
+            )
+            for lot in lots_transitoires
+        ]
+        cout_agrege = calculer_devis_multilots(db, entreprise_id, devis_inputs)
+        cout_brut = cout_agrege.prix_vente_ht_total_eur
+        chiffrage_erreur = None
+    except Exception as exc:
+        logger.warning("preview_couts_multilots erreur : %s", exc)
+        cout_brut = Decimal(0)
+        chiffrage_erreur = str(exc)
+
+    reduction_eur = (cout_brut * reduction_pct / Decimal(100)).quantize(
+        Decimal("0.01")
+    )
+    cout_net = (cout_brut - reduction_eur).quantize(Decimal("0.01"))
+
+    return {
+        "cout_brut_ht_eur": cout_brut,
+        "reduction_pct": reduction_pct,
+        "reduction_eur": reduction_eur,
+        "cout_net_ht_eur": cout_net,
+        "nb_lots": len(lots_data),
+        "chiffrage_erreur": chiffrage_erreur,
+    }
 
 
 def _chiffrer_devis_multilots(
@@ -413,6 +479,15 @@ def _construire_devis_input_pour_lot(
     format_l = int(payload_input.get("format_etiquette_largeur_mm", 60))
     format_h = int(payload_input.get("format_etiquette_hauteur_mm", 40))
 
+    # Brief #33 — marge override globale du devis lue depuis payload_input
+    # (étape 4 chiffrage). None = utiliser le default entreprise.
+    pct_marge_raw = payload_input.get("pct_marge_override")
+    pct_marge_override = (
+        Decimal(str(pct_marge_raw))
+        if pct_marge_raw is not None
+        else None
+    )
+
     return DevisInput(
         complexe_id=complexe.id,
         laize_utile_mm=int(machine_imp.laize_utile_mm or 320),
@@ -425,6 +500,7 @@ def _construire_devis_input_pour_lot(
         nb_poses_developpement=lot.nb_poses_dev,
         forme_speciale=False,
         mode_calcul="manuel",
+        pct_marge_override=pct_marge_override,
     )
 
 
@@ -484,6 +560,7 @@ def update_devis(
                 largeur_plaque_mm=lot_dict.get("largeur_plaque_mm"),
                 score_optim=lot_dict.get("score_optim"),
                 cout_lot_ht_eur=lot_dict.get("cout_lot_ht_eur"),
+                payload_visuel=lot_dict.get("payload_visuel"),
             )
             db.add(lot)
             nouveaux_lots.append(lot)

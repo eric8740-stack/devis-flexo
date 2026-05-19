@@ -21,10 +21,15 @@
  */
 import Link from "next/link";
 
+import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import type { DevisDetail, LotProductionRead } from "@/lib/api";
+import type {
+  DevisDetail,
+  LotProductionRead,
+  OptimisationConfigOut,
+} from "@/lib/api";
 
 const STATUT_COLORS: Record<string, string> = {
   brouillon: "bg-amber-100 text-amber-900 border-amber-300",
@@ -76,6 +81,20 @@ export function DevisResultMultiLots({
   const reductionPct = parseFloat(devis.reduction_pct ?? "0") || 0;
   const brut = parseFloat(devis.ht_total_eur) || 0;
   const apresRemise = brut * (1 - reductionPct / 100);
+  // Brief #33 commit 5 — laize/dev/mandrin de l'étiquette pour le
+  // SchemaImplantation par lot. Récupérés depuis payload_input (snapshoté
+  // à la création par OptimisationPoseDetailLots / OptimisationChiffrage).
+  const payloadInput = (devis.payload_input ?? {}) as Record<string, unknown>;
+  const laizeEtiqMm =
+    typeof payloadInput.format_etiquette_largeur_mm === "number"
+      ? payloadInput.format_etiquette_largeur_mm
+      : parseFloat(devis.format_l_mm) || 0;
+  const devEtiqMm =
+    typeof payloadInput.format_etiquette_hauteur_mm === "number"
+      ? payloadInput.format_etiquette_hauteur_mm
+      : parseFloat(devis.format_h_mm) || 0;
+  const mandrinMm =
+    typeof payloadInput.mandrin_mm === "number" ? payloadInput.mandrin_mm : 76;
 
   return (
     <div className="space-y-6">
@@ -142,7 +161,10 @@ export function DevisResultMultiLots({
           <LotCard
             key={lot.id}
             lot={lot}
-            colorClass={LOT_BORDER_COLORS[idx % LOT_BORDER_COLORS.length]}
+            colorClass={LOT_BORDER_COLORS[idx % LOT_BORDER_COLORS.length]!}
+            laizeEtiqMm={laizeEtiqMm}
+            devEtiqMm={devEtiqMm}
+            mandrinMm={mandrinMm}
           />
         ))}
         {lots.length === 0 && (
@@ -183,7 +205,12 @@ export function DevisResultMultiLots({
             size="lg"
             className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg"
           >
-            <Link href={`/devis/${devis.id}/edit`}>✎ Modifie ton devis</Link>
+            {/* Brief #33 commit 4 — redirige vers /optimisation?devis_id=X
+                pour ouvrir le workflow 4 étapes en mode édition (étape 4
+                ouverte par défaut, hydratée via getDevisDetail). */}
+            <Link href={`/optimisation?devis_id=${devis.id}`}>
+              ✎ Modifie ton devis
+            </Link>
           </Button>
         </div>
       </section>
@@ -194,11 +221,26 @@ export function DevisResultMultiLots({
 function LotCard({
   lot,
   colorClass,
+  laizeEtiqMm,
+  devEtiqMm,
+  mandrinMm,
 }: {
   lot: LotProductionRead;
   colorClass: string;
+  laizeEtiqMm: number;
+  devEtiqMm: number;
+  mandrinMm: number;
 }) {
   const posesTotal = lot.nb_poses_dev * lot.nb_poses_laize;
+  // Brief #33 commit 5 — payload_visuel = snapshot OptimisationConfigOut
+  // capturé à la création/édition (étape 4 chiffrage). Permet de rejouer
+  // SchemaImplantation Vue A/B/C sans recalculer cost_engine côté UI.
+  // Null pour les lots historiques (créés avant la migration j1c6e8a3d9b5)
+  // → on retombe sur les infos textuelles seules dans ce cas.
+  const candidatVisuel =
+    lot.payload_visuel && typeof lot.payload_visuel === "object"
+      ? (lot.payload_visuel as unknown as OptimisationConfigOut)
+      : null;
   return (
     <Card
       className={
@@ -261,6 +303,17 @@ function LotCard({
           )}
         </div>
       </CardContent>
+
+      {candidatVisuel && (
+        <div className="border-t border-border px-4 pb-4 pt-4 sm:px-6">
+          <SchemaImplantation
+            config={candidatVisuel}
+            laizeEtiqMm={laizeEtiqMm}
+            devEtiqMm={devEtiqMm}
+            mandrinMm={mandrinMm}
+          />
+        </div>
+      )}
     </Card>
   );
 }

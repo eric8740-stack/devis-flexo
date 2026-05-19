@@ -18,7 +18,6 @@
  * "Valider et créer le devis" est désactivé tant qu'un lot n'a pas de
  * matière sélectionnée (FK NOT NULL sur lot_production.matiere_id).
  */
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { SchemaImplantation } from "@/components/SchemaImplantation";
@@ -32,20 +31,11 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
-  createDevis,
   listMatieres,
-  type DevisCreate,
-  type LotProductionCreatePayload,
   type MatiereOut,
 } from "@/lib/api";
 
 import { useOptimisationPose } from "./OptimisationPoseStore";
-
-function _sensEnroulementToInt(se: string): number {
-  // "SE1" → 1, "SE8" → 8 (convention métier flexo, single source of truth
-  // backend dans `app/services/rotation_se.py`).
-  return parseInt(se.replace("SE", ""), 10);
-}
 
 export function OptimisationPoseDetailLots() {
   const {
@@ -57,12 +47,11 @@ export function OptimisationPoseDetailLots() {
     mandrinMm,
     goCandidats,
     goSaisie,
+    goChiffrage,
   } = useOptimisationPose();
   const { toast } = useToast();
-  const router = useRouter();
 
   const [matieres, setMatieres] = useState<MatiereOut[] | null>(null);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,74 +74,10 @@ export function OptimisationPoseDetailLots() {
   const tousLotsOntMatiere = selection.every((s) => s.matiere_id !== null);
   const sommeQuantites = selection.reduce((acc, s) => acc + s.quantite, 0);
   const sommeOK = sommeQuantites === quantiteTotale && selection.length > 0;
-  const peutCreer = tousLotsOntMatiere && sommeOK && !creating;
-
-  const handleValider = async () => {
-    if (!peutCreer) return;
-    setCreating(true);
-    try {
-      // Construction du payload conforme à DevisCreate (PR B #26 commit 5) :
-      // - `lots` + `quantite_totale` activent le mode multi-lots (création de N
-      //   LotProduction en cascade côté backend).
-      // - `payload_input`/`payload_output` sont des dicts JSON libres servant
-      //   au moteur cost_engine (calcul du HT à venir séparément). On y stocke
-      //   les paramètres de saisie (étape 1) + un placeholder ht=0 — le coût
-      //   réel sera recalculé via /api/cost/calculer après création.
-      const premierLot = selection[0]!.candidat;
-      const lotsPayload: LotProductionCreatePayload[] = selection.map((s) => ({
-        cylindre_id: s.candidat.cylindre_id,
-        machine_id: s.candidat.machine_id,
-        nb_poses_dev: s.candidat.nb_poses_dev,
-        nb_poses_laize: s.candidat.nb_poses_laize,
-        sens_enroulement: _sensEnroulementToInt(s.candidat.sens_enroulement),
-        quantite: s.quantite,
-        matiere_id: s.matiere_id as number,
-        intervalle_dev_reel_mm: String(s.candidat.intervalle_dev_reel_mm),
-        intervalle_laize_reel_mm: String(s.candidat.intervalle_laize_reel_mm),
-        largeur_plaque_mm: String(s.candidat.largeur_plaque_mm),
-        score_optim: s.candidat.score,
-      }));
-      const payload: DevisCreate = {
-        payload_input: {
-          machine_id: premierLot.machine_id,
-          format_etiquette_largeur_mm: laizeEtiqMm,
-          format_etiquette_hauteur_mm: devEtiqMm,
-          mode_calcul: "manuel",
-          source: "optim_multi_lots",
-          nb_lots: selection.length,
-          mandrin_mm: mandrinMm,
-        },
-        payload_output: {
-          mode: "manuel",
-          prix_vente_ht_eur: "0.00",
-          note: "Coût lots à calculer post-création via /api/cost/calculer.",
-        },
-        statut: "brouillon",
-        quantite_totale: quantiteTotale,
-        lots: lotsPayload,
-      };
-      const devis = await createDevis(payload);
-      toast({
-        title: "Devis créé ✓",
-        description: `Devis ${devis.numero} créé avec ${selection.length} lot(s) — direction ta page détail.`,
-      });
-      // Brief #32 commit 6 — retrait du workaround patch #31. La page
-      // détail /devis/{id} détecte désormais les devis multi-lots (commit 4)
-      // et rend `DevisResultMultiLots` (commit 3) au lieu de `DevisResult`
-      // legacy qui plantait sur `payload_output.postes` manquant.
-      // Le devis sort aussi chiffré automatiquement via cost_engine_aggregator
-      // (commit 1), donc le récap total HT est rempli.
-      router.push(`/devis/${devis.id}`);
-    } catch (err) {
-      toast({
-        title: "Création du devis impossible",
-        description: err instanceof Error ? err.message : "Erreur inconnue",
-        variant: "destructive",
-      });
-    } finally {
-      setCreating(false);
-    }
-  };
+  // Brief #33 — l'étape 3 ne crée plus le devis : elle bascule vers
+  // l'étape 4 chiffrage qui gère options globales, marge override,
+  // réduction commerciale et POST/PUT final.
+  const peutPasserChiffrage = tousLotsOntMatiere && sommeOK;
 
   return (
     <section className="space-y-4">
@@ -227,10 +152,9 @@ export function OptimisationPoseDetailLots() {
         ))}
       </div>
 
-      {/* Récap + CTA primary prominent (Brief #30 commit 1).
-          Bouton centré sous le récap, gradient bleu→ambre, taille lg,
-          loading state avec spinner inline, redirect vers /devis/{id}
-          après succès POST /api/devis. */}
+      {/* Brief #33 — étape 3 → étape 4 chiffrage. Le devis sera créé
+          depuis l'étape 4 (options globales, marge override, réduction
+          commerciale, récap brut/net live). */}
       <div className="rounded-lg border-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-amber-50/30 p-6">
         <div className="space-y-1 text-center">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -245,44 +169,17 @@ export function OptimisationPoseDetailLots() {
         <div className="mt-5 flex justify-center">
           <Button
             size="lg"
-            onClick={handleValider}
-            disabled={!peutCreer}
+            onClick={goChiffrage}
+            disabled={!peutPasserChiffrage}
             className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 disabled:shadow-none"
           >
-            {creating ? (
-              <span className="flex items-center gap-2">
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    className="opacity-25"
-                  />
-                  <path
-                    d="M4 12a8 8 0 018-8"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Création en cours…
-              </span>
-            ) : (
-              <>✓ Valider et créer le devis</>
-            )}
+            Étape suivante : chiffrage →
           </Button>
         </div>
 
         {!tousLotsOntMatiere && (
           <p className="mt-3 text-center text-sm text-amber-700">
-            ℹ Renseigne une matière pour chaque lot avant validation.
+            ℹ Renseigne une matière pour chaque lot avant de passer au chiffrage.
           </p>
         )}
         {tousLotsOntMatiere && !sommeOK && (

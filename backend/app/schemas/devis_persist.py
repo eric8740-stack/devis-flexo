@@ -43,6 +43,11 @@ class LotProductionCreate(BaseModel):
     score_optim: float | None = None
     cout_lot_ht_eur: Decimal | None = None
 
+    # Brief #33 — snapshot visuel pour SchemaImplantation par lot (laize
+    # papier, liner, chute latérale, diamètre bobine, lacets, rotations).
+    # Stocké tel quel en JSONB côté DB.
+    payload_visuel: dict | None = None
+
 
 class LotProductionRead(BaseModel):
     """Représentation lecture d'un lot dans GET /api/devis/{id} (Sprint 13).
@@ -81,6 +86,10 @@ class LotProductionRead(BaseModel):
     sens_enroulement_libelle: str | None = None
     rotation_vue_a_deg: int | None = None
     rotation_vue_c_deg: int | None = None
+
+    # Brief #33 — snapshot visuel JSON (laize papier, liner, chute latérale,
+    # diamètre bobine, lacets...). Null pour lots historiques.
+    payload_visuel: dict | None = None
 
 
 class DevisCreate(BaseModel):
@@ -215,3 +224,39 @@ class DevisListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+# ---------------------------------------------------------------------------
+# Brief #33 — endpoint POST /api/devis/preview-couts
+# ---------------------------------------------------------------------------
+# Calcule brut/réduction/net sans persister. Sert au recalcul live de
+# l'étape 4 chiffrage (toggle options, ajustement marge/réduction).
+
+
+class PreviewCoutsIn(BaseModel):
+    """Body POST /api/devis/preview-couts (Brief #33)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # payload_input : contexte saisie (laize/dev, options, marge override).
+    payload_input: dict
+    lots: list[LotProductionCreate] = Field(min_length=1)
+    reduction_pct: Decimal = Field(default=Decimal(0), ge=0, le=100)
+
+
+class PreviewCoutsOut(BaseModel):
+    """Réponse POST /api/devis/preview-couts.
+
+    `cout_brut_ht` = somme du cost_engine_aggregator sans réduction.
+    `cout_net_ht` = brut × (1 - reduction_pct/100).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cout_brut_ht_eur: Decimal
+    reduction_pct: Decimal
+    reduction_eur: Decimal
+    cout_net_ht_eur: Decimal
+    nb_lots: int
+    # Note pour transparence si le chiffrage auto a échoué (mode dégradé).
+    chiffrage_erreur: str | None = None

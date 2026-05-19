@@ -19,6 +19,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     Float,
     ForeignKey,
@@ -28,6 +29,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -89,6 +91,15 @@ class LotProduction(Base):
     largeur_plaque_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     score_optim: Mapped[float | None] = mapped_column(Float)
     cout_lot_ht_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+
+    # Brief #33 — snapshot JSON des champs visuels (laize papier, liner,
+    # chute latérale, diamètre bobine, lacets, rotations). Permet de
+    # rejouer SchemaImplantation côté UI sans recalculer cost_engine et
+    # de ré-hydrater le store en mode édition avec un visuel fidèle.
+    # Nullable pour compat lots historiques (créés avant migration).
+    payload_visuel: Mapped[dict | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

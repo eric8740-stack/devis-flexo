@@ -18,11 +18,42 @@ from app.schemas.devis_persist import (
     DevisDetail,
     DevisListResponse,
     DevisUpdate,
+    PreviewCoutsIn,
+    PreviewCoutsOut,
 )
 from app.services.pdf_service import generate_devis_pdf
 from app.services.scope_service import get_or_404_scoped
 
 router = APIRouter(prefix="/api/devis", tags=["devis"])
+
+
+@router.post(
+    "/preview-couts",
+    response_model=PreviewCoutsOut,
+)
+def preview_couts_devis(
+    payload: PreviewCoutsIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PreviewCoutsOut:
+    """Brief #33 — recalcul live des coûts sans persister.
+
+    Utilisé par l'étape 4 chiffrage UI pour rafraîchir le récap brut/net
+    à chaque toggle d'option ou ajustement de marge/réduction, sans
+    créer un devis.
+
+    Multi-tenant strict via `user.entreprise_id`. Aucune mutation DB
+    (les LotProduction transitoires construits ne sont pas db.add).
+    """
+    lots_data = [lot.model_dump() for lot in payload.lots]
+    result = crud.preview_couts_multilots(
+        db,
+        entreprise_id=user.entreprise_id,
+        lots_data=lots_data,
+        payload_input=payload.payload_input,
+        reduction_pct=payload.reduction_pct,
+    )
+    return PreviewCoutsOut(**result)
 
 
 @router.get("", response_model=DevisListResponse)
