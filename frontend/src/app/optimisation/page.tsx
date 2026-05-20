@@ -25,11 +25,7 @@ import {
   type SensEnroulement,
 } from "@/lib/api";
 
-import {
-  BRIEF_CLIENT_DEFAULTS,
-  BriefClientForm,
-  type BriefClientData,
-} from "./_components/BriefClientForm";
+import { BriefClientForm } from "./_components/BriefClientForm";
 import { OptimisationChiffrage } from "./_components/OptimisationChiffrage";
 import { OptimisationPoseCandidats } from "./_components/OptimisationPoseCandidats";
 import { OptimisationPoseDetailLots } from "./_components/OptimisationPoseDetailLots";
@@ -245,12 +241,6 @@ function OptimisationPoseSaisie() {
   const [lacetDroit, setLacetDroit] = useState<string>("2.5");
   const [lacetGauche, setLacetGauche] = useState<string>("2.5");
 
-  // Sprint 14 Lot 3 — brief client unifié (state local étape saisie ;
-  // sera transmis au payload devis lors de la persistance étape chiffrage).
-  const [briefClient, setBriefClient] = useState<BriefClientData>(
-    BRIEF_CLIENT_DEFAULTS,
-  );
-
   const [submitting, setSubmitting] = useState(false);
   // Brief #28 : `response` state retiré — l'étape 2 (OptimisationPoseCandidats)
   // affiche désormais TOUS les candidats via le store ; plus aucun rendu
@@ -409,9 +399,9 @@ function OptimisationPoseSaisie() {
         </p>
       </header>
 
-      {/* Sprint 14 Lot 3 — Brief client unifié, monté AVANT les contraintes
-          techniques. Mobile-first 375 px géré dans chaque sous-section. */}
-      <BriefClientForm value={briefClient} onChange={setBriefClient} />
+      {/* Sprint 14 Lot 3/4.3 — Brief client unifié, monté AVANT les contraintes
+          techniques. State porté par OptimisationPoseProvider (Lot 4.2). */}
+      <BriefClientForm />
 
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
         {/* --- Colonne 1 : Format + impression --- */}
