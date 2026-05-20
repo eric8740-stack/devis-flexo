@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import type { DevisDetail } from "@/lib/api";
 
 import {
+  briefClientToPayload,
   extractBriefClientFromDevis,
   mergeBriefClient,
 } from "./store-helpers";
@@ -130,5 +131,54 @@ describe("extractBriefClientFromDevis — hydratation depuis DevisDetail", () =>
     expect(result.conditions_stockage.t_min_c).toBeNull();
     expect(result.conditions_stockage.t_max_c).toBeNull();
     expect(result.conditions_stockage.lieu).toBe("interieur");
+  });
+});
+
+describe("briefClientToPayload — projection vers DevisCreate/Update", () => {
+  it("omet les valeurs null dans conditions_stockage", () => {
+    const payload = briefClientToPayload(BRIEF_CLIENT_DEFAULTS);
+    // Defaults : humidite/tmin/tmax null + lieu='interieur' → seul lieu
+    // est inclus dans le payload final.
+    expect(payload.conditions_stockage).toEqual({ lieu: "interieur" });
+  });
+
+  it("conserve les valeurs non-null et le lieu", () => {
+    const payload = briefClientToPayload({
+      nb_etiquettes_par_rouleau: 1500,
+      diametre_max_bobine_mm: 220,
+      nb_fronts_sortie: 2,
+      type_entree_fichier: "bat_pro_fourni",
+      conditions_stockage: {
+        humidite_pct: 75,
+        t_min_c: -2,
+        t_max_c: 65,
+        lieu: "exterieur",
+      },
+    });
+    expect(payload).toEqual({
+      nb_etiquettes_par_rouleau: 1500,
+      diametre_max_bobine_mm: 220,
+      nb_fronts_sortie: 2,
+      type_entree_fichier: "bat_pro_fourni",
+      conditions_stockage: {
+        humidite_pct: 75,
+        t_min_c: -2,
+        t_max_c: 65,
+        lieu: "exterieur",
+      },
+    });
+  });
+
+  it("retourne conditions_stockage=null si aucun champ stockage renseigné", () => {
+    const payload = briefClientToPayload({
+      ...BRIEF_CLIENT_DEFAULTS,
+      conditions_stockage: {
+        humidite_pct: null,
+        t_min_c: null,
+        t_max_c: null,
+        lieu: null,
+      },
+    });
+    expect(payload.conditions_stockage).toBeNull();
   });
 });
