@@ -1,13 +1,15 @@
-"""Router /api/optimisation — Sprint 13 Lot S13.D.7b.
+"""Router /api/optimisation — Sprint 13 Lot S13.D.7b + Sprint 14 Lot 2.
 
-1 endpoint :
-  - POST /api/optimisation/calculer
-        Reçoit le contexte devis (format, couleurs, options, contrainte
-        client) + hydrate cylindres/machines/barèmes du tenant + appelle
-        optimiser_pose(). Renvoie top 3 (≤ 3) configs + métadonnées.
+Endpoints :
+  - POST /api/optimisation/calculer (Sprint 13.D)
+        Moteur d'optimisation pose 6 règles métier + scoring sophistiqué.
+  - POST /api/optimisation/matcher-outil (Sprint 14 Lot 2)
+        Matching simple des cylindres parc tenant contre un brief client.
 
 Activé pour les users avec module FlexoCompare (require_module).
 """
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,7 @@ from app.dependencies import require_module
 from app.models import (
     CylindreMagnetique,
     Entreprise,
+    Machine,
     MachineImprimerie,
     Matiere,
     OptionFabrication,
@@ -23,6 +26,9 @@ from app.models import (
 )
 from app.schemas.matiere import MatiereOut
 from app.schemas.optimisation import (
+    MatcherOutilIn,
+    MatcherOutilOut,
+    MatchOutilOut,
     OptimisationCalculerRequest,
     OptimisationCalculerResponse,
     OptimisationConfigOut,
@@ -57,6 +63,8 @@ from app.services.optimisation_loader import (
     charger_machines_actives,
     charger_options_par_codes,
 )
+from app.services.outil_matcher import ContrainteOutil, matcher_outils
+from app.services.scope_service import get_or_404_scoped
 
 
 router = APIRouter(prefix="/api/optimisation", tags=["optimisation"])
@@ -468,4 +476,74 @@ def _to_config_out(
         epaisseur_appliquee_um=int(epaisseur_appliquee_um),
         forcage_epaisseur=forcage_epaisseur,
         motif_forcage_epaisseur=motif_forcage_epaisseur,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sprint 14 Lot 2 — POST /api/optimisation/matcher-outil
+# ---------------------------------------------------------------------------
+
+
+@router.post("/matcher-outil", response_model=MatcherOutilOut)
+def post_matcher_outil(
+    body: MatcherOutilIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_module("flexocompare")),
+) -> MatcherOutilOut:
+    """Match les cylindres du parc tenant contre un brief client.
+
+    Distinct du moteur d'optimisation pose `/calculer` (Sprint 13.D, 6 règles
+    métier + scoring sophistiqué) : ici on fait un matching simple
+    nb_dents × pas_chenille → poses possibles, score = surface utile /
+    surface développée machine. Sert au funnel d'entrée Sprint 14 où le
+    commercial saisit un brief client et veut voir d'abord si un outil
+    existant convient avant de chiffrer.
+
+    Scope tenant strict : machine_id et cylindres viennent obligatoirement
+    de `user.entreprise_id` ; tout cross-tenant → 404 (anti-énumération).
+
+    Utilise le modèle `Machine` (table `machine` Sprint 2) — cohérent avec
+    le sacred `cylindre_matcher.py` Sprint 7 qui consomme `Machine.laize_max_mm`.
+    `MachineImprimerie` (Sprint 13.B) reste réservé au moteur d'optimisation
+    pose `/calculer`.
+    """
+    # 1) Récupère la machine scopée (404 si cross-tenant)
+    machine = get_or_404_scoped(db, Machine, body.machine_id, user)
+
+    # 2) Charge les cylindres actifs du tenant (raw query — pas le loader
+    #    Sprint 13 qui mappe en dataclass Cylindre ; ici on a besoin du
+    #    modèle ORM pour passer au service avec `.id` et `.developpe_mm`).
+    cylindres = (
+        db.query(CylindreMagnetique)
+        .filter_by(entreprise_id=user.entreprise_id, actif=True)
+        .all()
+    )
+
+    # 3) Construit la contrainte et appelle le service stateless
+    contrainte = ContrainteOutil(
+        laize_etiquette_mm=body.laize_etiquette_mm,
+        dev_etiquette_mm=body.dev_etiquette_mm,
+        intervalle_dev_mm=body.intervalle_dev_mm,
+        intervalle_laize_mm=body.intervalle_laize_mm,
+        laize_machine_mm=Decimal(str(machine.laize_max_mm)),
+        nb_fronts_min=body.nb_fronts_min,
+        nb_fronts_max=body.nb_fronts_max,
+    )
+    matches = matcher_outils(contrainte, cylindres)
+
+    return MatcherOutilOut(
+        matches=[
+            MatchOutilOut(
+                cylindre_id=m.cylindre_id,
+                nb_dents=m.nb_dents,
+                developpe_mm=m.developpe_mm,
+                nb_poses_dev=m.nb_poses_dev,
+                nb_poses_laize=m.nb_poses_laize,
+                nb_poses_total=m.nb_poses_total,
+                cout_outil_eur=m.cout_outil_eur,
+                score_efficacite=m.score_efficacite,
+            )
+            for m in matches
+        ],
+        nb_matches=len(matches),
     )
