@@ -119,6 +119,17 @@ class DevisCreate(BaseModel):
     quantite_totale: int | None = Field(None, ge=1)
     lots: list[LotProductionCreate] | None = Field(None, min_length=1)
 
+    # Sprint 14 Lot 1 — brief client unifié (caractérise la livraison
+    # finale, commune à tous les lots du devis). Tous optionnels avec
+    # defaults rétro-compatibles : un payload pré-S14 reste valide.
+    nb_etiquettes_par_rouleau: int | None = Field(None, ge=1)
+    diametre_max_bobine_mm: int | None = Field(None, ge=1)
+    nb_fronts_sortie: int | None = Field(1, ge=1)
+    type_entree_fichier: Literal[
+        "vierge", "bat_pro_fourni", "a_designer"
+    ] = "a_designer"
+    conditions_stockage: dict | None = None
+
     @model_validator(mode="after")
     def _valider_somme_quantites_lots(self) -> "DevisCreate":
         """Si des lots sont fournis, leur somme de quantités doit égaler
@@ -167,6 +178,17 @@ class DevisUpdate(BaseModel):
     quantite_totale: int | None = Field(None, ge=1)
     lots: list[LotProductionCreate] | None = Field(None, min_length=1)
 
+    # Sprint 14 Lot 1 — brief client unifié. Tous None par défaut (partial
+    # update via exclude_unset côté CRUD : seuls les champs effectivement
+    # transmis sont écrits).
+    nb_etiquettes_par_rouleau: int | None = Field(None, ge=1)
+    diametre_max_bobine_mm: int | None = Field(None, ge=1)
+    nb_fronts_sortie: int | None = Field(None, ge=1)
+    type_entree_fichier: Literal[
+        "vierge", "bat_pro_fourni", "a_designer"
+    ] | None = None
+    conditions_stockage: dict | None = None
+
 
 class DevisListItem(BaseModel):
     """Item retourné par GET /api/devis (liste paginée)."""
@@ -214,6 +236,15 @@ class DevisDetail(BaseModel):
     # Sprint 13 avenant — lots de production (liste vide si devis legacy
     # mono-config).
     lots_production: list[LotProductionRead] = Field(default_factory=list)
+
+    # Sprint 14 Lot 1 — brief client unifié. Defaults rétro-compatibles
+    # avec les devis pré-S14 : la migration a posé `a_designer` et `1`
+    # via server_default, les autres restent NULL.
+    nb_etiquettes_par_rouleau: int | None = None
+    diametre_max_bobine_mm: int | None = None
+    nb_fronts_sortie: int | None = 1
+    type_entree_fichier: str = "a_designer"
+    conditions_stockage: dict | None = None
 
 
 class DevisListResponse(BaseModel):

@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -103,6 +104,32 @@ class Devis(Base):
     # affiche les deux pour transparence (brut + après remise).
     reduction_pct: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, server_default="0", default=Decimal(0)
+    )
+
+    # Sprint 14 Lot 1 — brief client unifié. Ces 5 champs caractérisent
+    # la livraison finale au client (commune à tous les lots d'un devis) :
+    # quantité par rouleau, contrainte machine cliente, type d'entrée
+    # fichier et conditions de stockage (servent à la déduction adhésif).
+    # Tous rétro-compatibles : nullable ou server_default pour ne pas
+    # casser les devis existants.
+    nb_etiquettes_par_rouleau: Mapped[int | None] = mapped_column(Integer)
+    diametre_max_bobine_mm: Mapped[int | None] = mapped_column(Integer)
+    nb_fronts_sortie: Mapped[int | None] = mapped_column(
+        Integer, server_default="1", default=1
+    )
+    type_entree_fichier: Mapped[str] = mapped_column(
+        Enum(
+            "vierge",
+            "bat_pro_fourni",
+            "a_designer",
+            name="devis_type_entree_fichier_enum",
+        ),
+        nullable=False,
+        server_default="a_designer",
+        default="a_designer",
+    )
+    conditions_stockage: Mapped[dict | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
     )
 
     # Sprint 13 avenant — lots de production multi-lots (N lots par devis).
