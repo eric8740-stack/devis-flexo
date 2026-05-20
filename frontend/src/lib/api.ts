@@ -769,6 +769,18 @@ export interface DevisDetail {
   reduction_pct?: string;
   // Brief #32 — lots de production (vide si devis legacy mono-lot).
   lots_production?: LotProductionRead[];
+  // Sprint 14 Lot 1 — brief client unifié. Defaults backend rétro-
+  // compatibles avec les devis pré-S14 (server_default `a_designer` / 1).
+  nb_etiquettes_par_rouleau?: number | null;
+  diametre_max_bobine_mm?: number | null;
+  nb_fronts_sortie?: number | null;
+  type_entree_fichier?: "vierge" | "bat_pro_fourni" | "a_designer";
+  conditions_stockage?: {
+    humidite_pct?: number;
+    t_min_c?: number;
+    t_max_c?: number;
+    lieu?: string;
+  } | null;
 }
 
 // Brief #32 — représentation lecture d'un lot de production (joints UI).
@@ -840,6 +852,19 @@ export interface DevisCreate {
   // Multi-lots (optionnel, backward-compat)
   quantite_totale?: number;
   lots?: LotProductionCreatePayload[];
+  // Sprint 14 Lot 1 — brief client unifié (caractérise la livraison
+  // finale, commune à tous les lots). Tous optionnels avec defaults
+  // backend (`a_designer`, `1`) ; un payload pré-S14 reste valide.
+  nb_etiquettes_par_rouleau?: number | null;
+  diametre_max_bobine_mm?: number | null;
+  nb_fronts_sortie?: number | null;
+  type_entree_fichier?: "vierge" | "bat_pro_fourni" | "a_designer";
+  conditions_stockage?: {
+    humidite_pct?: number;
+    t_min_c?: number;
+    t_max_c?: number;
+    lieu?: string;
+  } | null;
 }
 
 export interface DevisUpdate {
@@ -854,6 +879,18 @@ export interface DevisUpdate {
   // Brief #32 — replace les lots si fourni (recalcul cost_engine côté CRUD).
   quantite_totale?: number;
   lots?: LotProductionCreatePayload[];
+  // Sprint 14 Lot 1 — brief client unifié. Partial update : seuls les
+  // champs effectivement transmis sont écrits côté CRUD (exclude_unset).
+  nb_etiquettes_par_rouleau?: number | null;
+  diametre_max_bobine_mm?: number | null;
+  nb_fronts_sortie?: number | null;
+  type_entree_fichier?: "vierge" | "bat_pro_fourni" | "a_designer";
+  conditions_stockage?: {
+    humidite_pct?: number;
+    t_min_c?: number;
+    t_max_c?: number;
+    lieu?: string;
+  } | null;
 }
 
 export interface ListDevisParams {
