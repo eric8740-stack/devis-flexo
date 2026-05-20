@@ -213,6 +213,121 @@ def test_devis_update_partial_brief_client():
 
 
 # ---------------------------------------------------------------------------
+# (c) Pipeline API : POST /api/devis avec brief client → GET retrouve EXACT
+# ---------------------------------------------------------------------------
+# Détecté par Lot 5 E2E : le CRUD `create_devis()` Lot 1 ne propageait PAS
+# les 5 champs brief client du body Pydantic vers le modèle ORM. Ce test
+# verrouille le contrat pipeline complet (échouerait avec server_default
+# silencieux si on retire le fix dans crud/devis.py).
+
+
+def _payload_post_devis_with_brief() -> dict:
+    """Payload complet POST /api/devis avec V1a + brief client renseigné."""
+    return {
+        "payload_input": {
+            "complexe_id": 31,
+            "laize_utile_mm": 220,
+            "ml_total": 3000,
+            "nb_couleurs_par_type": {"process_cmj": 4, "pantone": 1},
+            "machine_id": 1,
+            "format_etiquette_largeur_mm": 60,
+            "format_etiquette_hauteur_mm": 40,
+            "nb_poses_largeur": 3,
+            "nb_poses_developpement": 1,
+            "forfaits_st": [{"partenaire_st_id": 1, "montant_eur": "50.00"}],
+        },
+        "payload_output": _payload_output_v1a(),
+        # Brief client S14 — valeurs explicites distinctes des defaults
+        "nb_etiquettes_par_rouleau": 1500,
+        "diametre_max_bobine_mm": 250,
+        "nb_fronts_sortie": 2,
+        "type_entree_fichier": "bat_pro_fourni",
+        "conditions_stockage": {
+            "humidite_pct": 60,
+            "t_min_c": 8,
+            "t_max_c": 28,
+            "lieu": "atelier climatise",
+        },
+    }
+
+
+def test_e2e_api_post_devis_propage_brief_client_jusquen_db():
+    """(c) Pipeline API : POST /api/devis avec les 5 champs brief client →
+    GET /api/devis/{id} retourne EXACT les mêmes valeurs (pas les defaults).
+
+    Test de non-régression du fix `fix(devis): propager 5 champs brief
+    client S14 du CRUD vers le modèle (create + update)`. Sans le fix,
+    le POST acceptait silencieusement les valeurs côté Pydantic mais le
+    CRUD instanciait `Devis(...)` sans les passer → `server_default` DB
+    appliqué pour 2 champs (a_designer, 1) + NULL pour les 3 autres.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    payload = _payload_post_devis_with_brief()
+
+    r = client.post("/api/devis", json=payload)
+    assert r.status_code == 201, r.text
+    created = r.json()
+    devis_id = created["id"]
+
+    # GET pour confirmer la persistance via le pipeline complet
+    r = client.get(f"/api/devis/{devis_id}")
+    assert r.status_code == 200, r.text
+    devis = r.json()
+
+    # Les 5 valeurs envoyées sont retrouvées EXACT (pas les defaults DB)
+    assert devis["nb_etiquettes_par_rouleau"] == 1500
+    assert devis["diametre_max_bobine_mm"] == 250
+    assert devis["nb_fronts_sortie"] == 2
+    assert devis["type_entree_fichier"] == "bat_pro_fourni"
+    assert devis["conditions_stockage"] == {
+        "humidite_pct": 60,
+        "t_min_c": 8,
+        "t_max_c": 28,
+        "lieu": "atelier climatise",
+    }
+
+    # Cleanup
+    r = client.delete(f"/api/devis/{devis_id}")
+    assert r.status_code == 204
+
+
+def test_e2e_api_duplicate_devis_copie_brief_client():
+    """(c-bis) Duplication d'un devis : les 5 champs brief client sont
+    copiés depuis le source (cf. fix duplicate_devis()).
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+
+    # Crée un source avec brief explicite
+    r = client.post("/api/devis", json=_payload_post_devis_with_brief())
+    assert r.status_code == 201, r.text
+    src_id = r.json()["id"]
+
+    # Duplicate
+    r = client.post(f"/api/devis/{src_id}/duplicate")
+    assert r.status_code == 201, r.text
+    dup = r.json()
+
+    # Les 5 valeurs sont copiées depuis le source
+    assert dup["nb_etiquettes_par_rouleau"] == 1500
+    assert dup["diametre_max_bobine_mm"] == 250
+    assert dup["nb_fronts_sortie"] == 2
+    assert dup["type_entree_fichier"] == "bat_pro_fourni"
+    assert dup["conditions_stockage"]["lieu"] == "atelier climatise"
+
+    # Cleanup les deux
+    client.delete(f"/api/devis/{src_id}")
+    client.delete(f"/api/devis/{dup['id']}")
+
+
+# ---------------------------------------------------------------------------
 # Schéma DB après migration
 # ---------------------------------------------------------------------------
 
