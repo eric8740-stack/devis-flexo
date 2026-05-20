@@ -25,13 +25,19 @@ export interface MatcherOutilRequest {
 }
 
 export interface MatcherOutilMatch {
-  cylindre_id: number;
+  // null = match « nouvel outil à fabriquer sur mesure » (contrat backend
+  // Lot 2 : si aucun cylindre du parc ne convient, le backend renvoie une
+  // entrée unique avec cylindre_id=null + cout_outil_eur="200").
+  cylindre_id: number | null;
   nb_dents: number;
-  developpe_mm: number;
+  // Decimal sérialisé string (cohérent avec format_h_mm,
+  // intervalle_dev_reel_mm, etc. dans api.ts). Conversion via
+  // parseFloat / Number UNIQUEMENT à l'affichage.
+  developpe_mm: string;
   nb_poses_dev: number;
   nb_poses_laize: number;
   nb_poses_total: number;
-  cout_outil_eur: number;
+  cout_outil_eur: string;
   score_efficacite: number;
 }
 

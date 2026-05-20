@@ -27,6 +27,7 @@ import type {
   OptimisationConfigOut,
   SensEnroulement,
 } from "@/lib/api";
+import type { MatcherOutilMatch } from "@/lib/api/matcherOutil";
 
 import {
   extractBriefClientFromDevis,
@@ -130,6 +131,12 @@ interface OptimisationPoseContextValue {
   // partiel ; merge profond sur `conditions_stockage` (cf helper).
   briefClient: BriefClientData;
   setBriefClient: (patch: Partial<BriefClientData>) => void;
+
+  // Sprint 14 Lot 4.5 — outil compatible sélectionné via le matcher.
+  // null tant que l'utilisateur n'a pas cliqué un match. Objet complet
+  // (pas que l'id) pour permettre l'affichage récap sans re-fetch.
+  outilSelectionne: MatcherOutilMatch | null;
+  setOutilSelectionne: (match: MatcherOutilMatch | null) => void;
 
   // Brief #33 commit 3 — hydratation depuis un devis existant. Reconstruit
   // selection + candidats minimum à partir de `lots_production`, lit
@@ -254,6 +261,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     },
     [],
   );
+
+  // Sprint 14 Lot 4.5 — outil sélectionné via matcher-outil.
+  const [outilSelectionne, setOutilSelectionne] =
+    useState<MatcherOutilMatch | null>(null);
 
   const goSaisie = useCallback(() => {
     setEtape("saisie");
@@ -437,6 +448,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setModeEdition,
       briefClient,
       setBriefClient,
+      outilSelectionne,
+      setOutilSelectionne,
       hydrateFromDevisExistant,
     }),
     [
@@ -464,6 +477,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setModeEdition,
       briefClient,
       setBriefClient,
+      outilSelectionne,
       hydrateFromDevisExistant,
     ]
   );
