@@ -34,6 +34,13 @@ const NAV_ITEMS = [
   { href: "/catalogue", label: "Produits clients" },
 ];
 
+// Sprint 15 — entrée réservée aux comptes FlexoCheck (Contrôle BAT IA).
+// Filtrée dynamiquement sur `user.has_flexocheck` plus bas.
+const FLEXOCHECK_NAV_ITEM = {
+  href: "/atelier/controle-bat",
+  label: "Contrôle BAT",
+};
+
 const ADMIN_NAV_ITEM = { href: "/admin", label: "Admin" };
 
 export function Header() {
@@ -43,9 +50,11 @@ export function Header() {
   // Best-match : on choisit le href le PLUS LONG qui matche le pathname.
   // Évite que /devis/nouveau active à la fois /devis et /devis/nouveau.
   const visibleNav = isAuthenticated
-    ? user?.is_admin
-      ? [...NAV_ITEMS, ADMIN_NAV_ITEM]
-      : NAV_ITEMS
+    ? [
+        ...NAV_ITEMS,
+        ...(user?.has_flexocheck ? [FLEXOCHECK_NAV_ITEM] : []),
+        ...(user?.is_admin ? [ADMIN_NAV_ITEM] : []),
+      ]
     : [];
   const activeHref = visibleNav
     .filter(
