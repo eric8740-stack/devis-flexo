@@ -4,8 +4,10 @@ import { ApiError } from "@/lib/api";
 
 import {
   createControleBat,
+  decideControleBat,
   getControleBatContext,
   listProductionsActives,
+  relancerTirage,
   uploadBatReference,
   type ProductionActive,
 } from "./controleBat";
@@ -325,6 +327,159 @@ describe("createControleBat", () => {
     const photo = new File(["x"], "p.jpg", { type: "image/jpeg" });
     await expect(createControleBat(7, photo)).rejects.toMatchObject({
       status: 503,
+    });
+  });
+});
+
+describe("decideControleBat", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("POST JSON avec decision_finale + decideur + motif, renvoie la décision", async () => {
+    window.localStorage.setItem("devis_flexo_access_token", "tok-dec");
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        controle_id: 101,
+        devis_id: 7,
+        decision_finale: "valider",
+        decideur: "J. Martin",
+        motif: "Écart mineur accepté",
+        decided_at: "2026-05-24T11:00:00",
+      }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const res = await decideControleBat(101, {
+      decision_finale: "valider",
+      decideur: "J. Martin",
+      motif: "Écart mineur accepté",
+    });
+    expect(res.decision_finale).toBe("valider");
+    expect(res.decideur).toBe("J. Martin");
+
+    const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
+    const url = callArgs?.[0] as string;
+    const init = callArgs?.[1] as RequestInit | undefined;
+    expect(url).toContain("/api/flexocheck/controle-bat/101/decision");
+    expect(init?.method).toBe("POST");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers.Authorization).toBe("Bearer tok-dec");
+    const body = JSON.parse(init?.body as string);
+    expect(body).toEqual({
+      decision_finale: "valider",
+      decideur: "J. Martin",
+      motif: "Écart mineur accepté",
+    });
+  });
+
+  it("motif omis : payload sans motif (champ optionnel)", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        controle_id: 102,
+        devis_id: 8,
+        decision_finale: "valider",
+        decideur: "P. Dupond",
+        motif: null,
+        decided_at: "2026-05-24T11:30:00",
+      }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    await decideControleBat(102, {
+      decision_finale: "valider",
+      decideur: "P. Dupond",
+    });
+    const init = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body.motif).toBeUndefined();
+  });
+
+  it("409 (décision déjà enregistrée) → ApiError 409", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      statusText: "Conflict",
+      json: async () => ({ detail: "Décision déjà enregistrée" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      decideControleBat(101, {
+        decision_finale: "valider",
+        decideur: "J. Martin",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe("relancerTirage", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("POST multipart sur /{id}/retirage avec photo, renvoie ControleBatResult tentative+1", async () => {
+    window.localStorage.setItem("devis_flexo_access_token", "tok-rt");
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        controle_id: 101,
+        devis_id: 7,
+        tentative: 2,
+        score_conformite: 91.0,
+        decision_recommandee: "valider",
+      }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const photo = new File(["JPEG"], "tirage2.jpg", { type: "image/jpeg" });
+    const res = await relancerTirage(101, photo);
+    expect(res.tentative).toBe(2);
+
+    const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
+    const url = callArgs?.[0] as string;
+    const init = callArgs?.[1] as RequestInit | undefined;
+    expect(url).toContain("/api/flexocheck/controle-bat/101/retirage");
+    expect(init?.method).toBe("POST");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer tok-rt");
+    expect(headers["Content-Type"]).toBeUndefined();
+    expect(init?.body).toBeInstanceOf(FormData);
+    const fd = init?.body as FormData;
+    expect((fd.get("photo") as File).name).toBe("tirage2.jpg");
+    // Le devis_id n'est PAS dans la requête : le backend le résout via
+    // /controle-bat/{id}/retirage.
+    expect(fd.get("devis_id")).toBeNull();
+  });
+
+  it("409 (contrôle déjà décidé) → ApiError 409", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      statusText: "Conflict",
+      json: async () => ({ detail: "Contrôle déjà clôturé" }),
+    })) as unknown as typeof fetch;
+
+    const photo = new File(["x"], "p.jpg", { type: "image/jpeg" });
+    await expect(relancerTirage(101, photo)).rejects.toMatchObject({
+      status: 409,
     });
   });
 });

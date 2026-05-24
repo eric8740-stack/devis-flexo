@@ -229,6 +229,103 @@ export interface ControleBatResult {
   sens_enroulement_detecte?: SensEnroulement | null;
   sens_enroulement_demande?: SensEnroulement | null;
   alerte_sens_enroulement?: AlerteSensEnroulement | null;
+  // Lot E — backend lève ce flag au-delà de N tentatives échouées (seuil
+  // métier 3 d'après le brief, mais le seuil reste côté backend pour
+  // pouvoir évoluer). L'UI affiche un bandeau "Prévenir le chef d'atelier".
+  alerte_chef_atelier?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Lot E — Décision finale opérateur + workflow re-tirage
+// ---------------------------------------------------------------------------
+
+export type DecisionFinale = "valider" | "rejeter";
+
+export interface DecideControleRequest {
+  decision_finale: DecisionFinale;
+  decideur: string;
+  motif?: string;
+}
+
+export interface DecideControleResponse {
+  controle_id: number;
+  devis_id: number;
+  decision_finale: DecisionFinale;
+  decideur: string;
+  motif: string | null;
+  decided_at: string;
+}
+
+export async function decideControleBat(
+  controleId: number,
+  body: DecideControleRequest,
+): Promise<DecideControleResponse> {
+  const path = `/api/flexocheck/controle-bat/${controleId}/decision`;
+  const token =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(ACCESS_TOKEN_KEY)
+      : null;
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const data = await response.json();
+      if (data?.detail) detail = `${response.status} ${data.detail}`;
+    } catch {
+      /* corps non JSON */
+    }
+    // 404 = controle introuvable, 409 = décision déjà enregistrée (idempotent
+    // côté UI : on remonte l'erreur, l'utilisateur recharge).
+    throw new ApiError(response.status, `POST ${path} → ${detail}`);
+  }
+
+  return response.json();
+}
+
+export async function relancerTirage(
+  controleId: number,
+  photo: File,
+): Promise<ControleBatResult> {
+  const path = `/api/flexocheck/controle-bat/${controleId}/retirage`;
+  const token =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(ACCESS_TOKEN_KEY)
+      : null;
+
+  const formData = new FormData();
+  formData.append("photo", photo);
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const data = await response.json();
+      if (data?.detail) detail = `${response.status} ${data.detail}`;
+    } catch {
+      /* corps non JSON */
+    }
+    // 409 = contrôle déjà décidé (plus de retirage possible), 413 = photo
+    // trop grosse, 422 = photo invalide, 503 = service IA indisponible.
+    throw new ApiError(response.status, `POST ${path} → ${detail}`);
+  }
+
+  return response.json();
 }
 
 export async function getControleBatContext(

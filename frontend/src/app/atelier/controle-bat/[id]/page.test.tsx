@@ -20,6 +20,8 @@ vi.mock("next/navigation", () => ({
 
 const getContextMock = vi.fn();
 const createControleMock = vi.fn();
+const relancerTirageMock = vi.fn();
+const decideControleMock = vi.fn();
 vi.mock("@/lib/api/controleBat", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/api/controleBat")>();
@@ -31,6 +33,12 @@ vi.mock("@/lib/api/controleBat", async (importOriginal) => {
     createControleBat: (
       ...args: Parameters<typeof actual.createControleBat>
     ) => createControleMock(...args),
+    relancerTirage: (
+      ...args: Parameters<typeof actual.relancerTirage>
+    ) => relancerTirageMock(...args),
+    decideControleBat: (
+      ...args: Parameters<typeof actual.decideControleBat>
+    ) => decideControleMock(...args),
   };
 });
 
@@ -84,6 +92,8 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     useParamsMock.mockReset();
     getContextMock.mockReset();
     createControleMock.mockReset();
+    relancerTirageMock.mockReset();
+    decideControleMock.mockReset();
     useParamsMock.mockReturnValue({ id: "7" });
   });
   afterEach(() => {
@@ -248,5 +258,201 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     );
     expect(screen.queryByTestId("analyzing-banner")).toBeNull();
     expect(screen.queryByTestId("resultat-controle")).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Lot E — workflow re-tirage + décision opérateur
+  // -------------------------------------------------------------------------
+
+  it("après 1ère analyse : timeline #1, ResultatControle, boutons Valider+Ajuster, capture initiale masquée", async () => {
+    useAuthMock.mockReturnValue({ user: buildUser() });
+    getContextMock.mockResolvedValueOnce(buildContext());
+    createControleMock.mockResolvedValueOnce({
+      controle_id: 100,
+      devis_id: 7,
+      tentative: 1,
+      score_conformite: 72,
+      decision_recommandee: "ajuster",
+    });
+
+    render(<AtelierControleBatDetailPage />);
+    await screen.findByTestId("bat-pdf");
+    await userEvent.upload(
+      screen.getByTestId("photo-input"),
+      new File(["JPEG"], "t1.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Analyser la conformité/i }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("resultat-controle")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("tentatives-timeline")).toBeInTheDocument();
+    expect(screen.getByTestId("tentative-chip-1")).toHaveTextContent("#1");
+    expect(screen.getByTestId("decision-actions")).toBeInTheDocument();
+    // CaptureSection initiale (gros bouton "📷 Prendre photo 1er tirage")
+    // doit avoir disparu : photo a été reset après l'analyse.
+    expect(
+      screen.queryByRole("button", { name: /Prendre photo 1er tirage/i }),
+    ).toBeNull();
+  });
+
+  it("Ajuster + nouvelle photo + analyser : relancerTirage appelé avec last controle_id, timeline #1+#2", async () => {
+    useAuthMock.mockReturnValue({ user: buildUser() });
+    getContextMock.mockResolvedValueOnce(buildContext());
+    createControleMock.mockResolvedValueOnce({
+      controle_id: 100,
+      devis_id: 7,
+      tentative: 1,
+      score_conformite: 60,
+      decision_recommandee: "ajuster",
+    });
+    relancerTirageMock.mockResolvedValueOnce({
+      controle_id: 100,
+      devis_id: 7,
+      tentative: 2,
+      score_conformite: 88,
+      decision_recommandee: "valider",
+    });
+
+    render(<AtelierControleBatDetailPage />);
+    await screen.findByTestId("bat-pdf");
+
+    // 1ère analyse.
+    await userEvent.upload(
+      screen.getByTestId("photo-input"),
+      new File(["JPEG1"], "t1.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Analyser la conformité/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("tentative-chip-1")).toBeInTheDocument(),
+    );
+
+    // Ajuster : click déclenche fileInputRef.click() (impossible à
+    // observer en happy-dom) puis reset des états → on re-uploade
+    // directement sur l'input file pour simuler la sélection caméra.
+    await userEvent.click(
+      screen.getByRole("button", { name: /Ajuster et recommencer/i }),
+    );
+    // Après reset, l'input est toujours rendu (sr-only) — on peut re-uploader.
+    await userEvent.upload(
+      screen.getByTestId("photo-input"),
+      new File(["JPEG2"], "t2.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Lancer un nouveau tirage/i }),
+    );
+
+    await waitFor(() =>
+      expect(relancerTirageMock).toHaveBeenCalledTimes(1),
+    );
+    // Le retirage est attaché au controle_id de la 1ère analyse.
+    expect(relancerTirageMock).toHaveBeenCalledWith(100, expect.any(File));
+    expect(createControleMock).toHaveBeenCalledTimes(1);
+    // Timeline mise à jour.
+    await waitFor(() =>
+      expect(screen.getByTestId("tentative-chip-2")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("tentative-chip-1")).toBeInTheDocument();
+    expect(screen.getByTestId("resultat-controle")).toHaveTextContent(
+      /tentative 2/i,
+    );
+  });
+
+  it("Valider la production → dialog ouvre, soumission → bloc décision + actions masquées", async () => {
+    useAuthMock.mockReturnValue({ user: buildUser() });
+    getContextMock.mockResolvedValueOnce(buildContext());
+    createControleMock.mockResolvedValueOnce({
+      controle_id: 100,
+      devis_id: 7,
+      tentative: 1,
+      score_conformite: 92,
+      decision_recommandee: "valider",
+    });
+    decideControleMock.mockResolvedValueOnce({
+      controle_id: 100,
+      devis_id: 7,
+      decision_finale: "valider",
+      decideur: "J. Martin",
+      motif: null,
+      decided_at: "2026-05-24T11:00:00",
+    });
+
+    render(<AtelierControleBatDetailPage />);
+    await screen.findByTestId("bat-pdf");
+    await userEvent.upload(
+      screen.getByTestId("photo-input"),
+      new File(["JPEG"], "t.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Analyser la conformité/i }),
+    );
+    await screen.findByTestId("resultat-controle");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Valider la production/i }),
+    );
+    // Dialog Radix : titre rendu dans le portal.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Valider la production — DEV-2026-0007/),
+      ).toBeInTheDocument(),
+    );
+
+    await userEvent.type(
+      screen.getByTestId("decideur-input"),
+      "J. Martin",
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: /^✅ Valider la production$/,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("decision-enregistree")).toBeInTheDocument(),
+    );
+    expect(decideControleMock).toHaveBeenCalledWith(100, {
+      decision_finale: "valider",
+      decideur: "J. Martin",
+      motif: undefined,
+    });
+    // Boutons d'action masqués après décision finale.
+    expect(screen.queryByTestId("decision-actions")).toBeNull();
+  });
+
+  it("alerte_chef_atelier : bandeau rouge affiché en tête du résultat", async () => {
+    useAuthMock.mockReturnValue({ user: buildUser() });
+    getContextMock.mockResolvedValueOnce(buildContext());
+    createControleMock.mockResolvedValueOnce({
+      controle_id: 100,
+      devis_id: 7,
+      tentative: 4,
+      score_conformite: 30,
+      decision_recommandee: "rejeter",
+      alerte_chef_atelier: true,
+    });
+
+    render(<AtelierControleBatDetailPage />);
+    await screen.findByTestId("bat-pdf");
+    await userEvent.upload(
+      screen.getByTestId("photo-input"),
+      new File(["JPEG"], "t.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Analyser la conformité/i }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("alerte-chef-atelier"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("alerte-chef-atelier")).toHaveTextContent(
+      /Prévenir le chef d'atelier/i,
+    );
   });
 });

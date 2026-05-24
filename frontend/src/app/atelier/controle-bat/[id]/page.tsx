@@ -17,31 +17,39 @@ import {
   createControleBat,
   getControleBatContext,
   PHOTO_TIRAGE_MAX_SIZE_MO,
+  relancerTirage,
   type ControleBatContext,
   type ControleBatResult,
+  type DecideControleResponse,
 } from "@/lib/api/controleBat";
 
+import { DialogValiderProduction } from "../_components/DialogValiderProduction";
 import { ResultatControle } from "../_components/ResultatControle";
+import { TentativesTimeline } from "../_components/TentativesTimeline";
 
 /**
- * Sprint 15 Lot C — Détail Contrôle BAT : capture du 1er tirage.
+ * Sprint 15 Lots C/D/E — Détail Contrôle BAT : capture, analyse, décision.
  *
  * Cible atelier (tablette, mobile). Mobile-first strict, gros boutons
- * tactiles, encart protocole en texte clair (PAS de tooltip au survol —
- * un opérateur sur tablette ne survole rien).
+ * tactiles, encart protocole en texte clair (PAS de tooltip au survol).
  *
- * Trois sections :
- *   1. BAT de référence affiché en grand (la photo viendra s'y comparer)
- *   2. Encart protocole photo (toujours visible)
+ * Workflow opérateur :
+ *   1. Affichage du BAT de référence en grand (Lot C).
+ *   2. Encart protocole photo toujours visible (Lot C).
  *   3. Bouton « 📷 Prendre photo 1er tirage » → input capture="environment"
  *      qui ouvre la caméra arrière de la tablette ; fallback upload fichier
- *      sur desktop
- *
- * Au submit, animation « Analyse en cours… » pendant le POST
- * (5-10 s côté IA d'après le brief). Le rendu détaillé du résultat
- * (score, écarts, sens enroulement…) est implémenté au Lot D — pour
- * l'instant on confirme juste la réception de l'analyse et on propose
- * de relancer une capture.
+ *      sur desktop (Lot C).
+ *   4. Au submit, animation « Analyse en cours… » pendant le POST IA
+ *      (Lot C, ~5-10 s).
+ *   5. Résultat détaillé : score, écarts, sens enroulement (Lot D).
+ *   6. Décision opérateur (Lot E) :
+ *        - « ✅ Valider la production » → POST decision (dialog décideur)
+ *        - « 🔁 Ajuster et recommencer » → reset photo, prochain submit
+ *          appelle l'endpoint /retirage avec le dernier controle_id
+ *          → la tentative est incrémentée côté backend.
+ *      Une fois validée, les boutons d'action sont masqués.
+ *      Si le backend lève `alerte_chef_atelier`, un bandeau rouge
+ *      "Prévenir le chef d'atelier" s'affiche en tête du résultat.
  *
  * Gating : si l'utilisateur n'a pas `has_flexocheck`, message d'accès
  * sans appel API (le backend renverrait 403 de toute façon).
@@ -62,7 +70,18 @@ export default function AtelierControleBatDetailPage() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
-  const [result, setResult] = useState<ControleBatResult | null>(null);
+
+  // Historique local des tentatives sur cette session de contrôle.
+  // Lot E : on tient la liste pour la timeline. Le rendu détaillé se fait
+  // toujours sur la DERNIÈRE tentative (la plus récente).
+  const [attempts, setAttempts] = useState<ControleBatResult[]>([]);
+  const lastResult = attempts.length > 0 ? attempts[attempts.length - 1] : null;
+  const hasResult = lastResult !== null;
+
+  // Décision finale opérateur (Lot E). Une fois set, on bloque les boutons
+  // d'action — le contrôle est clôturé.
+  const [decision, setDecision] = useState<DecideControleResponse | null>(null);
+  const [showValidateDialog, setShowValidateDialog] = useState(false);
 
   useEffect(() => {
     if (!hasAccess) {
@@ -107,7 +126,6 @@ export default function AtelierControleBatDetailPage() {
   const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
     setPhotoError(null);
     setAnalyzeError(null);
-    setResult(null);
     const f = e.target.files?.[0];
     if (!f) return;
     if (!f.type.startsWith("image/")) {
@@ -132,8 +150,20 @@ export default function AtelierControleBatDetailPage() {
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
-      const res = await createControleBat(context.devis_id, photo);
-      setResult(res);
+      // 1ère analyse → createControleBat ; retirage → relancerTirage.
+      // Le backend incrémente lui-même `tentative` côté retirage, on lui
+      // fait confiance pour le compteur.
+      const res =
+        lastResult === null
+          ? await createControleBat(context.devis_id, photo)
+          : await relancerTirage(lastResult.controle_id, photo);
+      setAttempts((prev) => [...prev, res]);
+      // Vide la photo pour préparer un éventuel re-tirage : la photo en cours
+      // a été analysée, garder le preview deviendrait trompeur.
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      setPhoto(null);
+      setPhotoPreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -141,14 +171,19 @@ export default function AtelierControleBatDetailPage() {
     }
   };
 
-  const handleReset = () => {
+  // Lot E — "Ajuster et recommencer" : reset l'erreur d'analyse et la photo
+  // courante (si l'opérateur en a une en attente), conserve attempts pour
+  // la timeline, puis ouvre directement la caméra. Le but : un seul geste
+  // pour relancer le cycle de capture. Au prochain submit, c'est
+  // `relancerTirage` qui sera appelé (lastResult !== null).
+  const handleAdjustAndRetry = () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhoto(null);
     setPhotoPreview(null);
     setPhotoError(null);
     setAnalyzeError(null);
-    setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    fileInputRef.current?.click();
   };
 
   if (!hasAccess) {
@@ -196,18 +231,71 @@ export default function AtelierControleBatDetailPage() {
 
           <ProtocolePhotoSection />
 
-          <CaptureSection
-            inputRef={fileInputRef}
-            photo={photo}
-            photoPreview={photoPreview}
-            photoError={photoError}
-            analyzing={analyzing}
-            analyzeError={analyzeError}
-            result={result}
-            onPhotoChange={handlePhotoChange}
-            onAnalyze={handleAnalyze}
-            onReset={handleReset}
-          />
+          {/*
+            Section capture. Conditions d'affichage :
+            - décision finale enregistrée → on masque, le contrôle est clôturé.
+            - aucun résultat encore → 1ère analyse (entry-point du flow).
+            - résultat existant + photo en attente → re-tirage en cours,
+              on a besoin du preview + bouton "Lancer le tirage".
+            - résultat existant + pas de photo → on masque : le bouton
+              "Ajuster et recommencer" de la section résultats sert d'entry-
+              point unique au prochain cycle (évite la double commande).
+          */}
+          {decision === null && (!hasResult || photo !== null) && (
+            <CaptureSection
+              inputRef={fileInputRef}
+              photo={photo}
+              photoPreview={photoPreview}
+              photoError={photoError}
+              analyzing={analyzing}
+              analyzeError={analyzeError}
+              hasResult={hasResult}
+              onPhotoChange={handlePhotoChange}
+              onAnalyze={handleAnalyze}
+            />
+          )}
+
+          {/*
+            L'input file doit rester monté pour que `handleAdjustAndRetry`
+            puisse appeler `.click()` dessus depuis la section résultats,
+            même quand la CaptureSection est masquée. On le rend en sr-only
+            quand la CaptureSection n'est pas affichée.
+          */}
+          {decision === null && hasResult && photo === null && (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoChange}
+              className="sr-only"
+              data-testid="photo-input"
+              aria-label="Photo du re-tirage"
+              disabled={analyzing}
+            />
+          )}
+
+          {/* Timeline + dernier résultat dès qu'on a au moins 1 tentative. */}
+          {hasResult && lastResult && (
+            <ResultatsSection
+              attempts={attempts}
+              lastResult={lastResult}
+              decisionEnregistree={decision}
+              onValiderClick={() => setShowValidateDialog(true)}
+              onAjusterClick={handleAdjustAndRetry}
+            />
+          )}
+
+          {/* Dialog validation : monté de façon contrôlée. */}
+          {hasResult && lastResult && (
+            <DialogValiderProduction
+              controleId={lastResult.controle_id}
+              devisNumero={context.devis_numero}
+              open={showValidateDialog}
+              onOpenChange={setShowValidateDialog}
+              onValidated={(res) => setDecision(res)}
+            />
+          )}
         </>
       )}
     </main>
@@ -296,10 +384,12 @@ interface CaptureSectionProps {
   photoError: string | null;
   analyzing: boolean;
   analyzeError: string | null;
-  result: ControleBatResult | null;
+  // hasResult permet d'adapter le libellé du bouton primaire : « Prendre
+  // photo 1er tirage » à la 1ère tentative, « Prendre une nouvelle photo »
+  // ensuite (workflow re-tirage Lot E).
+  hasResult: boolean;
   onPhotoChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onAnalyze: () => void;
-  onReset: () => void;
 }
 
 function CaptureSection({
@@ -309,15 +399,22 @@ function CaptureSection({
   photoError,
   analyzing,
   analyzeError,
-  result,
+  hasResult,
   onPhotoChange,
   onAnalyze,
-  onReset,
 }: CaptureSectionProps) {
+  const primaryLabel = hasResult
+    ? "📷 Prendre une nouvelle photo"
+    : "📷 Prendre photo 1er tirage";
+  const submitLabel = hasResult
+    ? "Lancer un nouveau tirage"
+    : "Analyser la conformité";
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Photo du 1er tirage</CardTitle>
+        <CardTitle className="text-lg">
+          {hasResult ? "Re-tirage" : "Photo du 1er tirage"}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/*
@@ -337,7 +434,7 @@ function CaptureSection({
           disabled={analyzing}
         />
 
-        {!photo && !result && (
+        {!photo && (
           <Button
             type="button"
             size="lg"
@@ -345,7 +442,7 @@ function CaptureSection({
             disabled={analyzing}
             className="h-14 w-full text-lg"
           >
-            📷 Prendre photo 1er tirage
+            {primaryLabel}
           </Button>
         )}
 
@@ -369,7 +466,7 @@ function CaptureSection({
           </div>
         )}
 
-        {photo && !result && (
+        {photo && (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
@@ -388,7 +485,7 @@ function CaptureSection({
               disabled={analyzing}
               className="h-12 flex-1 text-base"
             >
-              {analyzing ? "Analyse en cours…" : "Analyser la conformité"}
+              {analyzing ? "Analyse en cours…" : submitLabel}
             </Button>
           </div>
         )}
@@ -421,28 +518,146 @@ function CaptureSection({
             <strong>Analyse impossible :</strong> {analyzeError}
           </div>
         )}
-
-        {result && (
-          <div className="space-y-4">
-            <ResultatControle result={result} />
-            {/*
-              Lot D — bouton minimal pour relancer une capture. Le workflow
-              re-tirage complet (compteur tentatives, décision finale
-              opérateur, alerte chef d'atelier) est livré au Lot E.
-            */}
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              onClick={onReset}
-              className="h-12 w-full text-base"
-            >
-              Nouvelle capture
-            </Button>
-          </div>
-        )}
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section résultats (Lot D affichage + Lot E workflow)
+// ---------------------------------------------------------------------------
+
+interface ResultatsSectionProps {
+  attempts: ControleBatResult[];
+  lastResult: ControleBatResult;
+  decisionEnregistree: DecideControleResponse | null;
+  onValiderClick: () => void;
+  onAjusterClick: () => void;
+}
+
+function ResultatsSection({
+  attempts,
+  lastResult,
+  decisionEnregistree,
+  onValiderClick,
+  onAjusterClick,
+}: ResultatsSectionProps) {
+  return (
+    <section className="space-y-4">
+      <TentativesTimeline
+        attempts={attempts}
+        currentIndex={attempts.length - 1}
+      />
+
+      {lastResult.alerte_chef_atelier && decisionEnregistree === null && (
+        <div
+          role="alert"
+          data-testid="alerte-chef-atelier"
+          className="rounded-md border-2 border-red-500 bg-red-50 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <span aria-hidden="true" className="text-2xl">
+              📣
+            </span>
+            <div>
+              <div className="text-base font-bold text-red-900 sm:text-lg">
+                Prévenir le chef d&apos;atelier
+              </div>
+              <p className="mt-1 text-sm text-red-900">
+                Trop de tentatives échouées sur cette production. Avant
+                de poursuivre, demandez l&apos;avis du chef d&apos;atelier
+                — la décision peut nécessiter un arbitrage métier.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ResultatControle result={lastResult} />
+
+      {decisionEnregistree ? (
+        <DecisionEnregistreeBlock decision={decisionEnregistree} />
+      ) : (
+        <DecisionActionsBlock
+          onValiderClick={onValiderClick}
+          onAjusterClick={onAjusterClick}
+        />
+      )}
+    </section>
+  );
+}
+
+function DecisionActionsBlock({
+  onValiderClick,
+  onAjusterClick,
+}: {
+  onValiderClick: () => void;
+  onAjusterClick: () => void;
+}) {
+  return (
+    <div
+      data-testid="decision-actions"
+      className="flex flex-col gap-2 sm:flex-row"
+    >
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        onClick={onAjusterClick}
+        className="h-14 flex-1 text-base"
+      >
+        🔁 Ajuster et recommencer
+      </Button>
+      <Button
+        type="button"
+        size="lg"
+        onClick={onValiderClick}
+        className="h-14 flex-1 bg-emerald-600 text-base text-white hover:bg-emerald-700"
+      >
+        ✅ Valider la production
+      </Button>
+    </div>
+  );
+}
+
+function DecisionEnregistreeBlock({
+  decision,
+}: {
+  decision: DecideControleResponse;
+}) {
+  const valider = decision.decision_finale === "valider";
+  const tone = valider
+    ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+    : "border-red-300 bg-red-50 text-red-900";
+  const icone = valider ? "✅" : "⛔";
+  const titre = valider
+    ? "Production validée"
+    : "Production rejetée";
+  const decidedAt = new Date(decision.decided_at).toLocaleString("fr-FR");
+  return (
+    <div
+      data-testid="decision-enregistree"
+      role="status"
+      aria-live="polite"
+      className={`rounded-md border-2 p-4 ${tone}`}
+    >
+      <div className="flex items-start gap-3">
+        <span aria-hidden="true" className="text-2xl">
+          {icone}
+        </span>
+        <div>
+          <div className="text-base font-bold sm:text-lg">{titre}</div>
+          <div className="mt-1 text-sm">
+            par <strong>{decision.decideur}</strong> · {decidedAt}
+          </div>
+          {decision.motif && (
+            <div className="mt-1 text-sm">
+              <strong>Motif :</strong> {decision.motif}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
