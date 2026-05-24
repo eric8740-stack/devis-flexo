@@ -367,7 +367,9 @@ def test_migration_backfill_defaults_sur_rows_preexistantes():
     numero_test = "DEV-S14-BACKFILL-001"
 
     # Étape 1 — downgrade au state pré-Sprint 14 (j1c6e8a3d9b5)
-    command.downgrade(cfg, "-1")
+    # Révision explicite (et non `-1`) : robuste à l'ajout ultérieur de
+    # migrations en tête de chaîne (cf. Sprint 15 Lot 1 — controle_bat).
+    command.downgrade(cfg, "j1c6e8a3d9b5")
 
     try:
         # Étape 2 — INSERT raw SQL d'une row "ancienne" sans les 5 colonnes
@@ -391,11 +393,14 @@ def test_migration_backfill_defaults_sur_rows_preexistantes():
                 {"numero": numero_test},
             )
 
-        # Étape 3 — upgrade head → la migration applique le backfill
-        # server_default sur les colonnes NOT NULL (type_entree_fichier)
-        # et le default explicite "1" sur nb_fronts_sortie ; les 3 autres
-        # restent NULL (nullable sans server_default).
-        command.upgrade(cfg, "head")
+        # Étape 3 — upgrade en ciblant EXPLICITEMENT la migration S14
+        # (k2d7f9a4b6c8), pas `head`. Sinon, dès qu'une migration ultérieure
+        # est ajoutée (S15 controle_bat...), `head` les appliquerait toutes
+        # et le test ne testerait plus seulement le backfill S14 mais aussi
+        # les effets de bord des migrations suivantes. La sémantique du test
+        # est : « le upgrade de la révision k2d7f9a4b6c8 elle-même remplit
+        # bien les server_default ».
+        command.upgrade(cfg, "k2d7f9a4b6c8")
 
         # Étape 4 — SELECT raw SQL pour vérifier les valeurs effectivement
         # stockées (sans repasser par l'ORM qui pourrait masquer le test
@@ -459,34 +464,47 @@ def test_migration_cycle_down_up_preserve_table_devis():
     # Path config Alembic (env piloté par DATABASE_URL/SQLite local cf. env.py).
     cfg = Config("alembic.ini")
 
-    # Down d'un cran : k2d7f9a4b6c8 → j1c6e8a3d9b5
-    command.downgrade(cfg, "-1")
-    inspector = inspect(engine)
-    columns_after_down = {col["name"] for col in inspector.get_columns("devis")}
-    for col in (
-        "nb_etiquettes_par_rouleau",
-        "diametre_max_bobine_mm",
-        "nb_fronts_sortie",
-        "type_entree_fichier",
-        "conditions_stockage",
-    ):
-        assert col not in columns_after_down, (
-            f"downgrade Sprint 14 : colonne {col} aurait dû être supprimée"
-        )
-    # La table devis reste utilisable (au moins ses colonnes core)
-    assert "id" in columns_after_down
-    assert "numero" in columns_after_down
-    assert "reduction_pct" in columns_after_down  # Brief #32 inchangé
+    try:
+        # Down jusqu'à pré-Sprint 14 : k2d7f9a4b6c8 → j1c6e8a3d9b5.
+        # Révision explicite (et non `-1`) : robuste à l'ajout ultérieur de
+        # migrations en tête de chaîne (cf. Sprint 15 Lot 1 — controle_bat).
+        command.downgrade(cfg, "j1c6e8a3d9b5")
+        inspector = inspect(engine)
+        columns_after_down = {
+            col["name"] for col in inspector.get_columns("devis")
+        }
+        for col in (
+            "nb_etiquettes_par_rouleau",
+            "diametre_max_bobine_mm",
+            "nb_fronts_sortie",
+            "type_entree_fichier",
+            "conditions_stockage",
+        ):
+            assert col not in columns_after_down, (
+                f"downgrade Sprint 14 : colonne {col} aurait dû être supprimée"
+            )
+        # La table devis reste utilisable (au moins ses colonnes core)
+        assert "id" in columns_after_down
+        assert "numero" in columns_after_down
+        assert "reduction_pct" in columns_after_down  # Brief #32 inchangé
 
-    # Re-upgrade head : colonnes Sprint 14 réapparaissent
-    command.upgrade(cfg, "head")
-    inspector = inspect(engine)
-    columns_after_up = {col["name"] for col in inspector.get_columns("devis")}
-    expected = {
-        "nb_etiquettes_par_rouleau",
-        "diametre_max_bobine_mm",
-        "nb_fronts_sortie",
-        "type_entree_fichier",
-        "conditions_stockage",
-    }
-    assert expected.issubset(columns_after_up)
+        # Re-upgrade en ciblant EXPLICITEMENT la migration S14, pas `head` :
+        # garantit qu'on teste l'application de k2d7f9a4b6c8 isolément,
+        # indépendamment des migrations ultérieures (S15+).
+        command.upgrade(cfg, "k2d7f9a4b6c8")
+        inspector = inspect(engine)
+        columns_after_up = {
+            col["name"] for col in inspector.get_columns("devis")
+        }
+        expected = {
+            "nb_etiquettes_par_rouleau",
+            "diametre_max_bobine_mm",
+            "nb_fronts_sortie",
+            "type_entree_fichier",
+            "conditions_stockage",
+        }
+        assert expected.issubset(columns_after_up)
+    finally:
+        # Restaurer la DB à head pour les tests suivants (qui peuvent
+        # avoir besoin des tables des migrations ultérieures).
+        command.upgrade(cfg, "head")
