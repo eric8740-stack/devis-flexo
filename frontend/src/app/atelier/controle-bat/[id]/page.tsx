@@ -21,6 +21,8 @@ import {
   type ControleBatResult,
 } from "@/lib/api/controleBat";
 
+import { ResultatControle } from "../_components/ResultatControle";
+
 /**
  * Sprint 15 Lot C — Détail Contrôle BAT : capture du 1er tirage.
  *
@@ -421,17 +423,13 @@ function CaptureSection({
         )}
 
         {result && (
-          <div data-testid="result-placeholder" className="space-y-3">
-            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-emerald-900">
-              <div className="font-medium">
-                Analyse terminée — contrôle #{result.controle_id} (tentative{" "}
-                {result.tentative})
-              </div>
-              <div className="text-sm">
-                Le détail du résultat (score, écarts, sens enroulement,
-                décision recommandée) sera affiché au prochain lot.
-              </div>
-            </div>
+          <div className="space-y-4">
+            <ResultatControle result={result} />
+            {/*
+              Lot D — bouton minimal pour relancer une capture. Le workflow
+              re-tirage complet (compteur tentatives, décision finale
+              opérateur, alerte chef d'atelier) est livré au Lot E.
+            */}
             <Button
               type="button"
               variant="outline"

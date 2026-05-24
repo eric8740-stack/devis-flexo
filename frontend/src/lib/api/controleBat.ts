@@ -166,16 +166,69 @@ export interface ControleBatContext {
 // des JPEG haute déf.
 export const PHOTO_TIRAGE_MAX_SIZE_MO = 15;
 
-// Réponse minimale du POST /api/flexocheck/controle-bat/. Lot C n'a besoin
-// que de savoir « l'analyse est revenue, voici l'id ». Le Lot D enrichira
-// avec score, écarts, alerte sens enroulement, etc.
+// Gravité d'un écart de conformité. Ordre métier : critique > majeur > mineur
+// — utilisé pour le tri et la couleur côté UI.
+export type GraviteEcart = "critique" | "majeur" | "mineur";
+
+// Sens d'enroulement normalisé flexo (ANSI/AWA SE1-SE8). null si le backend
+// n'a pas pu déterminer le sens (ex: photo trop floue).
+export type SensEnroulement =
+  | "SE1"
+  | "SE2"
+  | "SE3"
+  | "SE4"
+  | "SE5"
+  | "SE6"
+  | "SE7"
+  | "SE8";
+
+export type DecisionRecommandee = "valider" | "ajuster" | "rejeter";
+
+export type NiveauConfiance = "haut" | "moyen" | "faible";
+
+export interface EcartConformite {
+  gravite: GraviteEcart;
+  localisation: string;
+  description: string;
+  suggestion_correction: string | null;
+}
+
+// Si l'analyse détecte une divergence entre sens demandé et sens vu sur la
+// photo, on déclenche un bandeau bloquant côté UI. Les `options_correction`
+// sont les 3 chemins de remédiation décidés métier (cf. brief Lot D).
+export interface AlerteSensEnroulement {
+  message: string;
+  options_correction: Array<{
+    code:
+      | "inversion_cliche"
+      | "ajustement_rebobineuse"
+      | "confirmation_client";
+    libelle: string;
+    description: string;
+  }>;
+}
+
+// Réponse complète du POST /api/flexocheck/controle-bat/.
+// Lot C utilise un sous-ensemble minimal (controle_id, tentative) ; Lot D
+// consomme la totalité pour l'affichage opérateur. Les champs métier
+// (score, écarts, sens) restent optionnels au niveau du type pour rester
+// tolérant aux analyses partielles côté backend (ex: photo illisible ⇒
+// pas d'écarts mais on renvoie quand même un controle_id + niveau_confiance
+// "faible" + limites_analyse).
 export interface ControleBatResult {
   controle_id: number;
   devis_id: number;
   tentative: number;
-  // Champs Lot D (optionnels ici pour ne pas pré-empter le contrat) :
   score_conformite?: number;
-  decision_recommandee?: "valider" | "ajuster" | "rejeter";
+  decision_recommandee?: DecisionRecommandee;
+  niveau_confiance?: NiveauConfiance;
+  limites_analyse?: string[];
+  ecarts?: EcartConformite[];
+  elements_conformes?: string[];
+  elements_manquants?: string[];
+  sens_enroulement_detecte?: SensEnroulement | null;
+  sens_enroulement_demande?: SensEnroulement | null;
+  alerte_sens_enroulement?: AlerteSensEnroulement | null;
 }
 
 export async function getControleBatContext(

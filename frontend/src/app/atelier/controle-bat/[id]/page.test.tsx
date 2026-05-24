@@ -205,7 +205,7 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     );
     expect(createControleMock).toHaveBeenCalledWith(7, photo);
 
-    // Résolution du fetch → placeholder résultat affiché, animation disparue.
+    // Résolution du fetch → bloc résultat affiché, animation disparue.
     resolveCreate({
       controle_id: 101,
       devis_id: 7,
@@ -214,10 +214,10 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
       decision_recommandee: "valider",
     });
     await waitFor(() =>
-      expect(screen.getByTestId("result-placeholder")).toBeInTheDocument(),
+      expect(screen.getByTestId("resultat-controle")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("analyzing-banner")).toBeNull();
-    expect(screen.getByTestId("result-placeholder")).toHaveTextContent(
+    expect(screen.getByTestId("resultat-controle")).toHaveTextContent(
       /contrôle #101/i,
     );
   });
@@ -247,6 +247,6 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("analyzing-banner")).toBeNull();
-    expect(screen.queryByTestId("result-placeholder")).toBeNull();
+    expect(screen.queryByTestId("resultat-controle")).toBeNull();
   });
 });
