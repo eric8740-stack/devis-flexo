@@ -73,6 +73,10 @@ from app.schemas.controle_bat import (
     ProductionActiveItem,
     ProductionsActivesResponse,
 )
+from app.services.coherence_sens import (
+    diagnostiquer_coherence,
+    sens_demande_du_devis,
+)
 from app.services.ia.client import IAClientError
 from app.services.ia.controle_bat import comparer_bat_vs_tirage
 from app.services.ia.photo_storage import (
@@ -120,45 +124,55 @@ def _build_blob_url(image_key: str | None) -> str | None:
     return f"/api/flexocheck/blobs/{image_key}"
 
 
-def _build_alerte_sens(message_brut: str | None) -> AlerteSensEnroulement | None:
-    """Enveloppe `alerte_sens_enroulement` brut en objet structuré.
+def _build_alerte_sens(
+    message: str | None,
+    action_recommandee: str | None = None,
+) -> AlerteSensEnroulement | None:
+    """Enveloppe `alerte_sens_enroulement` en objet structuré avec
+    auto-sélection (Lot 4) de l'action recommandée.
 
-    Si l'IA renvoie un message non-null, on propose les 3 options de
-    correction standards (codes alignés sur `ACTIONS_CORRECTION_SENS`
-    du modèle). Le diagnostic fin (auto-sélection d'une option) est
-    Lot 4. Ici on expose les 3 options à l'opérateur pour qu'il choisisse.
+    Si `message` est None, retourne None (pas d'alerte). Sinon construit
+    les 3 options de correction standards (codes alignés sur
+    `ACTIONS_CORRECTION_SENS` du modèle). L'option dont le `code` matche
+    `action_recommandee` reçoit `recommandee=True` et est placée en
+    premier dans la liste — l'UI met cette option en avant.
     """
-    if not message_brut:
+    if not message:
         return None
-    return AlerteSensEnroulement(
-        message=message_brut,
-        options_correction=[
-            OptionCorrectionSens(
-                code="inversion_cliche",
-                libelle="Inverser le cliché",
-                description=(
-                    "Remettre le cliché à l'endroit sur la presse. "
-                    "Tirage à reprendre après inversion."
-                ),
+
+    options = [
+        OptionCorrectionSens(
+            code="inversion_cliche",
+            libelle="Inverser le cliché",
+            description=(
+                "Remettre le cliché à l'endroit sur la presse. "
+                "Tirage à reprendre après inversion."
             ),
-            OptionCorrectionSens(
-                code="ajustement_rebobineuse",
-                libelle="Ajuster la rebobineuse",
-                description=(
-                    "Reconfigurer la rebobineuse pour produire le sens "
-                    "d'enroulement demandé sans toucher au cliché."
-                ),
+            recommandee=(action_recommandee == "inversion_cliche"),
+        ),
+        OptionCorrectionSens(
+            code="ajustement_rebobineuse",
+            libelle="Ajuster la rebobineuse",
+            description=(
+                "Reconfigurer la rebobineuse pour produire le sens "
+                "d'enroulement demandé sans toucher au cliché."
             ),
-            OptionCorrectionSens(
-                code="confirmation_client",
-                libelle="Demander confirmation client",
-                description=(
-                    "Contacter le client pour valider le sens observé "
-                    "comme acceptable malgré l'écart au BAT."
-                ),
+            recommandee=(action_recommandee == "ajustement_rebobineuse"),
+        ),
+        OptionCorrectionSens(
+            code="confirmation_client",
+            libelle="Demander confirmation client",
+            description=(
+                "Contacter le client pour valider le sens observé "
+                "comme acceptable malgré l'écart au BAT."
             ),
-        ],
-    )
+            recommandee=(action_recommandee == "confirmation_client"),
+        ),
+    ]
+    # Stable sort : option recommandée en premier, autres dans l'ordre
+    # de déclaration. `False < True` donc on inverse via `not`.
+    options.sort(key=lambda o: not o.recommandee)
+    return AlerteSensEnroulement(message=message, options_correction=options)
 
 
 def _ecarts_to_detail(ecarts: Iterable[dict] | None) -> list[EcartDetail]:
@@ -188,9 +202,35 @@ def _to_analyse_response(
 
     Re-pioche les champs liste depuis `resultats_comparaison` (JSONB) pour
     éviter de les dupliquer en colonnes dédiées sur le modèle.
+
+    Sprint 15 Lot 4 — construction de `alerte_sens_enroulement` :
+      1. On recalcule le diagnostic à partir des sens persistés sur la
+         row (canonique, défensif vs drift entre stockage et réponse).
+      2. Si le diagnostic identifie une incohérence (message non-null)
+         → l'alerte porte ce message + option recommandée auto-sélectionnée.
+      3. Sinon, fallback sur l'alerte brute renvoyée par l'IA (Lot 3) :
+         couvre le cas où le sens demandé est absent (info insuffisante
+         pour notre diagnostic) mais l'IA a vu un autre type d'anomalie.
     """
     resultats = cb.resultats_comparaison or {}
-    alerte_brut = resultats.get("alerte_sens_enroulement")
+
+    diagnostic = diagnostiquer_coherence(
+        sens_demande=cb.sens_enroulement_demande,
+        sens_detecte=cb.sens_sortie_detecte,
+        niveau_confiance=cb.niveau_confiance,
+    )
+    if diagnostic["message_alerte"]:
+        alerte = _build_alerte_sens(
+            diagnostic["message_alerte"],
+            action_recommandee=diagnostic["action_correction_sens"],
+        )
+    else:
+        alerte_brut = resultats.get("alerte_sens_enroulement")
+        alerte = _build_alerte_sens(
+            alerte_brut if isinstance(alerte_brut, str) else None,
+            action_recommandee=cb.action_correction_sens,
+        )
+
     return ControleBatAnalyseResponse(
         controle_id=cb.id,
         devis_id=cb.devis_id,
@@ -204,9 +244,7 @@ def _to_analyse_response(
         elements_manquants=_resultats_to_lists(resultats, "elements_manquants"),
         sens_enroulement_detecte=cb.sens_sortie_detecte,
         sens_enroulement_demande=cb.sens_enroulement_demande,
-        alerte_sens_enroulement=_build_alerte_sens(
-            alerte_brut if isinstance(alerte_brut, str) else None
-        ),
+        alerte_sens_enroulement=alerte,
         alerte_chef_atelier=alerte_chef_atelier,
     )
 
@@ -549,6 +587,14 @@ def _executer_controle(
     """
     bat_bytes = _lire_bat_bytes(bat_ref)
 
+    # Sprint 15 Lot 4 — fallback sens demandé : si l'opérateur n'a pas
+    # explicité de sens en multipart, on lit le sens du 1er lot de
+    # production du devis (interprétation : le client a validé le sens
+    # au moment du chiffrage multi-lots). Reste None pour les devis
+    # legacy mono-config sans LotProduction.
+    if sens_demande is None:
+        sens_demande = sens_demande_du_devis(db, devis.id)
+
     try:
         resultats = comparer_bat_vs_tirage(
             bat_image_bytes=bat_bytes,
@@ -576,7 +622,22 @@ def _executer_controle(
 
     sens_struct = resultats.get("sens_sortie_detecte") or {}
     sens_resultant = sens_struct.get("sens_enroulement_resultant")
-    coherence = sens_struct.get("coherence_avec_bat")
+
+    # Sprint 15 Lot 4 — diagnostic métier vs convention SE1-SE8 (sacred
+    # rotation_se en lecture seule). Surcharge l'info `coherence_avec_bat`
+    # remontée par l'IA quand notre diagnostic peut trancher (sens demandé
+    # + sens détecté tous deux connus). Sinon fallback sur l'IA.
+    diagnostic = diagnostiquer_coherence(
+        sens_demande=sens_demande,
+        sens_detecte=sens_resultant if isinstance(sens_resultant, str) else None,
+        niveau_confiance=resultats.get("niveau_confiance_analyse"),
+    )
+    if diagnostic["coherence_sens"] is not None:
+        coherence = diagnostic["coherence_sens"]
+    else:
+        ia_coherence = sens_struct.get("coherence_avec_bat")
+        coherence = ia_coherence if isinstance(ia_coherence, bool) else None
+    action_correction = diagnostic["action_correction_sens"]
 
     majeurs, mineurs = _ecarts_compteurs(resultats.get("ecarts_detectes"))
 
@@ -613,10 +674,11 @@ def _executer_controle(
         controle_bat_precedent_id=controle_bat_precedent_id,
         # Coût API
         cout_api_eur=cout_api,
-        # Sens sortie (champs exposés, logique cohérence = Lot 4)
+        # Sens sortie (Lot 4 : diagnostic vs convention SE1-SE8)
         sens_sortie_detecte=sens_resultant if isinstance(sens_resultant, str) else None,
         sens_enroulement_demande=sens_demande,
-        coherence_sens=coherence if isinstance(coherence, bool) else None,
+        coherence_sens=coherence,
+        action_correction_sens=action_correction,
     )
     db.add(cb)
     db.commit()

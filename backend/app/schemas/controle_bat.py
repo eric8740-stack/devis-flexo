@@ -180,13 +180,20 @@ class ControleBatContexte(BaseModel):
 
 class OptionCorrectionSens(BaseModel):
     """Une option de correction sens proposée à l'opérateur quand
-    `alerte_sens_enroulement` est non-null (cf. brief Lot 3)."""
+    `alerte_sens_enroulement` est non-null (cf. brief Lot 3).
+
+    Sprint 15 Lot 4 : ajout `recommandee` — quand `True`, l'UI met
+    l'option en avant (couleur, ordre, autofocus du bouton). L'auto-
+    sélection vient du diagnostic `coherence_sens` (cf. service
+    `coherence_sens.py`).
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     code: ActionCorrectionSens
     libelle: str
     description: str
+    recommandee: bool = False
 
 
 class AlerteSensEnroulement(BaseModel):

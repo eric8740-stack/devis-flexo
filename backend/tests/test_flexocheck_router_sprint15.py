@@ -465,9 +465,9 @@ def test_post_controle_bat_ia_indisponible_503(monkeypatch):
     assert r.status_code == 503
 
 
-def test_post_controle_bat_avec_alerte_sens_renvoie_objet_structure(monkeypatch):
-    """Si l'IA retourne `alerte_sens_enroulement = "msg"`, le router
-    enveloppe en {message, options_correction:[3 options]}."""
+def test_post_controle_bat_alerte_inversion_cliche_face_opposee(monkeypatch):
+    """SE1 demandé + SE5 détecté = face opposée → diagnostic Lot 4
+    auto-recommande `inversion_cliche` et la place en premier."""
     payload = json.loads(json.dumps(_REPONSE_CLAUDE_VALIDE))
     payload["alerte_sens_enroulement"] = (
         "Sens SE5 détecté alors que BAT en SE1 — risque inversion cliché"
@@ -477,7 +477,46 @@ def test_post_controle_bat_avec_alerte_sens_renvoie_objet_structure(monkeypatch)
     _install_mock_ia(monkeypatch, payload)
 
     with SessionLocal() as db:
-        devis = _create_devis(db, "TEST-FX-CB-ALERTE-001")
+        devis = _create_devis(db, "TEST-FX-CB-INV-001")
+        db.commit()
+        devis_id = devis.id
+    _upload_bat_ok(devis_id)
+
+    r = _http.post(
+        "/api/flexocheck/controle-bat/",
+        data={"devis_id": str(devis_id), "sens_demande": "SE1"},
+        files={"photo": ("t.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert r.status_code == 201
+    data = r.json()
+    alerte = data["alerte_sens_enroulement"]
+    assert alerte is not None
+    # Le message Lot 4 explique le diagnostic métier (face opposée)
+    assert "SE1" in alerte["message"] and "SE5" in alerte["message"]
+    assert "inversion" in alerte["message"].lower()
+    # 3 options présentes, inversion_cliche recommandée + en première
+    codes = {o["code"] for o in alerte["options_correction"]}
+    assert codes == {
+        "inversion_cliche",
+        "ajustement_rebobineuse",
+        "confirmation_client",
+    }
+    recommandees = [o for o in alerte["options_correction"] if o["recommandee"]]
+    assert len(recommandees) == 1
+    assert recommandees[0]["code"] == "inversion_cliche"
+    assert alerte["options_correction"][0]["code"] == "inversion_cliche"
+
+
+def test_post_controle_bat_alerte_ajustement_rebobineuse_meme_face(monkeypatch):
+    """SE1 demandé + SE3 détecté = même face Ext, rotation différente →
+    diagnostic Lot 4 auto-recommande `ajustement_rebobineuse`."""
+    payload = json.loads(json.dumps(_REPONSE_CLAUDE_VALIDE))
+    payload["sens_sortie_detecte"]["sens_enroulement_resultant"] = "SE3"
+    payload["sens_sortie_detecte"]["coherence_avec_bat"] = False
+    _install_mock_ia(monkeypatch, payload)
+
+    with SessionLocal() as db:
+        devis = _create_devis(db, "TEST-FX-CB-REB-001")
         db.commit()
         devis_id = devis.id
     _upload_bat_ok(devis_id)
@@ -490,13 +529,146 @@ def test_post_controle_bat_avec_alerte_sens_renvoie_objet_structure(monkeypatch)
     assert r.status_code == 201
     alerte = r.json()["alerte_sens_enroulement"]
     assert alerte is not None
-    assert "SE5" in alerte["message"]
-    codes = {o["code"] for o in alerte["options_correction"]}
-    assert codes == {
-        "inversion_cliche",
-        "ajustement_rebobineuse",
-        "confirmation_client",
-    }
+    assert "rebobineuse" in alerte["message"].lower()
+    assert alerte["options_correction"][0]["code"] == "ajustement_rebobineuse"
+    assert alerte["options_correction"][0]["recommandee"] is True
+
+
+def test_post_controle_bat_alerte_confirmation_client_si_confiance_faible(monkeypatch):
+    """Même cas face opposée (SE1 vs SE5) mais avec niveau_confiance='faible'
+    → l'IA n'est pas fiable, on demande à un humain via
+    `confirmation_client` (prime sur la règle inversion_cliche)."""
+    payload = json.loads(json.dumps(_REPONSE_CLAUDE_VALIDE))
+    payload["sens_sortie_detecte"]["sens_enroulement_resultant"] = "SE5"
+    payload["niveau_confiance_analyse"] = "faible"
+    _install_mock_ia(monkeypatch, payload)
+
+    with SessionLocal() as db:
+        devis = _create_devis(db, "TEST-FX-CB-CONF-001")
+        db.commit()
+        devis_id = devis.id
+    _upload_bat_ok(devis_id)
+
+    r = _http.post(
+        "/api/flexocheck/controle-bat/",
+        data={"devis_id": str(devis_id), "sens_demande": "SE1"},
+        files={"photo": ("t.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert r.status_code == 201
+    alerte = r.json()["alerte_sens_enroulement"]
+    assert alerte is not None
+    assert "confiance" in alerte["message"].lower()
+    assert alerte["options_correction"][0]["code"] == "confirmation_client"
+    assert alerte["options_correction"][0]["recommandee"] is True
+
+
+def test_post_controle_bat_sens_coherent_aucune_alerte(monkeypatch):
+    """SE1 demandé + SE1 détecté → diagnostic Lot 4 = coherent, pas d'alerte
+    même si l'IA renvoyait par hasard un message d'alerte non-null."""
+    payload = json.loads(json.dumps(_REPONSE_CLAUDE_VALIDE))
+    # Sens identiques + sens demandé = SE1
+    payload["sens_sortie_detecte"]["sens_enroulement_resultant"] = "SE1"
+    _install_mock_ia(monkeypatch, payload)
+
+    with SessionLocal() as db:
+        devis = _create_devis(db, "TEST-FX-CB-OK-001")
+        db.commit()
+        devis_id = devis.id
+    _upload_bat_ok(devis_id)
+
+    r = _http.post(
+        "/api/flexocheck/controle-bat/",
+        data={"devis_id": str(devis_id), "sens_demande": "SE1"},
+        files={"photo": ("t.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["alerte_sens_enroulement"] is None
+    assert data["sens_enroulement_detecte"] == "SE1"
+    assert data["sens_enroulement_demande"] == "SE1"
+
+
+def test_post_controle_bat_persiste_coherence_et_action_sur_row(monkeypatch):
+    """Lot 4 doit écrire `coherence_sens` et `action_correction_sens`
+    sur la row ControleBat (pas seulement dans la réponse)."""
+    payload = json.loads(json.dumps(_REPONSE_CLAUDE_VALIDE))
+    payload["sens_sortie_detecte"]["sens_enroulement_resultant"] = "SE5"
+    _install_mock_ia(monkeypatch, payload)
+
+    with SessionLocal() as db:
+        devis = _create_devis(db, "TEST-FX-CB-PERSIST-001")
+        db.commit()
+        devis_id = devis.id
+    _upload_bat_ok(devis_id)
+
+    r = _http.post(
+        "/api/flexocheck/controle-bat/",
+        data={"devis_id": str(devis_id), "sens_demande": "SE1"},
+        files={"photo": ("t.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert r.status_code == 201
+    controle_id = r.json()["controle_id"]
+
+    with SessionLocal() as db:
+        cb = db.query(ControleBat).filter_by(id=controle_id).one()
+        assert cb.coherence_sens is False
+        assert cb.action_correction_sens == "inversion_cliche"
+        assert cb.sens_enroulement_demande == "SE1"
+        assert cb.sens_sortie_detecte == "SE5"
+
+
+def test_post_controle_bat_fallback_sens_demande_du_lot(monkeypatch):
+    """Si l'opérateur n'a pas fourni sens_demande en Form, on prend le
+    sens du 1er LotProduction du devis."""
+    # Setup : devis + 1 lot avec sens_enroulement=4 (SE4) — face Ext.
+    # Sens détecté = SE8 (Int) → inversion_cliche.
+    from tests.test_lot_production_model import (
+        _create_devis_minimal,
+        _get_fk_ids,
+        _onboard_if_needed,
+    )
+
+    _onboard_if_needed()
+    with SessionLocal() as db:
+        cyl_id, mach_id, mat_id = _get_fk_ids(db)
+        devis = _create_devis_minimal(db, numero="TEST-FX-CB-FB-001")
+        from app.models import LotProduction
+        db.add(
+            LotProduction(
+                devis_id=devis.id,
+                entreprise_id=1,
+                ordre=1,
+                cylindre_id=cyl_id,
+                machine_id=mach_id,
+                nb_poses_dev=2,
+                nb_poses_laize=3,
+                sens_enroulement=4,
+                quantite=1000,
+                matiere_id=mat_id,
+            )
+        )
+        db.commit()
+        devis_id = devis.id
+
+    _upload_bat_ok(devis_id)
+
+    payload = json.loads(json.dumps(_REPONSE_CLAUDE_VALIDE))
+    payload["sens_sortie_detecte"]["sens_enroulement_resultant"] = "SE8"
+    _install_mock_ia(monkeypatch, payload)
+
+    # PAS de sens_demande en Form → fallback sur le lot 1 = SE4
+    r = _http.post(
+        "/api/flexocheck/controle-bat/",
+        data={"devis_id": str(devis_id)},
+        files={"photo": ("t.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["sens_enroulement_demande"] == "SE4"
+    assert data["sens_enroulement_detecte"] == "SE8"
+    alerte = data["alerte_sens_enroulement"]
+    assert alerte is not None
+    assert alerte["options_correction"][0]["code"] == "inversion_cliche"
 
 
 # ---------------------------------------------------------------------------
