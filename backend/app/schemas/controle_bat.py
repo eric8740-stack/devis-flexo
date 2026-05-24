@@ -118,3 +118,131 @@ class DecisionFinaleIn(BaseModel):
     decision_finale: Literal["valide", "valide_avec_reserves", "rejete"]
     decideur: str = Field(..., max_length=200)
     motif_decision: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Sprint 15 Lot 3 — schémas du router /api/flexocheck/*
+# ---------------------------------------------------------------------------
+
+
+class BatUploadResponse(BaseModel):
+    """Réponse POST /api/flexocheck/controle-bat/upload-bat."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    devis_id: int
+    bat_filename: str | None
+    bat_mime_type: str
+    bat_uploaded_at: datetime
+
+
+class ProductionActiveItem(BaseModel):
+    """Un devis « en production » dans la liste productions-actives.
+
+    Convention projet : on n'a pas (encore) de statut `en_production` sur
+    Devis ; on retient les devis `statut = 'valide'` comme proxy. Le
+    champ `designation` reprend le `numero` (DEV-YYYY-NNNN) tant qu'on
+    n'a pas de libellé business côté Devis — CC #2 peut le composer côté
+    front s'il a besoin de plus.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    devis_id: int
+    client: str | None
+    designation: str
+    machine: str
+    bat_reference_uploaded: bool
+
+
+class ProductionsActivesResponse(BaseModel):
+    items: list[ProductionActiveItem]
+    total: int
+
+
+class ControleBatContexte(BaseModel):
+    """Réponse GET /api/flexocheck/controle-bat/contexte/{devis_id}.
+
+    `bat_url` / `bat_mime_type` sont None tant que l'opérateur n'a pas
+    uploadé de BAT pour ce devis.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    devis_id: int
+    devis_numero: str
+    client_nom: str | None
+    designation: str
+    machine_nom: str
+    bat_url: str | None
+    bat_mime_type: str | None
+
+
+class OptionCorrectionSens(BaseModel):
+    """Une option de correction sens proposée à l'opérateur quand
+    `alerte_sens_enroulement` est non-null (cf. brief Lot 3)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: ActionCorrectionSens
+    libelle: str
+    description: str
+
+
+class AlerteSensEnroulement(BaseModel):
+    """Enveloppe structurée de `alerte_sens_enroulement` quand non-null.
+
+    Le champ brut renvoyé par l'IA est un message texte ; le router
+    l'enveloppe ici avec les 3 options de correction standards
+    (`inversion_cliche` / `ajustement_rebobineuse` /
+    `confirmation_client`). Côté UI, cet objet déclenche un dialog
+    bloquant tant que l'opérateur n'a pas choisi une option.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    message: str
+    options_correction: list[OptionCorrectionSens]
+
+
+class EcartDetail(BaseModel):
+    """Représentation d'un écart détecté retourné au client.
+
+    Les valeurs `type` / `gravite` sont validées côté service IA (Lot 2)
+    avant d'arriver ici, donc on accepte str générique côté schema pour
+    rester souple si l'IA ajoute une nuance vocabulaire (sera reverrouillé
+    en Lot 5 si besoin)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    type: str
+    gravite: str
+    localisation: str | None = None
+    description: str | None = None
+    suggestion_correction: str | None = None
+
+
+class ControleBatAnalyseResponse(BaseModel):
+    """Réponse POST /api/flexocheck/controle-bat/ et POST /{id}/retirage.
+
+    Format aligné brief Lot 3. `alerte_chef_atelier` est exposé uniquement
+    pour la réponse retirage (true si tentative_numero > 3) et reste None
+    pour le contrôle initial.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    controle_id: int
+    devis_id: int
+    tentative: int
+    score_conformite: Decimal | None
+    decision_recommandee: str | None
+    niveau_confiance: str | None
+    limites_analyse: list[str]
+    ecarts: list[EcartDetail]
+    elements_conformes: list[str]
+    elements_manquants: list[str]
+    sens_enroulement_detecte: str | None
+    sens_enroulement_demande: str | None
+    alerte_sens_enroulement: AlerteSensEnroulement | None
+    alerte_chef_atelier: bool | None = None

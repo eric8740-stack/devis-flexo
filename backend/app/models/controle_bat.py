@@ -95,6 +95,10 @@ class ControleBat(Base):
     premier_tirage_timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    # Sprint 15 Lot 3 — clé locale photo_storage (sert au scope sécurisé
+    # de GET /api/flexocheck/blobs/{key}). Nullable pour rester compat
+    # avec un futur stockage 100 % externe (Vercel Blob / R2 V2).
+    premier_tirage_image_key: Mapped[str | None] = mapped_column(String(120))
 
     # --- Résultat IA Claude API --------------------------------------------
     # Réponse JSON complète (cf. prompt controle_bat.txt Lot 2).

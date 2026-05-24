@@ -1,5 +1,6 @@
 from app.models.analyse_photo_etiquette import AnalysePhotoEtiquette
 from app.models.bareme import BAREME_TYPES, Bareme
+from app.models.bat_reference import BAT_MIME_TYPES_AUTORISES, BatReference
 from app.models.catalogue import Catalogue
 from app.models.charge_machine_mensuelle import ChargeMachineMensuelle
 from app.models.charge_mensuelle import ChargeMensuelle
@@ -55,6 +56,9 @@ __all__ = [
     "DECISIONS_FINALES",
     "DECISIONS_RECOMMANDEES",
     "NIVEAUX_CONFIANCE",
+    # Sprint 15 Lot 3 — BAT de référence par devis
+    "BAT_MIME_TYPES_AUTORISES",
+    "BatReference",
     # Modèles existants (Sprint 0 à 12)
     "Catalogue",
     "ChargeMachineMensuelle",
