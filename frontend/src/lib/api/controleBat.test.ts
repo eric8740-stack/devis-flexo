@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 
 import {
+  createControleBat,
+  getControleBatContext,
   listProductionsActives,
   uploadBatReference,
   type ProductionActive,
@@ -206,5 +208,123 @@ describe("uploadBatReference", () => {
     await expect(uploadBatReference(999, file)).rejects.toBeInstanceOf(
       ApiError,
     );
+  });
+});
+
+describe("getControleBatContext", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("GET avec bearer, renvoie le contexte (devis, BAT URL/mime)", async () => {
+    window.localStorage.setItem("devis_flexo_access_token", "tok-1");
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        devis_id: 7,
+        devis_numero: "DEV-2026-0007",
+        client_nom: "ACME",
+        designation: "Étiquette 50×80",
+        machine_nom: "Mark Andy P5",
+        bat_url: "https://s3.example/bat-7.pdf?sig=abc",
+        bat_mime_type: "application/pdf",
+      }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const ctx = await getControleBatContext(7);
+    expect(ctx.devis_id).toBe(7);
+    expect(ctx.bat_mime_type).toBe("application/pdf");
+    expect(ctx.bat_url).toContain("bat-7.pdf");
+
+    const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
+    const url = callArgs?.[0] as string;
+    const init = callArgs?.[1] as RequestInit | undefined;
+    expect(url).toContain("/api/flexocheck/controle-bat/contexte/7");
+    expect(init?.method).toBe("GET");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer tok-1");
+  });
+
+  it("404 backend (devis inexistant) → ApiError 404 avec detail", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      json: async () => ({ detail: "Devis 999 introuvable" }),
+    })) as unknown as typeof fetch;
+
+    await expect(getControleBatContext(999)).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(getControleBatContext(999)).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("createControleBat", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("POST multipart avec devis_id + photo, renvoie le résultat IA", async () => {
+    window.localStorage.setItem("devis_flexo_access_token", "tok-IA");
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        controle_id: 101,
+        devis_id: 7,
+        tentative: 1,
+        score_conformite: 87.5,
+        decision_recommandee: "valider",
+      }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const photo = new File(["JPEGDATA"], "tirage.jpg", {
+      type: "image/jpeg",
+    });
+    const res = await createControleBat(7, photo);
+    expect(res.controle_id).toBe(101);
+    expect(res.tentative).toBe(1);
+    expect(res.decision_recommandee).toBe("valider");
+
+    const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
+    const url = callArgs?.[0] as string;
+    const init = callArgs?.[1] as RequestInit | undefined;
+    expect(url).toContain("/api/flexocheck/controle-bat/");
+    expect(init?.method).toBe("POST");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer tok-IA");
+    expect(headers["Content-Type"]).toBeUndefined();
+    expect(init?.body).toBeInstanceOf(FormData);
+    const fd = init?.body as FormData;
+    expect(fd.get("devis_id")).toBe("7");
+    expect((fd.get("photo") as File).name).toBe("tirage.jpg");
+  });
+
+  it("503 (service IA indisponible) → ApiError 503", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      statusText: "Service Unavailable",
+      json: async () => ({ detail: "Service IA temporairement indisponible" }),
+    })) as unknown as typeof fetch;
+
+    const photo = new File(["x"], "p.jpg", { type: "image/jpeg" });
+    await expect(createControleBat(7, photo)).rejects.toMatchObject({
+      status: 503,
+    });
   });
 });
