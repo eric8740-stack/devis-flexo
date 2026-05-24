@@ -29,13 +29,20 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-# Mapping mime → extension. On garde court (4 types supportés par le SDK
-# Anthropic et validés en amont par le router /api/ia/analyser-photo).
+# Mapping mime → extension. On garde court (types supportés par le SDK
+# Anthropic et validés en amont par les routers /api/ia/analyser-photo et
+# /api/flexocheck/controle-bat/*).
+# Sprint 15 Lot 3 : ajout de application/pdf pour permettre l'upload des
+# BAT pro envoyés en PDF (cf. router flexocheck). Le PDF n'est jamais
+# envoyé à Claude API multimodal — le BAT en PDF est consommé tel quel
+# par l'UI ; pour le contrôle IA c'est la photo du 1er tirage (image)
+# qui sert d'entrée.
 _EXT_BY_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "application/pdf": ".pdf",
 }
 
 

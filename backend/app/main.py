@@ -17,6 +17,7 @@ from app.routers import (
     cylindre,
     devis,
     entreprise,
+    flexocheck,
     fournisseur,
     ia,
     machine,
@@ -81,6 +82,8 @@ app.include_router(onboarding.router)
 app.include_router(optimisation.router)
 # Sprint 13 Lot S13.E — POC IA analyse photo étiquette (FlexoCheck)
 app.include_router(ia.router)
+# Sprint 15 Lot 3 — Contrôle BAT IA (FlexoCheck) — 7 endpoints + serve blob
+app.include_router(flexocheck.router)
 # Sprint 13 post — Paramètres > Options de fabrication (CRUD tenant)
 app.include_router(parametres_options.router)
 # PR souveraineté commerciale — catalogue matières scopé tenant

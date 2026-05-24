@@ -24,3 +24,6 @@ email-validator>=2.2.0
 sendgrid>=6.11.0
 # Sprint 13 Lot S13.E — wrapper IA (FlexoCheck POC analyse photo)
 anthropic>=0.40.0
+# Sprint 15 Lot 3 — multipart upload (BAT + photo tirage) sur le router
+# /api/flexocheck. Requis par FastAPI dès qu'on utilise UploadFile / Form.
+python-multipart>=0.0.9

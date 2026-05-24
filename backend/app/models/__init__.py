@@ -1,11 +1,19 @@
 from app.models.analyse_photo_etiquette import AnalysePhotoEtiquette
 from app.models.bareme import BAREME_TYPES, Bareme
+from app.models.bat_reference import BAT_MIME_TYPES_AUTORISES, BatReference
 from app.models.catalogue import Catalogue
 from app.models.charge_machine_mensuelle import ChargeMachineMensuelle
 from app.models.charge_mensuelle import ChargeMensuelle
 from app.models.client import Client
 from app.models.complexe import Complexe
 from app.models.configuration_pose import ConfigurationPose
+from app.models.controle_bat import (
+    ACTIONS_CORRECTION_SENS,
+    DECISIONS_FINALES,
+    DECISIONS_RECOMMANDEES,
+    NIVEAUX_CONFIANCE,
+    ControleBat,
+)
 from app.models.correspondance_laize_metrage import CorrespondanceLaizeMetrage
 from app.models.cylindre_magnetique import CylindreMagnetique
 from app.models.devis import Devis
@@ -42,6 +50,15 @@ __all__ = [
     "PHOTO_TYPE_ETAPES",
     "PhotoProduction",
     "RapportQualiteProduction",
+    # Sprint 15 Lot 1 — Contrôle BAT IA (FlexoCheck)
+    "ACTIONS_CORRECTION_SENS",
+    "ControleBat",
+    "DECISIONS_FINALES",
+    "DECISIONS_RECOMMANDEES",
+    "NIVEAUX_CONFIANCE",
+    # Sprint 15 Lot 3 — BAT de référence par devis
+    "BAT_MIME_TYPES_AUTORISES",
+    "BatReference",
     # Modèles existants (Sprint 0 à 12)
     "Catalogue",
     "ChargeMachineMensuelle",

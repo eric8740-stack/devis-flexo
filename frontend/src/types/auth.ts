@@ -11,6 +11,10 @@ export interface User {
   is_active: boolean;
   date_creation: string;
   date_derniere_connexion: string | null;
+  // Sprint 15 — flag d'accès au module FlexoCheck (Contrôle BAT IA).
+  // Optionnel : absent côté backend tant que CC #1 n'a pas exposé le champ,
+  // alors traité comme `false` (cf. helper `hasFlexocheck` côté UI).
+  has_flexocheck?: boolean;
 }
 
 export interface TokenResponse {
