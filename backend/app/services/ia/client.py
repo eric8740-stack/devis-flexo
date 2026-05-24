@@ -132,6 +132,94 @@ def analyser_image(
     return texte
 
 
+def analyser_images(
+    prompt_text: str,
+    images: list[tuple[bytes, str]],
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+) -> tuple[str, dict[str, int]]:
+    """Variante multi-images de `analyser_image` (Sprint 15 Lot 2).
+
+    Envoie N images + un prompt à Claude API. Utilisée par le service
+    Contrôle BAT IA qui compare BAT vs 1er tirage (2 images). Reste
+    générique pour d'éventuels usages futurs (palette + BAT…).
+
+    Args:
+      prompt_text : prompt en clair.
+      images : liste de tuples `(image_bytes, mime_type)` dans l'ordre
+        où Claude doit les voir. Au moins 1 image.
+      model : ID modèle (default claude-sonnet-4-6).
+      max_tokens : limite tokens sortie.
+
+    Returns:
+      Tuple `(texte_reponse, usage_dict)` où `usage_dict` contient
+      `{"input_tokens": int, "output_tokens": int}` extraits de la
+      réponse Anthropic — sert au service appelant à calculer un
+      coût €/contrôle.
+
+    Raises:
+      IAClientError : clé absente, SDK absent, image vide / mime invalide,
+      liste vide, ou réponse Claude vide.
+    """
+    if not images:
+        raise IAClientError("Aucune image fournie")
+    for image_bytes, mime_type in images:
+        if not image_bytes:
+            raise IAClientError("image_bytes vide")
+        if mime_type not in {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+        }:
+            raise IAClientError(
+                f"mime_type non supporté : {mime_type}. "
+                f"Attendu : image/jpeg | image/png | image/webp | image/gif."
+            )
+
+    client = _get_anthropic_client()
+
+    content: list[dict[str, Any]] = []
+    for image_bytes, mime_type in images:
+        image_b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+        content.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": image_b64,
+                },
+            }
+        )
+    content.append({"type": "text", "text": prompt_text})
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": content}],
+    )
+
+    texte_parts: list[str] = []
+    for block in message.content:
+        if getattr(block, "type", None) == "text":
+            texte_parts.append(block.text)
+    texte = "".join(texte_parts).strip()
+    if not texte:
+        raise IAClientError(
+            "Claude a renvoyé une réponse vide (pas de bloc text)."
+        )
+
+    # `message.usage` existe sur les SDK Anthropic récents. On reste
+    # défensif si jamais un mock le renvoie absent.
+    usage = getattr(message, "usage", None)
+    usage_dict = {
+        "input_tokens": getattr(usage, "input_tokens", 0) if usage else 0,
+        "output_tokens": getattr(usage, "output_tokens", 0) if usage else 0,
+    }
+    return texte, usage_dict
+
+
 # Helpers techniques pour les services
 def lire_prompt(nom_fichier: str) -> str:
     """Charge un prompt depuis app/services/ia/prompts/<nom_fichier>.
