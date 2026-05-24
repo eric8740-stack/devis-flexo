@@ -12,7 +12,7 @@ import type {
   AlerteSensEnroulement,
   ControleBatResult,
   DecisionRecommandee,
-  EcartConformite,
+  EcartDetail,
   GraviteEcart,
   NiveauConfiance,
 } from "@/lib/api/controleBat";
@@ -37,7 +37,13 @@ interface ResultatControleProps {
  * du Lot E (workflow re-tirage + décision).
  */
 export function ResultatControle({ result }: ResultatControleProps) {
-  const ecartsTries = trierEcarts(result.ecarts ?? []);
+  const ecartsTries = trierEcarts(result.ecarts);
+  // score_conformite est sérialisé Decimal → string par Pydantic v2 (pattern
+  // projet, cf. matcher-outil). Parsing UNIQUEMENT à l'affichage.
+  const scoreNum =
+    result.score_conformite !== null
+      ? parseFloat(result.score_conformite)
+      : null;
 
   return (
     <section
@@ -52,33 +58,33 @@ export function ResultatControle({ result }: ResultatControleProps) {
       {result.alerte_sens_enroulement && (
         <AlerteSensEnroulementBlock
           alerte={result.alerte_sens_enroulement}
-          sensDetecte={result.sens_enroulement_detecte ?? null}
-          sensDemande={result.sens_enroulement_demande ?? null}
+          sensDetecte={result.sens_enroulement_detecte}
+          sensDemande={result.sens_enroulement_demande}
         />
       )}
 
       <ScoreEtDecisionBlock
-        score={result.score_conformite}
+        score={scoreNum}
         decision={result.decision_recommandee}
       />
 
       {!result.alerte_sens_enroulement && (
         <SensSortieBlock
-          sensDetecte={result.sens_enroulement_detecte ?? null}
-          sensDemande={result.sens_enroulement_demande ?? null}
+          sensDetecte={result.sens_enroulement_detecte}
+          sensDemande={result.sens_enroulement_demande}
         />
       )}
 
       <EcartsBlock ecarts={ecartsTries} />
 
       <ConformesManquantsBlock
-        conformes={result.elements_conformes ?? []}
-        manquants={result.elements_manquants ?? []}
+        conformes={result.elements_conformes}
+        manquants={result.elements_manquants}
       />
 
       <ConfianceEtLimitesBlock
         niveau={result.niveau_confiance}
-        limites={result.limites_analyse ?? []}
+        limites={result.limites_analyse}
       />
     </section>
   );
@@ -92,14 +98,14 @@ function ScoreEtDecisionBlock({
   score,
   decision,
 }: {
-  score: number | undefined;
-  decision: DecisionRecommandee | undefined;
+  score: number | null;
+  decision: DecisionRecommandee | null;
 }) {
-  if (score === undefined && !decision) return null;
+  if (score === null && !decision) return null;
   return (
     <Card data-testid="score-decision">
       <CardContent className="grid gap-4 p-4 sm:grid-cols-[auto_1fr] sm:items-center">
-        {score !== undefined && <ScorePastille score={score} />}
+        {score !== null && <ScorePastille score={score} />}
         {decision && <DecisionBadge decision={decision} />}
       </CardContent>
     </Card>
@@ -163,6 +169,8 @@ function JaugeScore({ score }: { score: number }) {
 }
 
 function DecisionBadge({ decision }: { decision: DecisionRecommandee }) {
+  // Aligné sur DecisionRecommandee backend (frozenset `valider`,
+  // `ajuster_avant_demarrage`, `rejeter`).
   const config: Record<
     DecisionRecommandee,
     { libelle: string; tone: string; icone: string }
@@ -172,8 +180,8 @@ function DecisionBadge({ decision }: { decision: DecisionRecommandee }) {
       tone: "bg-emerald-100 text-emerald-900 border-emerald-300",
       icone: "✅",
     },
-    ajuster: {
-      libelle: "Ajuster et recommencer",
+    ajuster_avant_demarrage: {
+      libelle: "Ajuster avant démarrage",
       tone: "bg-amber-100 text-amber-900 border-amber-300",
       icone: "🔁",
     },
@@ -248,10 +256,29 @@ function AlerteSensEnroulementBlock({
             <li
               key={opt.code}
               data-testid={`option-correction-${opt.code}`}
-              className="rounded-md border border-red-300 bg-white p-3"
+              className={cn(
+                "rounded-md border p-3",
+                // Sprint 15 Lot 4 backend — `recommandee=true` sur l'option
+                // auto-sélectionnée par le diagnostic coherence_sens. Le
+                // backend place déjà cette option en premier ; on la met
+                // visuellement en avant (encadré coloré + badge).
+                opt.recommandee
+                  ? "border-red-500 bg-red-100"
+                  : "border-red-300 bg-white",
+              )}
             >
-              <div className="text-sm font-semibold text-red-900">
-                {opt.libelle}
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="text-sm font-semibold text-red-900">
+                  {opt.libelle}
+                </div>
+                {opt.recommandee && (
+                  <span
+                    data-testid={`option-recommandee-${opt.code}`}
+                    className="rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white"
+                  >
+                    Recommandée
+                  </span>
+                )}
               </div>
               <div className="text-sm text-red-900/80">{opt.description}</div>
             </li>
@@ -327,21 +354,24 @@ function KeyValue({
 // Écarts
 // ---------------------------------------------------------------------------
 
-const ORDRE_GRAVITE: Record<GraviteEcart, number> = {
+const ORDRE_GRAVITE: Record<string, number> = {
   critique: 0,
   majeur: 1,
   mineur: 2,
 };
 
-function trierEcarts(ecarts: EcartConformite[]): EcartConformite[] {
+function trierEcarts(ecarts: EcartDetail[]): EcartDetail[] {
   // Tri stable par gravité (critique d'abord) — `Array.sort` est stable
-  // depuis ES2019 donc l'ordre intra-gravité reste celui du backend.
+  // depuis ES2019 donc l'ordre intra-gravité reste celui du backend. Les
+  // gravités inconnues (le backend laisse passer en str pour rester souple
+  // si l'IA ajoute une nuance vocabulaire) tombent en fin de liste.
   return [...ecarts].sort(
-    (a, b) => ORDRE_GRAVITE[a.gravite] - ORDRE_GRAVITE[b.gravite],
+    (a, b) =>
+      (ORDRE_GRAVITE[a.gravite] ?? 99) - (ORDRE_GRAVITE[b.gravite] ?? 99),
   );
 }
 
-function EcartsBlock({ ecarts }: { ecarts: EcartConformite[] }) {
+function EcartsBlock({ ecarts }: { ecarts: EcartDetail[] }) {
   if (ecarts.length === 0) {
     return (
       <Card data-testid="ecarts-block">
@@ -373,28 +403,37 @@ function EcartsBlock({ ecarts }: { ecarts: EcartConformite[] }) {
   );
 }
 
-function EcartCard({ ecart }: { ecart: EcartConformite }) {
-  const config: Record<
-    GraviteEcart,
-    { libelle: string; tone: string; border: string }
-  > = {
-    critique: {
-      libelle: "Critique",
-      tone: "bg-red-100 text-red-900",
-      border: "border-red-400",
-    },
-    majeur: {
-      libelle: "Majeur",
-      tone: "bg-amber-100 text-amber-900",
-      border: "border-amber-400",
-    },
-    mineur: {
-      libelle: "Mineur",
-      tone: "bg-yellow-50 text-yellow-900",
-      border: "border-yellow-300",
-    },
-  };
-  const c = config[ecart.gravite];
+const ECART_DEFAULT_CONFIG = {
+  libelle: "Écart",
+  tone: "bg-gray-100 text-gray-900",
+  border: "border-gray-400",
+} as const;
+
+const ECART_CONFIG: Record<
+  GraviteEcart,
+  { libelle: string; tone: string; border: string }
+> = {
+  critique: {
+    libelle: "Critique",
+    tone: "bg-red-100 text-red-900",
+    border: "border-red-400",
+  },
+  majeur: {
+    libelle: "Majeur",
+    tone: "bg-amber-100 text-amber-900",
+    border: "border-amber-400",
+  },
+  mineur: {
+    libelle: "Mineur",
+    tone: "bg-yellow-50 text-yellow-900",
+    border: "border-yellow-300",
+  },
+};
+
+function EcartCard({ ecart }: { ecart: EcartDetail }) {
+  // Gravité backend = str libre (cf. EcartDetail extra="allow") ; bucket
+  // par défaut pour toute valeur non-standard.
+  const c = ECART_CONFIG[ecart.gravite as GraviteEcart] ?? ECART_DEFAULT_CONFIG;
   return (
     <div
       data-testid={`ecart-${ecart.gravite}`}
@@ -404,9 +443,11 @@ function EcartCard({ ecart }: { ecart: EcartConformite }) {
         <span className="text-xs font-bold uppercase tracking-wide">
           {c.libelle}
         </span>
-        <span className="text-xs opacity-80">{ecart.localisation}</span>
+        {ecart.localisation && (
+          <span className="text-xs opacity-80">{ecart.localisation}</span>
+        )}
       </div>
-      <p className="mt-1 text-sm">{ecart.description}</p>
+      {ecart.description && <p className="mt-1 text-sm">{ecart.description}</p>}
       {ecart.suggestion_correction && (
         <p className="mt-1 text-sm">
           <strong>Correction suggérée :</strong> {ecart.suggestion_correction}
@@ -478,7 +519,7 @@ function ConfianceEtLimitesBlock({
   niveau,
   limites,
 }: {
-  niveau: NiveauConfiance | undefined;
+  niveau: NiveauConfiance | null;
   limites: string[];
 }) {
   if (!niveau && limites.length === 0) return null;

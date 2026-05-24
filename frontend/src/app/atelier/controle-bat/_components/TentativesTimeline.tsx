@@ -59,10 +59,11 @@ function TentativeChip({
   isCurrent: boolean;
 }) {
   const tone = decisionTone(attempt.decision_recommandee);
+  // score_conformite est sérialisé Decimal → string (Pydantic v2).
   const scoreLabel =
-    attempt.score_conformite === undefined
+    attempt.score_conformite === null
       ? "—"
-      : `${Math.round(attempt.score_conformite)}%`;
+      : `${Math.round(parseFloat(attempt.score_conformite))}%`;
   return (
     <div
       data-testid={`tentative-chip-${attempt.tentative}`}
@@ -79,10 +80,10 @@ function TentativeChip({
   );
 }
 
-function decisionTone(decision: DecisionRecommandee | undefined): string {
+function decisionTone(decision: DecisionRecommandee | null): string {
   if (decision === "valider")
     return "bg-emerald-100 text-emerald-900 border-emerald-300";
-  if (decision === "ajuster")
+  if (decision === "ajuster_avant_demarrage")
     return "bg-amber-100 text-amber-900 border-amber-300";
   if (decision === "rejeter")
     return "bg-red-100 text-red-900 border-red-300";

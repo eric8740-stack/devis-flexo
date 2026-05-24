@@ -65,10 +65,15 @@ export function DialogValiderProduction({
     setSubmitting(true);
     setError(null);
     try {
+      // decision_finale="valide" : enum côté backend (cf. DecisionFinaleIn
+      // dans backend/app/schemas/controle_bat.py — valeurs autorisées
+      // "valide" / "valide_avec_reserves" / "rejete"). On expose un seul
+      // bouton "Valider" → "valide" plein, pas de "valide_avec_reserves"
+      // pour le Lot E (le brief ne demande pas la nuance).
       const res = await decideControleBat(controleId, {
-        decision_finale: "valider",
+        decision_finale: "valide",
         decideur: decideur.trim(),
-        motif: motif.trim() || undefined,
+        motif_decision: motif.trim() || undefined,
       });
       onValidated(res);
       onOpenChange(false);

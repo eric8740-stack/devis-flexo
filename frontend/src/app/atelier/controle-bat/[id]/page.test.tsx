@@ -22,6 +22,7 @@ const getContextMock = vi.fn();
 const createControleMock = vi.fn();
 const relancerTirageMock = vi.fn();
 const decideControleMock = vi.fn();
+const fetchBlobMock = vi.fn();
 vi.mock("@/lib/api/controleBat", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/api/controleBat")>();
@@ -39,6 +40,9 @@ vi.mock("@/lib/api/controleBat", async (importOriginal) => {
     decideControleBat: (
       ...args: Parameters<typeof actual.decideControleBat>
     ) => decideControleMock(...args),
+    fetchControleBatBlob: (
+      ...args: Parameters<typeof actual.fetchControleBatBlob>
+    ) => fetchBlobMock(...args),
   };
 });
 
@@ -64,24 +68,62 @@ function buildContext(overrides: Partial<{
   devis_id: number;
   devis_numero: string;
   client_nom: string | null;
-  designation: string | null;
+  designation: string;
   machine_nom: string;
-  bat_url: string;
-  bat_mime_type: string;
+  bat_url: string | null;
+  bat_mime_type: string | null;
 }> = {}) {
-  // bat_url = "about:blank" : happy-dom n'essaie pas de fetcher l'URL pour
-  // l'iframe PDF (sinon pollution `getaddrinfo ENOTFOUND` ou DOMException
-  // sur les fixtures). Pour vérifier qu'on rend bien la bonne URL côté
-  // code prod, on a déjà les tests du client API (getControleBatContext)
-  // qui prouvent que `bat_url` est conservé dans la réponse.
+  // bat_url côté backend = `/api/flexocheck/blobs/{key}` (endpoint
+  // authentifié). Le composant BatBlobAuthenticated passe par
+  // fetchControleBatBlob (mocké via vi.mock plus haut) qui renvoie un
+  // objectURL local → aucune requête réseau effective en test.
   return {
     devis_id: 7,
     devis_numero: "DEV-2026-0007",
     client_nom: "ACME",
-    designation: "Étiquette 50×80",
+    designation: "DEV-2026-0007",
     machine_nom: "Mark Andy P5",
-    bat_url: "about:blank",
+    bat_url: "/api/flexocheck/blobs/abc.pdf",
     bat_mime_type: "application/pdf",
+    ...overrides,
+  };
+}
+
+function buildAnalyseResult(
+  overrides: Partial<{
+    controle_id: number;
+    devis_id: number;
+    tentative: number;
+    score_conformite: string | null;
+    decision_recommandee: string | null;
+    niveau_confiance: string | null;
+    limites_analyse: string[];
+    ecarts: unknown[];
+    elements_conformes: string[];
+    elements_manquants: string[];
+    sens_enroulement_detecte: string | null;
+    sens_enroulement_demande: string | null;
+    alerte_sens_enroulement: unknown | null;
+    alerte_chef_atelier: boolean | null;
+  }> = {},
+) {
+  // Aligné sur ControleBatAnalyseResponse : listes obligatoires (vides
+  // au besoin), score Decimal sérialisé string.
+  return {
+    controle_id: 100,
+    devis_id: 7,
+    tentative: 1,
+    score_conformite: "80.00",
+    decision_recommandee: "valider",
+    niveau_confiance: "haut",
+    limites_analyse: [],
+    ecarts: [],
+    elements_conformes: [],
+    elements_manquants: [],
+    sens_enroulement_detecte: null,
+    sens_enroulement_demande: null,
+    alerte_sens_enroulement: null,
+    alerte_chef_atelier: null,
     ...overrides,
   };
 }
@@ -94,6 +136,13 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     createControleMock.mockReset();
     relancerTirageMock.mockReset();
     decideControleMock.mockReset();
+    fetchBlobMock.mockReset();
+    // BatBlobAuthenticated fait fetch authentifié dès qu'on lui donne une
+    // bat_url non-null. On stub `about:blank` plutôt qu'un faux objectURL
+    // (`blob:xxx`) : happy-dom tente de fetcher la src de l'iframe pour de
+    // vrai, le scheme `blob:` n'est pas supporté et pollue la sortie de
+    // tests avec des DOMException. `about:blank` est un no-op silencieux.
+    fetchBlobMock.mockResolvedValue("about:blank");
     useParamsMock.mockReturnValue({ id: "7" });
   });
   afterEach(() => {
@@ -150,17 +199,20 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     useAuthMock.mockReturnValue({ user: buildUser() });
     getContextMock.mockResolvedValueOnce(
       buildContext({
-        bat_url: "data:image/png;base64,iVBORw0KGgo=",
+        bat_url: "/api/flexocheck/blobs/img.png",
         bat_mime_type: "image/png",
       }),
     );
 
     render(<AtelierControleBatDetailPage />);
 
+    // BatBlobAuthenticated fait fetch + objectURL, le testid bat-image
+    // n'est rendu qu'une fois le blob disponible.
     await waitFor(() =>
       expect(screen.getByTestId("bat-image")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("bat-pdf")).toBeNull();
+    expect(fetchBlobMock).toHaveBeenCalledWith("/api/flexocheck/blobs/img.png");
 
     const photoInput = screen.getByTestId("photo-input") as HTMLInputElement;
     expect(photoInput.getAttribute("capture")).toBe("environment");
@@ -184,7 +236,7 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     ).toBeNull();
   });
 
-  it("submit happy path : animation 'Analyse en cours', appel API, placeholder résultat", async () => {
+  it("submit happy path : animation 'Analyse en cours', appel API, bloc résultat", async () => {
     useAuthMock.mockReturnValue({ user: buildUser() });
     getContextMock.mockResolvedValueOnce(buildContext());
 
@@ -216,13 +268,9 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
     expect(createControleMock).toHaveBeenCalledWith(7, photo);
 
     // Résolution du fetch → bloc résultat affiché, animation disparue.
-    resolveCreate({
-      controle_id: 101,
-      devis_id: 7,
-      tentative: 1,
-      score_conformite: 87.5,
-      decision_recommandee: "valider",
-    });
+    resolveCreate(
+      buildAnalyseResult({ controle_id: 101, tentative: 1 }),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("resultat-controle")).toBeInTheDocument(),
     );
@@ -267,13 +315,14 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
   it("après 1ère analyse : timeline #1, ResultatControle, boutons Valider+Ajuster, capture initiale masquée", async () => {
     useAuthMock.mockReturnValue({ user: buildUser() });
     getContextMock.mockResolvedValueOnce(buildContext());
-    createControleMock.mockResolvedValueOnce({
-      controle_id: 100,
-      devis_id: 7,
-      tentative: 1,
-      score_conformite: 72,
-      decision_recommandee: "ajuster",
-    });
+    createControleMock.mockResolvedValueOnce(
+      buildAnalyseResult({
+        controle_id: 100,
+        tentative: 1,
+        score_conformite: "72.00",
+        decision_recommandee: "ajuster_avant_demarrage",
+      }),
+    );
 
     render(<AtelierControleBatDetailPage />);
     await screen.findByTestId("bat-pdf");
@@ -301,20 +350,25 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
   it("Ajuster + nouvelle photo + analyser : relancerTirage appelé avec last controle_id, timeline #1+#2", async () => {
     useAuthMock.mockReturnValue({ user: buildUser() });
     getContextMock.mockResolvedValueOnce(buildContext());
-    createControleMock.mockResolvedValueOnce({
-      controle_id: 100,
-      devis_id: 7,
-      tentative: 1,
-      score_conformite: 60,
-      decision_recommandee: "ajuster",
-    });
-    relancerTirageMock.mockResolvedValueOnce({
-      controle_id: 100,
-      devis_id: 7,
-      tentative: 2,
-      score_conformite: 88,
-      decision_recommandee: "valider",
-    });
+    createControleMock.mockResolvedValueOnce(
+      buildAnalyseResult({
+        controle_id: 100,
+        tentative: 1,
+        score_conformite: "60.00",
+        decision_recommandee: "ajuster_avant_demarrage",
+      }),
+    );
+    relancerTirageMock.mockResolvedValueOnce(
+      buildAnalyseResult({
+        // Backend crée un ControleBat distinct par tentative (chaîné via
+        // controle_bat_precedent_id), donc nouveau controle_id pour la
+        // tentative 2.
+        controle_id: 101,
+        tentative: 2,
+        score_conformite: "88.00",
+        decision_recommandee: "valider",
+      }),
+    );
 
     render(<AtelierControleBatDetailPage />);
     await screen.findByTestId("bat-pdf");
@@ -365,20 +419,24 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
   it("Valider la production → dialog ouvre, soumission → bloc décision + actions masquées", async () => {
     useAuthMock.mockReturnValue({ user: buildUser() });
     getContextMock.mockResolvedValueOnce(buildContext());
-    createControleMock.mockResolvedValueOnce({
-      controle_id: 100,
-      devis_id: 7,
-      tentative: 1,
-      score_conformite: 92,
-      decision_recommandee: "valider",
-    });
+    createControleMock.mockResolvedValueOnce(
+      buildAnalyseResult({
+        controle_id: 100,
+        tentative: 1,
+        score_conformite: "92.00",
+        decision_recommandee: "valider",
+      }),
+    );
     decideControleMock.mockResolvedValueOnce({
-      controle_id: 100,
+      id: 100,
+      entreprise_id: 1,
       devis_id: 7,
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. Martin",
-      motif: null,
-      decided_at: "2026-05-24T11:00:00",
+      motif_decision: null,
+      tentative_numero: 1,
+      controle_bat_precedent_id: null,
+      created_at: "2026-05-24T11:00:00",
     });
 
     render(<AtelierControleBatDetailPage />);
@@ -416,9 +474,9 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
       expect(screen.getByTestId("decision-enregistree")).toBeInTheDocument(),
     );
     expect(decideControleMock).toHaveBeenCalledWith(100, {
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. Martin",
-      motif: undefined,
+      motif_decision: undefined,
     });
     // Boutons d'action masqués après décision finale.
     expect(screen.queryByTestId("decision-actions")).toBeNull();
@@ -427,14 +485,15 @@ describe("AtelierControleBatDetailPage — Lot C", () => {
   it("alerte_chef_atelier : bandeau rouge affiché en tête du résultat", async () => {
     useAuthMock.mockReturnValue({ user: buildUser() });
     getContextMock.mockResolvedValueOnce(buildContext());
-    createControleMock.mockResolvedValueOnce({
-      controle_id: 100,
-      devis_id: 7,
-      tentative: 4,
-      score_conformite: 30,
-      decision_recommandee: "rejeter",
-      alerte_chef_atelier: true,
-    });
+    createControleMock.mockResolvedValueOnce(
+      buildAnalyseResult({
+        controle_id: 100,
+        tentative: 4,
+        score_conformite: "30.00",
+        decision_recommandee: "rejeter",
+        alerte_chef_atelier: true,
+      }),
+    );
 
     render(<AtelierControleBatDetailPage />);
     await screen.findByTestId("bat-pdf");

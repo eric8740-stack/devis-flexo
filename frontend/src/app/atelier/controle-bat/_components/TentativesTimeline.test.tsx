@@ -14,6 +14,17 @@ function buildResult(
     controle_id: 100,
     devis_id: 7,
     tentative: 1,
+    score_conformite: null,
+    decision_recommandee: null,
+    niveau_confiance: null,
+    limites_analyse: [],
+    ecarts: [],
+    elements_conformes: [],
+    elements_manquants: [],
+    sens_enroulement_detecte: null,
+    sens_enroulement_demande: null,
+    alerte_sens_enroulement: null,
+    alerte_chef_atelier: null,
     ...overrides,
   };
 }
@@ -31,19 +42,19 @@ describe("TentativesTimeline — Lot E", () => {
       buildResult({
         controle_id: 100,
         tentative: 1,
-        score_conformite: 45,
+        score_conformite: "45.00",
         decision_recommandee: "rejeter",
       }),
       buildResult({
         controle_id: 101,
         tentative: 2,
-        score_conformite: 72,
-        decision_recommandee: "ajuster",
+        score_conformite: "72.00",
+        decision_recommandee: "ajuster_avant_demarrage",
       }),
       buildResult({
         controle_id: 102,
         tentative: 3,
-        score_conformite: 91,
+        score_conformite: "91.00",
         decision_recommandee: "valider",
       }),
     ];
@@ -75,7 +86,7 @@ describe("TentativesTimeline — Lot E", () => {
     ).toHaveTextContent("—");
   });
 
-  it("tons couleur selon decision_recommandee (valider/ajuster/rejeter)", () => {
+  it("tons couleur selon decision_recommandee (valider/ajuster_avant_demarrage/rejeter)", () => {
     render(
       <TentativesTimeline
         attempts={[
@@ -87,7 +98,7 @@ describe("TentativesTimeline — Lot E", () => {
           buildResult({
             controle_id: 101,
             tentative: 2,
-            decision_recommandee: "ajuster",
+            decision_recommandee: "ajuster_avant_demarrage",
           }),
           buildResult({
             controle_id: 102,

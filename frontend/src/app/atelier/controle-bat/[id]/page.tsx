@@ -17,12 +17,15 @@ import {
   createControleBat,
   getControleBatContext,
   PHOTO_TIRAGE_MAX_SIZE_MO,
+  PHOTO_TIRAGE_MIME_TYPES,
   relancerTirage,
   type ControleBatContext,
   type ControleBatResult,
   type DecideControleResponse,
+  type PhotoTirageMimeType,
 } from "@/lib/api/controleBat";
 
+import { BatBlobAuthenticated } from "../_components/BatBlobAuthenticated";
 import { DialogValiderProduction } from "../_components/DialogValiderProduction";
 import { ResultatControle } from "../_components/ResultatControle";
 import { TentativesTimeline } from "../_components/TentativesTimeline";
@@ -128,9 +131,11 @@ export default function AtelierControleBatDetailPage() {
     setAnalyzeError(null);
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
+    // Aligné sur PHOTO_TIRAGE_MIME_TYPES backend (JPEG/PNG/WebP — pas de
+    // GIF côté photo tirage). 422 backend sinon → autant filtrer ici.
+    if (!PHOTO_TIRAGE_MIME_TYPES.includes(f.type as PhotoTirageMimeType)) {
       setPhotoError(
-        `Format non supporté (${f.type || "inconnu"}). Une image est requise.`,
+        `Format non supporté (${f.type || "inconnu"}). Attendus : JPEG, PNG, WebP.`,
       );
       return;
     }
@@ -221,9 +226,7 @@ export default function AtelierControleBatDetailPage() {
               {context.devis_numero}
             </h1>
             <p className="text-base text-muted-foreground">
-              {context.client_nom ?? "—"} ·{" "}
-              {context.designation ?? "Sans désignation"} ·{" "}
-              {context.machine_nom}
+              {context.client_nom ?? "—"} · {context.machine_nom}
             </p>
           </header>
 
@@ -307,8 +310,6 @@ export default function AtelierControleBatDetailPage() {
 // ---------------------------------------------------------------------------
 
 function BatReferenceSection({ context }: { context: ControleBatContext }) {
-  const isImage = context.bat_mime_type.startsWith("image/");
-  const isPdf = context.bat_mime_type === "application/pdf";
   return (
     <Card>
       <CardHeader>
@@ -318,32 +319,19 @@ function BatReferenceSection({ context }: { context: ControleBatContext }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isImage && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={context.bat_url}
-            alt={`BAT de référence pour ${context.devis_numero}`}
-            data-testid="bat-image"
-            className="max-h-[60vh] w-full rounded-md border border-border bg-muted object-contain"
-          />
-        )}
-        {isPdf && (
-          <iframe
-            src={context.bat_url}
-            title={`BAT de référence (PDF) pour ${context.devis_numero}`}
-            data-testid="bat-pdf"
-            className="h-[60vh] w-full rounded-md border border-border bg-muted"
-          />
-        )}
-        {!isImage && !isPdf && (
-          <p
-            role="alert"
-            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
-          >
-            Type de BAT non affichable ({context.bat_mime_type}). Téléversez
-            de nouveau un PDF ou une image.
-          </p>
-        )}
+        {/*
+          BAT servi par GET /api/flexocheck/blobs/{key} (auth bearer
+          obligatoire) → on passe par BatBlobAuthenticated qui fait
+          fetch + objectURL avant de monter <img>/<iframe>.
+        */}
+        <BatBlobAuthenticated
+          blobUrl={context.bat_url}
+          mimeType={context.bat_mime_type}
+          alt={`BAT de référence pour ${context.devis_numero}`}
+          className="max-h-[60vh] h-[60vh] w-full rounded-md border border-border bg-muted object-contain"
+          testIdImage="bat-image"
+          testIdPdf="bat-pdf"
+        />
       </CardContent>
     </Card>
   );
@@ -625,15 +613,26 @@ function DecisionEnregistreeBlock({
 }: {
   decision: DecideControleResponse;
 }) {
-  const valider = decision.decision_finale === "valider";
+  // Aligné sur DecisionFinale backend (`valide` / `valide_avec_reserves`
+  // / `rejete` ; `en_attente` exclu — on n'affiche ce bloc qu'après une
+  // vraie décision opérateur). On regroupe les deux verdicts positifs.
+  const valider =
+    decision.decision_finale === "valide" ||
+    decision.decision_finale === "valide_avec_reserves";
   const tone = valider
     ? "border-emerald-300 bg-emerald-50 text-emerald-900"
     : "border-red-300 bg-red-50 text-red-900";
   const icone = valider ? "✅" : "⛔";
-  const titre = valider
-    ? "Production validée"
-    : "Production rejetée";
-  const decidedAt = new Date(decision.decided_at).toLocaleString("fr-FR");
+  const titre =
+    decision.decision_finale === "valide"
+      ? "Production validée"
+      : decision.decision_finale === "valide_avec_reserves"
+        ? "Production validée avec réserves"
+        : "Production rejetée";
+  // Le backend ne traque pas de timestamp de décision séparé (POST
+  // /decision met juste à jour decideur/motif sans toucher created_at).
+  // On affiche l'horodatage côté UI au moment où on reçoit la réponse —
+  // approximation acceptable pour traçabilité opérationnelle.
   return (
     <div
       data-testid="decision-enregistree"
@@ -648,11 +647,12 @@ function DecisionEnregistreeBlock({
         <div>
           <div className="text-base font-bold sm:text-lg">{titre}</div>
           <div className="mt-1 text-sm">
-            par <strong>{decision.decideur}</strong> · {decidedAt}
+            par <strong>{decision.decideur}</strong> · tentative{" "}
+            {decision.tentative_numero}
           </div>
-          {decision.motif && (
+          {decision.motif_decision && (
             <div className="mt-1 text-sm">
-              <strong>Motif :</strong> {decision.motif}
+              <strong>Motif :</strong> {decision.motif_decision}
             </div>
           )}
         </div>

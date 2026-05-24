@@ -123,20 +123,16 @@ describe("AtelierControleBatPage — Lot A", () => {
           items: [
             {
               devis_id: 1,
-              devis_numero: "DEV-2026-0001",
-              client_nom: "ACME",
-              designation: "Miel 50×80",
-              machine_id: 10,
-              machine_nom: "MA P5",
+              client: "ACME",
+              designation: "DEV-2026-0001",
+              machine: "MA P5",
               bat_reference_uploaded: true,
             },
             {
               devis_id: 2,
-              devis_numero: "DEV-2026-0002",
-              client_nom: null,
-              designation: null,
-              machine_id: 11,
-              machine_nom: "MA P7",
+              client: null,
+              designation: "DEV-2026-0002",
+              machine: "MA P7",
               bat_reference_uploaded: false,
             },
           ],
@@ -154,7 +150,6 @@ describe("AtelierControleBatPage — Lot A", () => {
     const card1 = screen.getByTestId("production-1");
     expect(card1).toHaveTextContent("DEV-2026-0001");
     expect(card1).toHaveTextContent("ACME");
-    expect(card1).toHaveTextContent("Miel 50×80");
     expect(card1).toHaveTextContent("MA P5");
     // BAT présent → badge "BAT rattaché", bouton "Remplacer le BAT" actif,
     // lien "Ouvrir le contrôle" rendu vers la route détail (Lot C).
@@ -182,11 +177,9 @@ describe("AtelierControleBatPage — Lot A", () => {
           items: [
             {
               devis_id: 7,
-              devis_numero: "DEV-2026-0007",
-              client_nom: "BetaCorp",
-              designation: "Sticker grand format",
-              machine_id: 12,
-              machine_nom: "MA P9",
+              client: "BetaCorp",
+              designation: "DEV-2026-0007",
+              machine: "MA P9",
               bat_reference_uploaded: false,
             },
           ],

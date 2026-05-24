@@ -20,11 +20,9 @@ function buildProduction(
 ): ProductionActive {
   return {
     devis_id: 1,
-    devis_numero: "DEV-2026-0001",
-    client_nom: "ACME SAS",
-    designation: "Étiquette miel 50×80 mm",
-    machine_id: 10,
-    machine_nom: "Mark Andy P5",
+    client: "ACME SAS",
+    designation: "DEV-2026-0001",
+    machine: "Mark Andy P5",
     bat_reference_uploaded: true,
     ...overrides,
   };
@@ -73,12 +71,11 @@ describe("listProductionsActives", () => {
 
   it("renvoie la liste paginée des productions actives", async () => {
     const items = [
-      buildProduction({ devis_id: 1, devis_numero: "DEV-2026-0001" }),
+      buildProduction({ devis_id: 1, designation: "DEV-2026-0001" }),
       buildProduction({
         devis_id: 2,
-        devis_numero: "DEV-2026-0002",
-        client_nom: null,
-        designation: null,
+        designation: "DEV-2026-0002",
+        client: null,
         bat_reference_uploaded: false,
       }),
     ];
@@ -92,7 +89,7 @@ describe("listProductionsActives", () => {
     const res = await listProductionsActives();
     expect(res.total).toBe(2);
     expect(res.items).toHaveLength(2);
-    expect(res.items[0]!.devis_numero).toBe("DEV-2026-0001");
+    expect(res.items[0]!.designation).toBe("DEV-2026-0001");
     expect(res.items[1]!.bat_reference_uploaded).toBe(false);
   });
 
@@ -287,8 +284,18 @@ describe("createControleBat", () => {
         controle_id: 101,
         devis_id: 7,
         tentative: 1,
-        score_conformite: 87.5,
+        // score_conformite : Decimal sérialisé string par Pydantic v2.
+        score_conformite: "87.50",
         decision_recommandee: "valider",
+        niveau_confiance: "haut",
+        limites_analyse: [],
+        ecarts: [],
+        elements_conformes: ["Logo"],
+        elements_manquants: [],
+        sens_enroulement_detecte: null,
+        sens_enroulement_demande: null,
+        alerte_sens_enroulement: null,
+        alerte_chef_atelier: null,
       }),
     })) as unknown as typeof fetch;
     global.fetch = fetchMock;
@@ -300,6 +307,8 @@ describe("createControleBat", () => {
     expect(res.controle_id).toBe(101);
     expect(res.tentative).toBe(1);
     expect(res.decision_recommandee).toBe("valider");
+    expect(res.score_conformite).toBe("87.50");
+    expect(res.ecarts).toEqual([]);
 
     const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
       .mock.calls[0];
@@ -339,30 +348,34 @@ describe("decideControleBat", () => {
     vi.restoreAllMocks();
   });
 
-  it("POST JSON avec decision_finale + decideur + motif, renvoie la décision", async () => {
+  it("POST JSON avec decision_finale + decideur + motif_decision, renvoie ControleBatDetail", async () => {
     window.localStorage.setItem("devis_flexo_access_token", "tok-dec");
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
       statusText: "OK",
       json: async () => ({
-        controle_id: 101,
+        id: 101,
+        entreprise_id: 1,
         devis_id: 7,
-        decision_finale: "valider",
+        decision_finale: "valide",
         decideur: "J. Martin",
-        motif: "Écart mineur accepté",
-        decided_at: "2026-05-24T11:00:00",
+        motif_decision: "Écart mineur accepté",
+        tentative_numero: 1,
+        controle_bat_precedent_id: null,
+        created_at: "2026-05-24T10:00:00",
       }),
     })) as unknown as typeof fetch;
     global.fetch = fetchMock;
 
     const res = await decideControleBat(101, {
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. Martin",
-      motif: "Écart mineur accepté",
+      motif_decision: "Écart mineur accepté",
     });
-    expect(res.decision_finale).toBe("valider");
+    expect(res.decision_finale).toBe("valide");
     expect(res.decideur).toBe("J. Martin");
+    expect(res.id).toBe(101);
 
     const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
       .mock.calls[0];
@@ -375,52 +388,55 @@ describe("decideControleBat", () => {
     expect(headers.Authorization).toBe("Bearer tok-dec");
     const body = JSON.parse(init?.body as string);
     expect(body).toEqual({
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. Martin",
-      motif: "Écart mineur accepté",
+      motif_decision: "Écart mineur accepté",
     });
   });
 
-  it("motif omis : payload sans motif (champ optionnel)", async () => {
+  it("motif_decision omis : payload sans motif_decision (champ optionnel)", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
       statusText: "OK",
       json: async () => ({
-        controle_id: 102,
+        id: 102,
+        entreprise_id: 1,
         devis_id: 8,
-        decision_finale: "valider",
+        decision_finale: "valide",
         decideur: "P. Dupond",
-        motif: null,
-        decided_at: "2026-05-24T11:30:00",
+        motif_decision: null,
+        tentative_numero: 1,
+        controle_bat_precedent_id: null,
+        created_at: "2026-05-24T11:30:00",
       }),
     })) as unknown as typeof fetch;
     global.fetch = fetchMock;
 
     await decideControleBat(102, {
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "P. Dupond",
     });
     const init = (fetchMock as unknown as { mock: { calls: unknown[][] } })
       .mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(init.body as string);
-    expect(body.motif).toBeUndefined();
+    expect(body.motif_decision).toBeUndefined();
   });
 
-  it("409 (décision déjà enregistrée) → ApiError 409", async () => {
+  it("404 (controle introuvable) → ApiError 404", async () => {
     global.fetch = vi.fn(async () => ({
       ok: false,
-      status: 409,
-      statusText: "Conflict",
-      json: async () => ({ detail: "Décision déjà enregistrée" }),
+      status: 404,
+      statusText: "Not Found",
+      json: async () => ({ detail: "Contrôle 999 introuvable" }),
     })) as unknown as typeof fetch;
 
     await expect(
-      decideControleBat(101, {
-        decision_finale: "valider",
+      decideControleBat(999, {
+        decision_finale: "valide",
         decideur: "J. Martin",
       }),
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({ status: 404 });
   });
 });
 
@@ -439,11 +455,20 @@ describe("relancerTirage", () => {
       status: 200,
       statusText: "OK",
       json: async () => ({
-        controle_id: 101,
+        controle_id: 102,
         devis_id: 7,
         tentative: 2,
-        score_conformite: 91.0,
+        score_conformite: "91.00",
         decision_recommandee: "valider",
+        niveau_confiance: "haut",
+        limites_analyse: [],
+        ecarts: [],
+        elements_conformes: [],
+        elements_manquants: [],
+        sens_enroulement_detecte: null,
+        sens_enroulement_demande: null,
+        alerte_sens_enroulement: null,
+        alerte_chef_atelier: false,
       }),
     })) as unknown as typeof fetch;
     global.fetch = fetchMock;

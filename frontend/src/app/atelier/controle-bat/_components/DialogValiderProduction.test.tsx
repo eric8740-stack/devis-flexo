@@ -67,14 +67,17 @@ describe("DialogValiderProduction — Lot E", () => {
     expect(decideMock).not.toHaveBeenCalled();
   });
 
-  it("submit avec décideur + motif : appel decideControleBat, callbacks, fermeture", async () => {
+  it("submit avec décideur + motif_decision : appel decideControleBat, callbacks, fermeture", async () => {
     decideMock.mockResolvedValueOnce({
-      controle_id: 101,
+      id: 101,
+      entreprise_id: 1,
       devis_id: 7,
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. Martin",
-      motif: "Écart mineur accepté",
-      decided_at: "2026-05-24T11:00:00",
+      motif_decision: "Écart mineur accepté",
+      tentative_numero: 1,
+      controle_bat_precedent_id: null,
+      created_at: "2026-05-24T10:00:00",
     });
 
     const { onOpenChange, onValidated } = renderDialog();
@@ -92,22 +95,25 @@ describe("DialogValiderProduction — Lot E", () => {
 
     await waitFor(() => expect(decideMock).toHaveBeenCalledTimes(1));
     expect(decideMock).toHaveBeenCalledWith(101, {
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. Martin",
-      motif: "Écart mineur accepté",
+      motif_decision: "Écart mineur accepté",
     });
     expect(onValidated).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("motif vide : envoyé sans motif (undefined)", async () => {
+  it("motif vide : envoyé sans motif_decision (undefined)", async () => {
     decideMock.mockResolvedValueOnce({
-      controle_id: 101,
+      id: 101,
+      entreprise_id: 1,
       devis_id: 7,
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. M",
-      motif: null,
-      decided_at: "2026-05-24T11:00:00",
+      motif_decision: null,
+      tentative_numero: 1,
+      controle_bat_precedent_id: null,
+      created_at: "2026-05-24T11:00:00",
     });
 
     renderDialog();
@@ -118,9 +124,9 @@ describe("DialogValiderProduction — Lot E", () => {
 
     await waitFor(() => expect(decideMock).toHaveBeenCalledTimes(1));
     expect(decideMock).toHaveBeenCalledWith(101, {
-      decision_finale: "valider",
+      decision_finale: "valide",
       decideur: "J. M",
-      motif: undefined,
+      motif_decision: undefined,
     });
   });
 

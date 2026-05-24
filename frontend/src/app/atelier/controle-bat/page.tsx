@@ -139,7 +139,7 @@ export default function AtelierControleBatPage() {
       {uploadTarget && (
         <UploadBatDialog
           devisId={uploadTarget.devis_id}
-          devisNumero={uploadTarget.devis_numero}
+          devisNumero={uploadTarget.designation}
           open={uploadTarget !== null}
           onOpenChange={(open) => {
             if (!open) setUploadTarget(null);
@@ -173,8 +173,9 @@ function ProductionCard({
     >
       <CardHeader>
         <div className="flex items-baseline justify-between gap-2">
+          {/* designation = Devis.numero (DEV-YYYY-NNNN) composé backend */}
           <CardTitle className="font-mono text-xl sm:text-2xl">
-            {production.devis_numero}
+            {production.designation}
           </CardTitle>
           {hasBat ? (
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900">
@@ -187,18 +188,14 @@ function ProductionCard({
           )}
         </div>
         <CardDescription className="text-base text-foreground">
-          {production.client_nom ?? "—"}
+          {production.client ?? "—"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-4">
         <dl className="space-y-1 text-sm sm:text-base">
           <div>
-            <dt className="inline text-muted-foreground">Désignation : </dt>
-            <dd className="inline">{production.designation ?? "—"}</dd>
-          </div>
-          <div>
             <dt className="inline text-muted-foreground">Machine : </dt>
-            <dd className="inline">{production.machine_nom}</dd>
+            <dd className="inline">{production.machine}</dd>
           </div>
         </dl>
         <div className="flex flex-col gap-2">

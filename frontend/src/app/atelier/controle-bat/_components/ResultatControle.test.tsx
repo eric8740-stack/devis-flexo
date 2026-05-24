@@ -13,10 +13,24 @@ import { ResultatControle } from "./ResultatControle";
 function buildResult(
   overrides: Partial<ControleBatResult> = {},
 ): ControleBatResult {
+  // Aligné sur ControleBatAnalyseResponse : les listes (limites, ecarts,
+  // conformes, manquants) sont TOUJOURS présentes côté backend (vides au
+  // besoin), score_conformite/decision/etc. peuvent être null.
   return {
     controle_id: 101,
     devis_id: 7,
     tentative: 1,
+    score_conformite: null,
+    decision_recommandee: null,
+    niveau_confiance: null,
+    limites_analyse: [],
+    ecarts: [],
+    elements_conformes: [],
+    elements_manquants: [],
+    sens_enroulement_detecte: null,
+    sens_enroulement_demande: null,
+    alerte_sens_enroulement: null,
+    alerte_chef_atelier: null,
     ...overrides,
   };
 }
@@ -36,7 +50,8 @@ describe("ResultatControle — Lot D", () => {
     render(
       <ResultatControle
         result={buildResult({
-          score_conformite: 92,
+          // score_conformite : Decimal sérialisé string par Pydantic v2.
+          score_conformite: "92.00",
           decision_recommandee: "valider",
         })}
       />,
@@ -49,25 +64,27 @@ describe("ResultatControle — Lot D", () => {
     expect(screen.getByTestId("decision-valider")).toBeInTheDocument();
   });
 
-  it("score 60-84 : pastille orange + décision ajuster", () => {
+  it("score 60-84 : pastille orange + décision ajuster_avant_demarrage", () => {
     render(
       <ResultatControle
         result={buildResult({
-          score_conformite: 72,
-          decision_recommandee: "ajuster",
+          score_conformite: "72.50",
+          decision_recommandee: "ajuster_avant_demarrage",
         })}
       />,
     );
     const pastille = screen.getByTestId("score-pastille");
     expect(pastille.className).toMatch(/amber/);
-    expect(screen.getByTestId("decision-ajuster")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("decision-ajuster_avant_demarrage"),
+    ).toHaveTextContent(/Ajuster avant démarrage/i);
   });
 
   it("score <60 : pastille rouge + décision rejeter", () => {
     render(
       <ResultatControle
         result={buildResult({
-          score_conformite: 45,
+          score_conformite: "45.00",
           decision_recommandee: "rejeter",
         })}
       />,
@@ -85,18 +102,21 @@ describe("ResultatControle — Lot D", () => {
         result={buildResult({
           ecarts: [
             {
+              type: "typo",
               gravite: "mineur",
               localisation: "Pied gauche",
               description: "Léger décalage typo",
               suggestion_correction: null,
             },
             {
+              type: "couleur",
               gravite: "critique",
               localisation: "Centre",
               description: "Couleur manquante",
               suggestion_correction: "Refaire la plaque K",
             },
             {
+              type: "nettete",
               gravite: "majeur",
               localisation: "Coin haut droit",
               description: "Logo flou",
@@ -124,31 +144,36 @@ describe("ResultatControle — Lot D", () => {
     );
   });
 
-  it("alerte sens enroulement : bandeau rouge bloquant en tête avec les 3 options", () => {
+  it("alerte sens enroulement : bandeau rouge bloquant en tête avec les 3 options + recommandée mise en avant", () => {
     const { container } = render(
       <ResultatControle
         result={buildResult({
-          score_conformite: 30,
+          score_conformite: "30.00",
           decision_recommandee: "rejeter",
           sens_enroulement_demande: "SE3",
           sens_enroulement_detecte: "SE7",
           alerte_sens_enroulement: {
             message: "Le sens vu sur la photo ne correspond pas au demandé.",
+            // Backend Lot 4 : place l'option `recommandee=true` en premier
+            // (tri stable côté router) — l'UI rend l'ordre tel quel.
             options_correction: [
-              {
-                code: "inversion_cliche",
-                libelle: "Inverser le cliché",
-                description: "Re-monter la plaque dans l'autre sens.",
-              },
               {
                 code: "ajustement_rebobineuse",
                 libelle: "Ajuster la rebobineuse",
                 description: "Inverser la sortie de la rebobineuse.",
+                recommandee: true,
+              },
+              {
+                code: "inversion_cliche",
+                libelle: "Inverser le cliché",
+                description: "Re-monter la plaque dans l'autre sens.",
+                recommandee: false,
               },
               {
                 code: "confirmation_client",
                 libelle: "Confirmation client",
                 description: "Appeler le client pour valider le sens livré.",
+                recommandee: false,
               },
             ],
           },
@@ -169,6 +194,16 @@ describe("ResultatControle — Lot D", () => {
     expect(
       screen.getByTestId("option-correction-confirmation_client"),
     ).toBeInTheDocument();
+    // Badge "Recommandée" visible UNIQUEMENT sur l'option recommandee=true.
+    expect(
+      screen.getByTestId("option-recommandee-ajustement_rebobineuse"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("option-recommandee-inversion_cliche"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("option-recommandee-confirmation_client"),
+    ).toBeNull();
 
     // Bandeau alerte rendu AVANT le bloc score (ordre métier décisionnel).
     const allTestable = Array.from(
@@ -243,11 +278,11 @@ describe("ResultatControle — Lot D", () => {
     );
   });
 
-  it("résultat minimal (champs Lot C uniquement) : pas de crash, sections optionnelles absentes", () => {
+  it("résultat minimal (listes vides + nulls) : pas de crash, sections optionnelles absentes", () => {
     render(<ResultatControle result={buildResult()} />);
-    // ecarts undefined → bloc rendu mais "0 écart"
+    // Backend renvoie ecarts: [] → bloc rendu avec "Aucun écart"
     expect(screen.getByTestId("ecarts-block")).toBeInTheDocument();
-    // Sections optionnelles absentes
+    // Sections optionnelles absentes (champs nullables = null + listes vides)
     expect(screen.queryByTestId("score-decision")).toBeNull();
     expect(screen.queryByTestId("sens-sortie")).toBeNull();
     expect(screen.queryByTestId("alerte-sens-enroulement")).toBeNull();
