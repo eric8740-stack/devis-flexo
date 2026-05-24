@@ -36,6 +36,7 @@ build/
 dist/
 .vercel
 next-env.d.ts
+*.tsbuildinfo
 
 # Logs
 *.log

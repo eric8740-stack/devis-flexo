@@ -27,6 +27,16 @@ import type {
   OptimisationConfigOut,
   SensEnroulement,
 } from "@/lib/api";
+import type { MatcherOutilMatch } from "@/lib/api/matcherOutil";
+
+import {
+  extractBriefClientFromDevis,
+  mergeBriefClient,
+} from "./brief-client/store-helpers";
+import {
+  BRIEF_CLIENT_DEFAULTS,
+  type BriefClientData,
+} from "./brief-client/types";
 
 // Brief #33 — étape 4 chiffrage ajoutée (options globales, marge, réduction).
 export type EtapeOptim = "saisie" | "candidats" | "detail" | "chiffrage";
@@ -115,6 +125,18 @@ interface OptimisationPoseContextValue {
   devisExistantId: number | null;
   devisExistantNumero: string | null;
   setModeEdition: (id: number, numero: string) => void;
+
+  // Sprint 14 Lot 4.2 — brief client unifié (Rouleau livré, Matière &
+  // stockage, Type d'entrée fichier). `setBriefClient` accepte un patch
+  // partiel ; merge profond sur `conditions_stockage` (cf helper).
+  briefClient: BriefClientData;
+  setBriefClient: (patch: Partial<BriefClientData>) => void;
+
+  // Sprint 14 Lot 4.5 — outil compatible sélectionné via le matcher.
+  // null tant que l'utilisateur n'a pas cliqué un match. Objet complet
+  // (pas que l'id) pour permettre l'affichage récap sans re-fetch.
+  outilSelectionne: MatcherOutilMatch | null;
+  setOutilSelectionne: (match: MatcherOutilMatch | null) => void;
 
   // Brief #33 commit 3 — hydratation depuis un devis existant. Reconstruit
   // selection + candidats minimum à partir de `lots_production`, lit
@@ -227,6 +249,23 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     null
   );
 
+  // Sprint 14 Lot 4.2 — brief client unifié state (Rouleau livré /
+  // Matière & stockage / Type d'entrée fichier). Defaults backend Lot 1.
+  const [briefClient, setBriefClientState] = useState<BriefClientData>(
+    BRIEF_CLIENT_DEFAULTS,
+  );
+
+  const setBriefClient = useCallback(
+    (patch: Partial<BriefClientData>) => {
+      setBriefClientState((prev) => mergeBriefClient(prev, patch));
+    },
+    [],
+  );
+
+  // Sprint 14 Lot 4.5 — outil sélectionné via matcher-outil.
+  const [outilSelectionne, setOutilSelectionne] =
+    useState<MatcherOutilMatch | null>(null);
+
   const goSaisie = useCallback(() => {
     setEtape("saisie");
     setSelection([]);
@@ -320,7 +359,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     // 4. Restaure réduction commerciale (champ devis.reduction_pct).
     setReductionPct(devis.reduction_pct ?? "0");
 
-    // 5. Mode édition + bascule sur étape 4 ouverte par défaut.
+    // 5. Sprint 14 Lot 4.2 — restaure brief client (5 champs columns).
+    setBriefClientState(extractBriefClientFromDevis(devis));
+
+    // 6. Mode édition + bascule sur étape 4 ouverte par défaut.
     setDevisExistantId(devis.id);
     setDevisExistantNumero(devis.numero);
     setEtape("chiffrage");
@@ -404,6 +446,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       devisExistantId,
       devisExistantNumero,
       setModeEdition,
+      briefClient,
+      setBriefClient,
+      outilSelectionne,
+      setOutilSelectionne,
       hydrateFromDevisExistant,
     }),
     [
@@ -429,6 +475,9 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       devisExistantId,
       devisExistantNumero,
       setModeEdition,
+      briefClient,
+      setBriefClient,
+      outilSelectionne,
       hydrateFromDevisExistant,
     ]
   );

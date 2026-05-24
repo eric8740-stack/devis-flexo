@@ -25,6 +25,8 @@ import {
   type SensEnroulement,
 } from "@/lib/api";
 
+import { BriefClientForm } from "./_components/BriefClientForm";
+import { MatcherOutilButton } from "./_components/MatcherOutilButton";
 import { OptimisationChiffrage } from "./_components/OptimisationChiffrage";
 import { OptimisationPoseCandidats } from "./_components/OptimisationPoseCandidats";
 import { OptimisationPoseDetailLots } from "./_components/OptimisationPoseDetailLots";
@@ -397,6 +399,10 @@ function OptimisationPoseSaisie() {
           rendement, ø bobine).
         </p>
       </header>
+
+      {/* Sprint 14 Lot 3/4.3 — Brief client unifié, monté AVANT les contraintes
+          techniques. State porté par OptimisationPoseProvider (Lot 4.2). */}
+      <BriefClientForm />
 
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
         {/* --- Colonne 1 : Format + impression --- */}
@@ -901,6 +907,19 @@ function OptimisationPoseSaisie() {
               ))}
           </CardContent>
         </Card>
+
+        {/* Sprint 14 Lot 4.5 — Matcher outil : vérifie si un cylindre du parc
+            convient déjà au format saisi, avant de lancer l'optim complète. */}
+        <div className="lg:col-span-2">
+          <MatcherOutilButton
+            laizeEtiqMm={parseFloat(laize) || 0}
+            devEtiqMm={parseFloat(dev) || 0}
+            intervalleDevMm={parseFloat(intervalleDevMin) || 0}
+            intervalleLaizeMm={
+              forcerIntervalleLaize ? parseFloat(intervalleLaizeForce) || 0 : 0
+            }
+          />
+        </div>
 
         <div className="lg:col-span-2">
           <Button

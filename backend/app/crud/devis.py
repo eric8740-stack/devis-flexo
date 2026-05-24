@@ -234,6 +234,15 @@ def create_devis(
         payload_output=data.payload_output,
         cylindre_choisi_z=data.cylindre_choisi_z,
         cylindre_choisi_nb_etiq=data.cylindre_choisi_nb_etiq,
+        # Sprint 14 Lot 1 — brief client unifié. Lot 1 avait câblé le modèle DB
+        # et le schema Pydantic mais OUBLIÉ le CRUD : sans ces 5 lignes, les
+        # valeurs envoyées par l'API étaient silencieusement remplacées par
+        # les server_default DB (bug détecté par Lot 5 E2E pipeline).
+        nb_etiquettes_par_rouleau=data.nb_etiquettes_par_rouleau,
+        diametre_max_bobine_mm=data.diametre_max_bobine_mm,
+        nb_fronts_sortie=data.nb_fronts_sortie,
+        type_entree_fichier=data.type_entree_fichier,
+        conditions_stockage=data.conditions_stockage,
         **denorm,
     )
     db.add(devis)
@@ -620,6 +629,12 @@ def duplicate_devis(db: Session, devis_id: int) -> Devis | None:
         format_h_mm=src.format_h_mm,
         format_l_mm=src.format_l_mm,
         machine_id=src.machine_id,
+        # Sprint 14 Lot 1 — copie du brief client (cohérence avec create_devis).
+        nb_etiquettes_par_rouleau=src.nb_etiquettes_par_rouleau,
+        diametre_max_bobine_mm=src.diametre_max_bobine_mm,
+        nb_fronts_sortie=src.nb_fronts_sortie,
+        type_entree_fichier=src.type_entree_fichier,
+        conditions_stockage=src.conditions_stockage,
     )
     db.add(nouveau)
     db.commit()

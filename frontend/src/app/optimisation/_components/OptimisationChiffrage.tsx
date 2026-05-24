@@ -39,6 +39,7 @@ import {
   type PreviewCoutsResponse,
 } from "@/lib/api";
 
+import { briefClientToPayload } from "./brief-client/store-helpers";
 import { useOptimisationPose } from "./OptimisationPoseStore";
 
 function sensEnroulementToInt(se: string): number {
@@ -71,6 +72,7 @@ export function OptimisationChiffrage() {
     setReductionPct,
     devisExistantId,
     devisExistantNumero,
+    briefClient,
   } = useOptimisationPose();
   const { toast } = useToast();
   const router = useRouter();
@@ -207,6 +209,10 @@ export function OptimisationChiffrage() {
         nb_lots: selection.length,
       };
 
+      // Sprint 14 Lot 4.4 — projection des 5 champs brief client vers le
+      // shape DevisCreate/DevisUpdate (gère null → omis sur sous-stockage).
+      const briefPayload = briefClientToPayload(briefClient);
+
       if (enModeEdition && devisExistantId !== null) {
         const updatePayload: DevisUpdate = {
           payload_input: payloadInput,
@@ -214,6 +220,7 @@ export function OptimisationChiffrage() {
           quantite_totale: quantiteTotale,
           lots: lotsPayload,
           reduction_pct: reductionValide ? reductionNum : 0,
+          ...briefPayload,
         };
         const devis = await updateDevis(devisExistantId, updatePayload);
         toast({
@@ -228,6 +235,7 @@ export function OptimisationChiffrage() {
           statut: "brouillon",
           quantite_totale: quantiteTotale,
           lots: lotsPayload,
+          ...briefPayload,
         };
         const devis = await createDevis(createPayload);
         toast({

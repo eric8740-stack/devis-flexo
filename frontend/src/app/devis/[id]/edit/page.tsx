@@ -18,6 +18,16 @@ import {
   type DevisDetail,
   type DevisInput,
 } from "@/lib/api";
+import {
+  briefClientEstVide,
+  formatLieu,
+  formatMmOrTiret,
+  formatNbOrTiret,
+  formatPourcentOrTiret,
+  formatTemperatureOrTiret,
+  formatTypeEntree,
+  NON_RENSEIGNE,
+} from "@/lib/brief-client-display";
 
 export default function EditDevisPage() {
   const params = useParams<{ id: string }>();
@@ -222,6 +232,10 @@ function EditMultiLotsPanel({
         ))}
       </section>
 
+      {/* Sprint 14 Lot 4.6 — Brief client (lecture seule). Édition reportée
+          S15+. Affiche les 5 champs persistés au moment du devis. */}
+      <BriefClientReadOnly devis={devis} />
+
       {/* Édition réduction */}
       <section className="rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-amber-50/50 to-white p-6 shadow">
         <div className="space-y-4">
@@ -293,5 +307,93 @@ function EditMultiLotsPanel({
         </div>
       </section>
     </main>
+  );
+}
+
+/**
+ * Sprint 14 Lot 4.6 — affichage lecture seule des 5 champs brief client
+ * d'un devis (Sprint 14 Lot 1). Affiché entre les lots et la réduction
+ * dans EditMultiLotsPanel. L'édition complète sera scope S15+.
+ */
+function BriefClientReadOnly({ devis }: { devis: DevisDetail }) {
+  const stockage = devis.conditions_stockage;
+  const aucunChampSaisi = briefClientEstVide(devis);
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        Brief client · figé
+      </h2>
+      <div className="rounded-lg border-l-4 border-l-blue-300 border-y border-r border-y-border border-r-border bg-white p-4 text-sm">
+        {aucunChampSaisi ? (
+          <p className="text-muted-foreground">
+            Aucun brief client saisi pour ce devis (devis antérieur à Sprint
+            14 ou contraintes non renseignées).
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Rouleau livré
+              </div>
+              <ul className="mt-1 space-y-1">
+                <li>
+                  Nb étiquettes/rouleau :{" "}
+                  <strong>
+                    {formatNbOrTiret(devis.nb_etiquettes_par_rouleau)}
+                  </strong>
+                </li>
+                <li>
+                  Diamètre maxi bobine :{" "}
+                  <strong>
+                    {formatMmOrTiret(devis.diametre_max_bobine_mm)}
+                  </strong>
+                </li>
+                <li>
+                  Nb fronts en sortie :{" "}
+                  <strong>{formatNbOrTiret(devis.nb_fronts_sortie)}</strong>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Entrée fichier
+              </div>
+              <p className="mt-1">
+                <strong>{formatTypeEntree(devis.type_entree_fichier)}</strong>
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Conditions de stockage
+              </div>
+              {stockage ? (
+                <ul className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                  <li>
+                    Humidité :{" "}
+                    <strong>
+                      {formatPourcentOrTiret(stockage.humidite_pct)}
+                    </strong>
+                  </li>
+                  <li>
+                    T° min :{" "}
+                    <strong>{formatTemperatureOrTiret(stockage.t_min_c)}</strong>
+                  </li>
+                  <li>
+                    T° max :{" "}
+                    <strong>{formatTemperatureOrTiret(stockage.t_max_c)}</strong>
+                  </li>
+                  <li>
+                    Lieu : <strong>{formatLieu(stockage.lieu)}</strong>
+                  </li>
+                </ul>
+              ) : (
+                <p className="mt-1 text-muted-foreground">{NON_RENSEIGNE}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

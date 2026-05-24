@@ -1,11 +1,17 @@
-"""Schémas Pydantic — optimisation Sprint 13 Lot S13.D.7b.
+"""Schémas Pydantic — optimisation Sprint 13 Lot S13.D.7b + Sprint 14 Lot 2.
 
 POST /api/optimisation/calculer : reçoit le contexte devis + sélection
 matière/options, hydrate depuis la BDD (cylindres + machines + barèmes
 du tenant) puis appelle optimiser_pose(). Renvoie top 3 + metadata.
 
+POST /api/optimisation/matcher-outil (Sprint 14) : reçoit un brief client
+unifié + machine_id, matche contre les cylindres en parc, retourne les
+candidats triés par score d'efficacité (option « nouvel outil » si rien
+ne convient).
+
 extra='forbid' partout pour rejeter les champs accessoires.
 """
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -311,3 +317,68 @@ class OptionDisponiblePublic(BaseModel):
     categorie: str | None = None
     coef_vitesse_impact: float
     coef_gache_impact: float
+
+
+# ---------------------------------------------------------------------------
+# Sprint 14 Lot 2 — matcher outil (POST /api/optimisation/matcher-outil)
+# ---------------------------------------------------------------------------
+
+
+class MatcherOutilIn(BaseModel):
+    """Body POST /api/optimisation/matcher-outil.
+
+    Le router dérive `laize_machine_mm` côté serveur depuis la MachineImprimerie
+    scopée tenant (FK `machine_id`). Les autres champs viennent directement
+    du brief client unifié (Sprint 14 §3 Lot 3 UI).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    machine_id: int = Field(..., gt=0)
+    laize_etiquette_mm: Decimal = Field(..., gt=0)
+    dev_etiquette_mm: Decimal = Field(..., gt=0)
+    intervalle_dev_mm: Decimal = Field(..., ge=0)
+    intervalle_laize_mm: Decimal = Field(..., ge=0)
+    nb_fronts_min: int = Field(1, ge=1, le=20)
+    nb_fronts_max: int = Field(10, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def _valider_fronts_min_max(self) -> "MatcherOutilIn":
+        if self.nb_fronts_min > self.nb_fronts_max:
+            raise ValueError(
+                f"nb_fronts_min ({self.nb_fronts_min}) > "
+                f"nb_fronts_max ({self.nb_fronts_max})"
+            )
+        return self
+
+
+class MatchOutilOut(BaseModel):
+    """Un match retourné par matcher-outil.
+
+    `cylindre_id=None` signifie « option fabriquer un nouvel outil sur
+    mesure » (dimensionné juste-assez par le service).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cylindre_id: int | None
+    nb_dents: int
+    developpe_mm: Decimal
+    nb_poses_dev: int
+    nb_poses_laize: int
+    nb_poses_total: int
+    cout_outil_eur: Decimal
+    score_efficacite: float
+
+
+class MatcherOutilOut(BaseModel):
+    """Réponse POST /api/optimisation/matcher-outil.
+
+    `matches` non vide par contrat : si aucun cylindre du parc ne convient,
+    contient exactement 1 entrée avec `cylindre_id=None`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    matches: list[MatchOutilOut]
+    nb_matches: int
