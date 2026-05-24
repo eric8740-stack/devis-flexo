@@ -71,3 +71,69 @@ export async function listProductionsActives(): Promise<ListProductionsActivesRe
 
   return response.json();
 }
+
+// ---------------------------------------------------------------------------
+// Lot B — Upload du BAT de référence
+// ---------------------------------------------------------------------------
+
+// Formats autorisés pour le BAT de référence : PDF (typique export imprimeur)
+// + images haute déf (cas où le client renvoie une photo annotée). Aligné sur
+// l'analyse photo S13 + tolérance PDF.
+export const BAT_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+
+export type BatMimeType = (typeof BAT_MIME_TYPES)[number];
+
+// Taille max alignée sur l'analyse photo S13. Un BAT PDF imprimeur tient
+// presque toujours en <10 Mo ; au-delà on demande compression côté client.
+export const BAT_MAX_SIZE_MO = 10;
+
+export interface UploadBatResponse {
+  devis_id: number;
+  bat_filename: string;
+  bat_mime_type: string;
+  bat_uploaded_at: string;
+}
+
+export async function uploadBatReference(
+  devisId: number,
+  file: File,
+): Promise<UploadBatResponse> {
+  const path = "/api/flexocheck/controle-bat/upload-bat";
+  const token =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(ACCESS_TOKEN_KEY)
+      : null;
+
+  // multipart/form-data : pas de `Content-Type` manuel, le navigateur ajoute
+  // automatiquement le boundary. Forcer le header casse le parsing serveur.
+  const formData = new FormData();
+  formData.append("devis_id", String(devisId));
+  formData.append("file", file);
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const data = await response.json();
+      if (data?.detail) detail = `${response.status} ${data.detail}`;
+    } catch {
+      /* corps non JSON */
+    }
+    // 413 = fichier trop gros, 415 = type non supporté, 422 = devis introuvable.
+    throw new ApiError(response.status, `POST ${path} → ${detail}`);
+  }
+
+  return response.json();
+}

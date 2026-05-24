@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,8 @@ import {
   type ProductionActive,
 } from "@/lib/api/controleBat";
 
+import { UploadBatDialog } from "./_components/UploadBatDialog";
+
 /**
  * Sprint 15 Lot A — Écran atelier Contrôle BAT IA.
  *
@@ -30,6 +32,10 @@ import {
  * l'écran de contrôle (route /atelier/controle-bat/[id], implémentée
  * au Lot C).
  *
+ * Lot B : depuis la carte, bouton "Rattacher le BAT" qui ouvre le
+ * dialog d'upload. Au succès on rafraîchit la liste pour mettre à
+ * jour le badge bat_reference_uploaded.
+ *
  * Gating : si l'utilisateur n'a pas `has_flexocheck`, on affiche un
  * message d'accès sans tenter l'appel API (le backend renvoie 403
  * de toute façon, mais on évite la requête).
@@ -41,6 +47,20 @@ export default function AtelierControleBatPage() {
   const [data, setData] = useState<ListProductionsActivesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploadTarget, setUploadTarget] = useState<ProductionActive | null>(
+    null,
+  );
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return listProductionsActives()
+      .then((res) => setData(res))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!hasAccess) {
@@ -107,10 +127,27 @@ export default function AtelierControleBatPage() {
         >
           {data.items.map((p) => (
             <li key={p.devis_id}>
-              <ProductionCard production={p} />
+              <ProductionCard
+                production={p}
+                onRequestUploadBat={() => setUploadTarget(p)}
+              />
             </li>
           ))}
         </ul>
+      )}
+
+      {uploadTarget && (
+        <UploadBatDialog
+          devisId={uploadTarget.devis_id}
+          devisNumero={uploadTarget.devis_numero}
+          open={uploadTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setUploadTarget(null);
+          }}
+          onUploaded={() => {
+            void reload();
+          }}
+        />
       )}
     </main>
   );
@@ -120,8 +157,15 @@ export default function AtelierControleBatPage() {
 // Composants
 // ---------------------------------------------------------------------------
 
-function ProductionCard({ production }: { production: ProductionActive }) {
+function ProductionCard({
+  production,
+  onRequestUploadBat,
+}: {
+  production: ProductionActive;
+  onRequestUploadBat: () => void;
+}) {
   const href = `/atelier/controle-bat/${production.devis_id}`;
+  const hasBat = production.bat_reference_uploaded;
   return (
     <Card
       data-testid={`production-${production.devis_id}`}
@@ -132,7 +176,11 @@ function ProductionCard({ production }: { production: ProductionActive }) {
           <CardTitle className="font-mono text-xl sm:text-2xl">
             {production.devis_numero}
           </CardTitle>
-          {!production.bat_reference_uploaded && (
+          {hasBat ? (
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900">
+              BAT rattaché
+            </span>
+          ) : (
             <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
               BAT manquant
             </span>
@@ -153,9 +201,31 @@ function ProductionCard({ production }: { production: ProductionActive }) {
             <dd className="inline">{production.machine_nom}</dd>
           </div>
         </dl>
-        <Button asChild size="lg" className="h-12 w-full text-base">
-          <Link href={href}>Ouvrir le contrôle →</Link>
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={onRequestUploadBat}
+            className="h-12 w-full text-base"
+          >
+            {hasBat ? "Remplacer le BAT" : "📎 Rattacher le BAT"}
+          </Button>
+          <Button
+            asChild
+            size="lg"
+            disabled={!hasBat}
+            className="h-12 w-full text-base"
+          >
+            {hasBat ? (
+              <Link href={href}>Ouvrir le contrôle →</Link>
+            ) : (
+              // Bouton désactivé : on rend un span pour éviter une navigation
+              // sur un BAT absent (le Lot C exige bat_reference_uploaded).
+              <span aria-disabled="true">Ouvrir le contrôle →</span>
+            )}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

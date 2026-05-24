@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 
 import {
   listProductionsActives,
+  uploadBatReference,
   type ProductionActive,
 } from "./controleBat";
 
@@ -138,5 +139,72 @@ describe("listProductionsActives", () => {
     await expect(listProductionsActives()).rejects.toMatchObject({
       status: 500,
     });
+  });
+});
+
+describe("uploadBatReference", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("POST multipart/form-data avec devis_id + file, renvoie la réponse JSON", async () => {
+    window.localStorage.setItem("devis_flexo_access_token", "tok-xyz");
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        devis_id: 42,
+        bat_filename: "bat-acme.pdf",
+        bat_mime_type: "application/pdf",
+        bat_uploaded_at: "2026-05-24T10:00:00",
+      }),
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const file = new File(["PDFDATA"], "bat-acme.pdf", {
+      type: "application/pdf",
+    });
+    const res = await uploadBatReference(42, file);
+
+    expect(res.devis_id).toBe(42);
+    expect(res.bat_filename).toBe("bat-acme.pdf");
+
+    const callArgs = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
+    const url = callArgs?.[0] as string;
+    const init = callArgs?.[1] as RequestInit | undefined;
+    expect(url).toContain("/api/flexocheck/controle-bat/upload-bat");
+    expect(init?.method).toBe("POST");
+    // Bearer présent, pas de Content-Type manuel (FormData → browser handles).
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer tok-xyz");
+    expect(headers["Content-Type"]).toBeUndefined();
+    // Body est bien une FormData avec devis_id + file.
+    expect(init?.body).toBeInstanceOf(FormData);
+    const fd = init?.body as FormData;
+    expect(fd.get("devis_id")).toBe("42");
+    expect(fd.get("file")).toBeInstanceOf(File);
+    expect((fd.get("file") as File).name).toBe("bat-acme.pdf");
+  });
+
+  it("422 backend (devis introuvable) → ApiError 422 avec detail", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 422,
+      statusText: "Unprocessable Entity",
+      json: async () => ({ detail: "Devis 999 introuvable" }),
+    })) as unknown as typeof fetch;
+
+    const file = new File(["x"], "bat.pdf", { type: "application/pdf" });
+    await expect(uploadBatReference(999, file)).rejects.toMatchObject({
+      status: 422,
+    });
+    await expect(uploadBatReference(999, file)).rejects.toBeInstanceOf(
+      ApiError,
+    );
   });
 });

@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { User } from "@/types/auth";
@@ -155,19 +156,59 @@ describe("AtelierControleBatPage — Lot A", () => {
     expect(card1).toHaveTextContent("ACME");
     expect(card1).toHaveTextContent("Miel 50×80");
     expect(card1).toHaveTextContent("MA P5");
-    // BAT présent → pas de badge "BAT manquant"
-    expect(card1).not.toHaveTextContent(/BAT manquant/i);
+    // BAT présent → badge "BAT rattaché", bouton "Remplacer le BAT" actif,
+    // lien "Ouvrir le contrôle" rendu vers la route détail (Lot C).
+    expect(card1).toHaveTextContent(/BAT rattaché/i);
+    expect(card1).toHaveTextContent(/Remplacer le BAT/i);
+    const link1 = card1.querySelector("a[href='/atelier/controle-bat/1']");
+    expect(link1).not.toBeNull();
 
     const card2 = screen.getByTestId("production-2");
     expect(card2).toHaveTextContent("DEV-2026-0002");
-    // BAT absent → badge visible
+    // BAT absent → badge "BAT manquant", bouton "Rattacher le BAT", pas de
+    // lien vers le contrôle (Lot C exige bat_reference_uploaded).
     expect(card2).toHaveTextContent(/BAT manquant/i);
-
-    // Lien "Ouvrir le contrôle" pointe vers la route détail (Lot C).
-    const link1 = card1.querySelector("a[href='/atelier/controle-bat/1']");
-    expect(link1).not.toBeNull();
+    expect(card2).toHaveTextContent(/Rattacher le BAT/i);
     const link2 = card2.querySelector("a[href='/atelier/controle-bat/2']");
-    expect(link2).not.toBeNull();
+    expect(link2).toBeNull();
+  });
+
+  it("clic sur 'Rattacher le BAT' : ouvre le dialog d'upload pour le bon devis", async () => {
+    useAuthMock.mockReturnValue({ user: buildUser() });
+    installFetchMock([
+      {
+        urlPart: "/api/flexocheck/productions-actives",
+        body: {
+          items: [
+            {
+              devis_id: 7,
+              devis_numero: "DEV-2026-0007",
+              client_nom: "BetaCorp",
+              designation: "Sticker grand format",
+              machine_id: 12,
+              machine_nom: "MA P9",
+              bat_reference_uploaded: false,
+            },
+          ],
+          total: 1,
+        },
+      },
+    ]);
+
+    render(<AtelierControleBatPage />);
+    const card = await screen.findByTestId("production-7");
+    await userEvent.click(
+      within(card).getByRole("button", { name: /Rattacher le BAT/i }),
+    );
+
+    // Dialog ouvert : le titre contient le numéro du devis ciblé. Radix
+    // Dialog rend via portal sur document.body, donc on cherche au niveau
+    // global plutôt que scoped à la card.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Rattacher le BAT — DEV-2026-0007/),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("erreur API (500) : bandeau alert affiché, pas de cards", async () => {
