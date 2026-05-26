@@ -21,13 +21,15 @@ import {
   type ReactNode,
 } from "react";
 
-import type {
-  DevisDetail,
-  LotProductionRead,
-  OptimisationConfigOut,
-  RebobinageCalculerRequest,
-  RebobinageResultat,
-  SensEnroulement,
+import {
+  getClient,
+  type Client,
+  type DevisDetail,
+  type LotProductionRead,
+  type OptimisationConfigOut,
+  type RebobinageCalculerRequest,
+  type RebobinageResultat,
+  type SensEnroulement,
 } from "@/lib/api";
 import type { MatcherOutilMatch } from "@/lib/api/matcherOutil";
 
@@ -160,6 +162,25 @@ interface OptimisationPoseContextValue {
     result: RebobinageResultat,
   ) => void;
   clearRebobinage: () => void;
+
+  // Sprint 16 — client du devis sélectionné dans le workflow optimisation.
+  // Source de vérité unique pour l'auto-remplissage de l'étape rebobinage
+  // (depuis les 9 champs profil) ET pour le client_id envoyé au POST/PUT
+  // devis dans l'étape chiffrage. Hydraté en mode édition depuis
+  // `devis.client_id` ; en mode création, set manuellement via le
+  // sélecteur en tête de l'étape rebobinage ou de l'étape chiffrage.
+  clientSelectionne: Client | null;
+  setClientSelectionne: (client: Client | null) => void;
+
+  // Sprint 16 — sens d'enroulement profil client (entier 1..8) transporté
+  // séparément du `rebobinageRequest` car non consommé par le backend
+  // /api/rebobinage/calculer. Propagé dans `payload_input.sens_enroulement`
+  // du devis au POST/PUT depuis OptimisationChiffrage. Pré-rempli depuis
+  // `clientSelectionne.sens_enroulement` ; override possible côté UI.
+  // Invariant : simple stockage d'un entier brut, aucune logique de
+  // rotation / interprétation (le Lot E reste gated).
+  sensEnroulementClient: number | null;
+  setSensEnroulementClient: (n: number | null) => void;
 
   // Brief #33 commit 3 — hydratation depuis un devis existant. Reconstruit
   // selection + candidats minimum à partir de `lots_production`, lit
@@ -308,6 +329,30 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     setRebobinageResult(null);
   }, []);
 
+  // Sprint 16 — client sélectionné + sens enroulement profil.
+  const [clientSelectionne, setClientSelectionneState] =
+    useState<Client | null>(null);
+  const [sensEnroulementClient, setSensEnroulementClientState] =
+    useState<number | null>(null);
+
+  const setClientSelectionne = useCallback((client: Client | null) => {
+    setClientSelectionneState(client);
+    // Auto-fill du sens enroulement depuis le profil au changement de
+    // client — l'utilisateur peut ensuite l'overrider via le setter
+    // dédié. Si l'utilisateur a déjà overridé puis change de client,
+    // on écrase ; pas de double-état "overridé vs profil" pour rester
+    // KISS.
+    if (client) {
+      setSensEnroulementClientState(client.sens_enroulement);
+    } else {
+      setSensEnroulementClientState(null);
+    }
+  }, []);
+
+  const setSensEnroulementClient = useCallback((n: number | null) => {
+    setSensEnroulementClientState(n);
+  }, []);
+
   const goSaisie = useCallback(() => {
     setEtape("saisie");
     setSelection([]);
@@ -405,7 +450,28 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     // 5. Sprint 14 Lot 4.2 — restaure brief client (5 champs columns).
     setBriefClientState(extractBriefClientFromDevis(devis));
 
-    // 6. Mode édition + bascule sur étape 4 ouverte par défaut.
+    // 6. Sprint 16 — restaure le client sélectionné depuis devis.client_id
+    //    (fire-and-forget : si le fetch échoue, le composant rebobinage
+    //    affichera juste le sélecteur vide ; pas d'erreur bloquante).
+    //    Au retour : auto-remplissage du sens_enroulement profil via le
+    //    setter dédié (cf. setClientSelectionne ci-dessus).
+    if (devis.client_id !== null) {
+      getClient(devis.client_id)
+        .then((client) => {
+          setClientSelectionneState(client);
+          setSensEnroulementClientState(client.sens_enroulement);
+        })
+        .catch(() => {
+          // Silencieux : le client peut être désactivé ou supprimé.
+          setClientSelectionneState(null);
+          setSensEnroulementClientState(null);
+        });
+    } else {
+      setClientSelectionneState(null);
+      setSensEnroulementClientState(null);
+    }
+
+    // 7. Mode édition + bascule sur étape 4 ouverte par défaut.
     setDevisExistantId(devis.id);
     setDevisExistantNumero(devis.numero);
     setEtape("chiffrage");
@@ -498,6 +564,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       rebobinageResult,
       setRebobinage,
       clearRebobinage,
+      clientSelectionne,
+      setClientSelectionne,
+      sensEnroulementClient,
+      setSensEnroulementClient,
       hydrateFromDevisExistant,
     }),
     [
@@ -531,6 +601,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       rebobinageResult,
       setRebobinage,
       clearRebobinage,
+      clientSelectionne,
+      setClientSelectionne,
+      sensEnroulementClient,
+      setSensEnroulementClient,
       hydrateFromDevisExistant,
     ]
   );
