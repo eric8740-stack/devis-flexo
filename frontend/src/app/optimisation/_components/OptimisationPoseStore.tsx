@@ -38,8 +38,15 @@ import {
   type BriefClientData,
 } from "./brief-client/types";
 
-// Brief #33 — étape 4 chiffrage ajoutée (options globales, marge, réduction).
-export type EtapeOptim = "saisie" | "candidats" | "detail" | "chiffrage";
+// Sprint 16 Lot D — étape "rebobinage" insérée entre "detail" et "chiffrage" :
+// paramètres bobine client + calcul nb bobines / temps / coût + arbitrage
+// pré-coupé vs découpe interne.
+export type EtapeOptim =
+  | "saisie"
+  | "candidats"
+  | "detail"
+  | "rebobinage"
+  | "chiffrage";
 
 export interface ParamsSaisie {
   laize: string;
@@ -96,6 +103,7 @@ interface OptimisationPoseContextValue {
     mandrin: number,
   ) => void;
   goDetail: () => void;
+  goRebobinage: () => void;
   goChiffrage: () => void;
 
   // Contexte saisie nécessaire aux étapes 2/3 (validation somme,
@@ -289,6 +297,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     []
   );
   const goDetail = useCallback(() => setEtape("detail"), []);
+  const goRebobinage = useCallback(() => setEtape("rebobinage"), []);
   const goChiffrage = useCallback(() => setEtape("chiffrage"), []);
 
   const toggleOption = useCallback((code: string) => {
@@ -426,6 +435,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       goSaisie,
       goCandidats,
       goDetail,
+      goRebobinage,
       goChiffrage,
       quantiteTotale,
       laizeEtiqMm,
@@ -457,6 +467,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       goSaisie,
       goCandidats,
       goDetail,
+      goRebobinage,
       goChiffrage,
       quantiteTotale,
       laizeEtiqMm,
