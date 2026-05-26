@@ -1657,6 +1657,22 @@ export const postRebobinageCalculer = (payload: RebobinageCalculerRequest) =>
     body: JSON.stringify(payload),
   });
 
+// Aligné sur `MachineRebobineuseListItem` (backend/app/schemas/rebobinage.py)
+// — sélecteur UI rebobinage. `laize_max_mm` Decimal sérialisé string par
+// Pydantic v2 (pattern projet). Tri backend par nom ASC puis id ASC.
+export interface MachineRebobineuseListItem {
+  id: number;
+  nom: string;
+  marque: string | null;
+  modele: string | null;
+  laize_max_mm: string;
+  diametre_max_mm: number;
+  actif: boolean;
+}
+
+export const listMachinesRebobineuses = () =>
+  apiFetch<MachineRebobineuseListItem[]>("/api/machines-rebobineuses");
+
 export const applyRebobinageDevis = (
   devisId: number,
   payload: RebobinageCalculerRequest,

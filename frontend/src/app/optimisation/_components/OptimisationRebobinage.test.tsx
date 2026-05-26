@@ -29,7 +29,17 @@ function machine(
   nom: string,
   actif = true,
 ): MachineRebobineuseLite {
-  return { id, nom, actif };
+  // Defaults raisonnables pour les champs qui ne pilotent pas les
+  // assertions des tests (marque/modele/laize_max_mm/diametre_max_mm).
+  return {
+    id,
+    nom,
+    actif,
+    marque: null,
+    modele: null,
+    laize_max_mm: "250.00",
+    diametre_max_mm: 500,
+  };
 }
 
 // Sprint 16 Lot D câblage — tests de non-régression du composant après

@@ -3,34 +3,27 @@
 /**
  * Sprint 16 — Hook de chargement des rebobineuses du tenant courant.
  *
- * **État du contrat** : l'endpoint backend `GET /api/machines-rebobineuses`
- * n'est PAS encore mergé sur main au moment de ce commit. On expose ici
- * un contrat stable côté UI (`MachineRebobineuseLite`, états
- * loading / error / machines) et une implémentation placeholder qui
- * renvoie une seule rebobineuse virtuelle id=1.
+ * Câblé sur `GET /api/machines-rebobineuses` (router rebobinage,
+ * PR #43 backend). Scope strict tenant côté backend — un tenant ne
+ * voit JAMAIS les rebobineuses d'un autre. Tri backend par nom ASC
+ * puis id ASC : on respecte cet ordre côté UI sans re-tri local.
  *
- * Le placeholder préserve le comportement actuel de la prod (qui hardcode
- * `machine_rebobineuse_id=1`) tout en faisant disparaître la constante
- * `MACHINE_REBOBINEUSE_ID_DEFAUT` du composant. Quand CC #1 mergera
- * l'endpoint, le câblage final = remplacer le corps de ce hook par un
- * `useEffect + fetch /api/machines-rebobineuses` ; le composant
- * consommateur et ses tests restent inchangés.
- *
- * Champs exposés volontairement minimaux (nom + actif) pour permettre à
- * l'UI de rendre un select sans avoir à connaître les détails moteur
- * (vitesse_pratique_m_min, cout_horaire_eur, etc. — ces champs restent
- * côté backend pour le calcul).
+ * Le hook expose une signature minimaliste consommée par
+ * `OptimisationRebobinage` : `{ machines, loading, error }`. Les
+ * tests RTL mockent ce hook via `vi.mock` pour injecter les 3 cas
+ * (1 / N / 0 machines) sans dépendre du réseau réel.
  */
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
-export interface MachineRebobineuseLite {
-  id: number;
-  nom: string;
-  // `actif=false` n'est pas filtré côté UI : si le backend renvoie une
-  // machine inactive, on l'affiche tout de même mais avec un libellé
-  // visible. Le backend reste responsable du filtre par défaut.
-  actif: boolean;
-}
+import {
+  listMachinesRebobineuses,
+  type MachineRebobineuseListItem,
+} from "@/lib/api";
+
+// Type ré-exporté pour les consommateurs UI + tests — historique du
+// pré-câblage (option 3) où le contrat n'était pas encore figé.
+// Aujourd'hui aligné sur `MachineRebobineuseListItem` côté backend.
+export type MachineRebobineuseLite = MachineRebobineuseListItem;
 
 interface UseRebobineusesResult {
   machines: MachineRebobineuseLite[];
@@ -38,28 +31,32 @@ interface UseRebobineusesResult {
   error: string | null;
 }
 
-// TODO commit de câblage (suit le merge de l'endpoint backend) :
-// remplacer le corps du hook par un useEffect + fetch authentifié vers
-// /api/machines-rebobineuses. Garder la même signature de retour.
-//
-// const [machines, setMachines] = useState<MachineRebobineuseLite[]>([]);
-// const [loading, setLoading] = useState(true);
-// const [error, setError] = useState<string | null>(null);
-// useEffect(() => { ... fetch ... }, []);
-// return { machines, loading, error };
-const PLACEHOLDER_MACHINES: MachineRebobineuseLite[] = [
-  {
-    id: 1,
-    // Libellé identifiable : l'opérateur sait que ce n'est pas une
-    // rebobineuse de son parc tant que l'endpoint n'est pas câblé.
-    nom: "Rebobineuse par défaut (en attente du parc tenant)",
-    actif: true,
-  },
-];
-
 export function useRebobineusesDuTenant(): UseRebobineusesResult {
-  // useMemo pour stabiliser la référence et éviter de re-déclencher les
-  // useEffect consommateurs à chaque render.
-  const machines = useMemo(() => PLACEHOLDER_MACHINES, []);
-  return { machines, loading: false, error: null };
+  const [machines, setMachines] = useState<MachineRebobineuseLite[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    listMachinesRebobineuses()
+      .then((rows) => {
+        if (cancelled) return;
+        setMachines(rows);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Erreur inconnue");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { machines, loading, error };
 }
