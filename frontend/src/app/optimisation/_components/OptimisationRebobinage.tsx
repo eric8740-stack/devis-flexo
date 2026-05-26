@@ -45,6 +45,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+import { useClientsListe } from "./useClientsListe";
 import { useOptimisationPose } from "./OptimisationPoseStore";
 import { useRebobineusesDuTenant } from "./useRebobineusesDuTenant";
 
@@ -86,7 +87,23 @@ export function OptimisationRebobinage() {
     goChiffrage,
     setRebobinage,
     rebobinageRequest,
+    clientSelectionne,
+    setClientSelectionne,
+    sensEnroulementClient,
+    setSensEnroulementClient,
   } = useOptimisationPose();
+
+  // ──────────────────────────────────────────────────────────────────
+  // Sélecteur client en tête (Sprint 16 auto-fill).
+  // Source de vérité : le store ; ce composant ne fait que lire/écrire
+  // `clientSelectionne` qui sera aussi consommé par OptimisationChiffrage
+  // pour pré-remplir son select et propager `client_id` au POST devis.
+  // ──────────────────────────────────────────────────────────────────
+  const {
+    clients,
+    loading: clientsLoading,
+    error: clientsError,
+  } = useClientsListe();
 
   // ──────────────────────────────────────────────────────────────────
   // Sélection rebobineuse (correctif fin du hardcode id=1).
@@ -112,31 +129,67 @@ export function OptimisationRebobinage() {
   }, [machineRebobineuseId, rebobineuses]);
 
   // ──────────────────────────────────────────────────────────────────
-  // Pré-remplissage : si le store contient déjà un request rebobinage
-  // (retour depuis l'étape chiffrage par exemple), on restore les
-  // inputs ; sinon on initialise depuis le brief client + saisie.
+  // Pré-remplissage initial (au mount). Ordre de priorité :
+  //   1. valeur déjà saisie dans le store rebobinage (retour depuis
+  //      l'étape chiffrage)
+  //   2. profil rebobinage du client sélectionné (Sprint 16 auto-fill)
+  //   3. brief client de la saisie étape 1 / mandrin choisi étape 1
+  // L'utilisateur peut overrider chaque valeur via les inputs.
   // ──────────────────────────────────────────────────────────────────
   const initialMandrin =
-    rebobinageRequest?.profil_client.diametre_mandrin_mm ?? mandrinMm;
+    rebobinageRequest?.profil_client.diametre_mandrin_mm ??
+    clientSelectionne?.diametre_mandrin_mm ??
+    mandrinMm;
   const initialDiamMax =
     rebobinageRequest?.profil_client.diametre_max_bobine_mm !== undefined &&
     rebobinageRequest?.profil_client.diametre_max_bobine_mm !== null
       ? String(rebobinageRequest.profil_client.diametre_max_bobine_mm)
-      : briefClient.diametre_max_bobine_mm !== null
-        ? String(briefClient.diametre_max_bobine_mm)
-        : "";
+      : clientSelectionne?.diametre_max_bobine_mm != null
+        ? String(clientSelectionne.diametre_max_bobine_mm)
+        : briefClient.diametre_max_bobine_mm !== null
+          ? String(briefClient.diametre_max_bobine_mm)
+          : "";
   const initialNbEtiq =
     rebobinageRequest?.profil_client.nb_etiq_par_bobine_fixe != null
       ? String(rebobinageRequest.profil_client.nb_etiq_par_bobine_fixe)
-      : briefClient.nb_etiquettes_par_rouleau !== null
-        ? String(briefClient.nb_etiquettes_par_rouleau)
-        : "";
+      : clientSelectionne?.nb_etiq_par_bobine_fixe != null
+        ? String(clientSelectionne.nb_etiq_par_bobine_fixe)
+        : briefClient.nb_etiquettes_par_rouleau !== null
+          ? String(briefClient.nb_etiquettes_par_rouleau)
+          : "";
 
   const [diametreMandrin, setDiametreMandrin] =
     useState<number>(initialMandrin);
   const [diametreMaxBobine, setDiametreMaxBobine] =
     useState<string>(initialDiamMax);
   const [nbEtiqParBobine, setNbEtiqParBobine] = useState<string>(initialNbEtiq);
+
+  // Sprint 16 auto-fill — quand l'utilisateur change le client en cours
+  // de session (sélecteur en tête), on remet à plat les 3 inputs avec
+  // les nouvelles valeurs profil. Comportement explicite et prévisible :
+  // changer de client réinitialise les inputs au profil de ce client ;
+  // l'opérateur peut ensuite overrider à la main.
+  // Le 1er mount est couvert par les `initial*` ci-dessus — on évite la
+  // double application via une ref qui track le dernier client appliqué.
+  const lastAppliedClientId = useState<number | null>(
+    clientSelectionne?.id ?? null,
+  );
+  useEffect(() => {
+    const currentId = clientSelectionne?.id ?? null;
+    if (currentId === lastAppliedClientId[0]) return;
+    lastAppliedClientId[1](currentId);
+    if (clientSelectionne === null) return;
+    if (clientSelectionne.diametre_mandrin_mm !== null) {
+      setDiametreMandrin(clientSelectionne.diametre_mandrin_mm);
+    }
+    if (clientSelectionne.diametre_max_bobine_mm !== null) {
+      setDiametreMaxBobine(String(clientSelectionne.diametre_max_bobine_mm));
+    }
+    if (clientSelectionne.nb_etiq_par_bobine_fixe !== null) {
+      setNbEtiqParBobine(String(clientSelectionne.nb_etiq_par_bobine_fixe));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientSelectionne]);
 
   // Tarifs mandrins (defaults projet UI tant que pas de catalogue tenant).
   const [prixPreCoupe, setPrixPreCoupe] = useState<string>(
@@ -343,6 +396,67 @@ export function OptimisationRebobinage() {
       </header>
 
       {/* ────────────────────────────────────────────────────────── */}
+      {/* Sprint 16 — Sélecteur client : alimente l'auto-remplissage   */}
+      {/* des paramètres bobine + propage `client_id` au devis final. */}
+      {/* ────────────────────────────────────────────────────────── */}
+      <Card data-testid="client-section">
+        <CardHeader>
+          <CardTitle>Client du devis</CardTitle>
+          <CardDescription>
+            Le profil rebobinage du client sélectionné pré-remplit les
+            paramètres bobine ci-dessous. Override possible à la main.
+            Le client est aussi propagé à l&apos;étape chiffrage finale.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {clientsLoading && (
+            <p className="text-sm text-muted-foreground">
+              Chargement des clients…
+            </p>
+          )}
+          {!clientsLoading && clientsError && (
+            <div
+              role="alert"
+              data-testid="clients-erreur"
+              className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              Chargement impossible : {clientsError}
+            </div>
+          )}
+          {!clientsLoading && !clientsError && (
+            <div className="space-y-2">
+              <Label htmlFor="rebob-client">Client</Label>
+              <select
+                id="rebob-client"
+                data-testid="client-select"
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={clientSelectionne?.id ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value
+                    ? Number(e.target.value)
+                    : null;
+                  const next = id !== null
+                    ? clients.find((c) => c.id === id) ?? null
+                    : null;
+                  setClientSelectionne(next);
+                }}
+              >
+                <option value="">— Aucun client sélectionné —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.raison_sociale}
+                  </option>
+                ))}
+              </select>
+              {clientSelectionne && (
+                <ClientExigencesBandeau client={clientSelectionne} />
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ────────────────────────────────────────────────────────── */}
       {/* Rebobineuse — sélection scopée tenant (fin du hardcode id=1) */}
       {/* ────────────────────────────────────────────────────────── */}
       <Card data-testid="rebobineuse-section">
@@ -478,7 +592,7 @@ export function OptimisationRebobinage() {
                 Pré-rempli depuis le brief client. Requis pour le calcul.
               </p>
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2">
               <Label htmlFor="rebob-nb-etiq">
                 Nb étiquettes / bobine (optionnel)
               </Label>
@@ -492,8 +606,40 @@ export function OptimisationRebobinage() {
                 placeholder="laisser vide pour optimisation auto"
               />
               <p className="text-xs text-muted-foreground">
-                Pré-rempli depuis le brief. Si vide, le moteur calcule le
-                nombre optimal pour saturer le Ø max bobine.
+                Pré-rempli depuis le profil client / le brief. Si vide,
+                le moteur calcule le nombre optimal pour saturer le Ø
+                max bobine.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rebob-sens-enroulement">
+                Sens d&apos;enroulement (1..8)
+              </Label>
+              <Input
+                id="rebob-sens-enroulement"
+                data-testid="sens-enroulement-input"
+                type="number"
+                min={1}
+                max={8}
+                step={1}
+                value={sensEnroulementClient ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") {
+                    setSensEnroulementClient(null);
+                    return;
+                  }
+                  const n = parseInt(v, 10);
+                  setSensEnroulementClient(
+                    Number.isFinite(n) ? n : null,
+                  );
+                }}
+                placeholder="ex: 3"
+              />
+              <p className="text-xs text-muted-foreground">
+                Pré-rempli depuis le profil client. Stockage brut
+                (convention SE1-SE8) ; aucune logique de rotation appliquée
+                ici. Propagé dans le devis pour traçabilité.
               </p>
             </div>
           </div>
@@ -878,6 +1024,80 @@ function ModeArbitrageCard({
             })}{" "}
             %
           </strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Bandeau "Exigences client" (Sprint 16 auto-fill — Q2 tranchée).
+// Affiche en read-only les 5 champs profil non-consommés par le moteur
+// de calcul rebobinage : 3 booléens (uniquement si true) + 2 textes
+// (uniquement si renseignés). Si rien à montrer → pas de bandeau.
+// L'édition se fait sur la fiche client, pas ici.
+// ──────────────────────────────────────────────────────────────────
+function ClientExigencesBandeau({
+  client,
+}: {
+  client: import("@/lib/api").Client;
+}) {
+  const exigencesBool: { label: string; testId: string }[] = [];
+  if (client.marquage_bobine_requis) {
+    exigencesBool.push({
+      label: "Marquage bobine requis",
+      testId: "exigence-marquage",
+    });
+  }
+  if (client.mandrin_fourni_par_client) {
+    exigencesBool.push({
+      label: "Mandrin fourni par le client",
+      testId: "exigence-mandrin",
+    });
+  }
+  if (client.film_protection_requis) {
+    exigencesBool.push({
+      label: "Film protection requis",
+      testId: "exigence-film",
+    });
+  }
+
+  const aQuelqueChose =
+    exigencesBool.length > 0 ||
+    (client.marquage_bobine_format !== null &&
+      client.marquage_bobine_format.length > 0) ||
+    (client.conditionnement_souhaite !== null &&
+      client.conditionnement_souhaite.length > 0);
+
+  if (!aQuelqueChose) return null;
+
+  return (
+    <div
+      data-testid="exigences-client-bandeau"
+      className="mt-3 space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide">
+        Exigences client (édition sur la fiche client)
+      </div>
+      {exigencesBool.length > 0 && (
+        <ul className="space-y-1">
+          {exigencesBool.map((e) => (
+            <li key={e.testId} data-testid={e.testId}>
+              ☑ {e.label}
+            </li>
+          ))}
+        </ul>
+      )}
+      {client.marquage_bobine_format && (
+        <div data-testid="exigence-marquage-format">
+          <span className="font-medium">Format du marquage :</span>{" "}
+          {client.marquage_bobine_format}
+        </div>
+      )}
+      {client.conditionnement_souhaite && (
+        <div data-testid="exigence-conditionnement">
+          <span className="font-medium">Conditionnement souhaité :</span>{" "}
+          {client.conditionnement_souhaite}
         </div>
       )}
     </div>

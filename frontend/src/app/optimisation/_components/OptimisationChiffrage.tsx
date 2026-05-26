@@ -41,6 +41,7 @@ import {
 } from "@/lib/api";
 
 import { briefClientToPayload } from "./brief-client/store-helpers";
+import { useClientsListe } from "./useClientsListe";
 import { useOptimisationPose } from "./OptimisationPoseStore";
 
 function sensEnroulementToInt(se: string): number {
@@ -75,9 +76,15 @@ export function OptimisationChiffrage() {
     devisExistantId,
     devisExistantNumero,
     briefClient,
+    clientSelectionne,
+    setClientSelectionne,
+    sensEnroulementClient,
   } = useOptimisationPose();
   const { toast } = useToast();
   const router = useRouter();
+  // Sprint 16 auto-fill — liste partagée (cache module) avec
+  // OptimisationRebobinage. Pas de double fetch.
+  const { clients, loading: clientsLoading } = useClientsListe();
 
   const enModeEdition = devisExistantId !== null;
 
@@ -133,6 +140,12 @@ export function OptimisationChiffrage() {
         margeOverridePct.trim() !== "" && !Number.isNaN(margeNum)
           ? margeNum
           : null,
+      // Sprint 16 auto-fill — sens enroulement profil propagé pour
+      // traçabilité (entier 1..8 ou null). Non consommé par
+      // /api/rebobinage/calculer (contrat backend inchangé) ; le
+      // backend accepte les clés inconnues dans payload_input (dict
+      // Pydantic non typé, cf. DevisCreate schemas/devis_persist.py).
+      sens_enroulement: sensEnroulementClient,
     };
   }, [
     selection,
@@ -141,6 +154,7 @@ export function OptimisationChiffrage() {
     mandrinMm,
     optionsCodes,
     margeOverridePct,
+    sensEnroulementClient,
   ]);
 
   const lotsPayload = useMemo<LotProductionCreatePayload[]>(
@@ -218,6 +232,11 @@ export function OptimisationChiffrage() {
       let devisId: number;
       let devisNumero: string;
 
+      // Sprint 16 auto-fill — client_id propagé depuis le store
+      // (alimenté par le sélecteur en tête de l'étape rebobinage et/ou
+      // de cette étape chiffrage — source de vérité unique).
+      const clientIdPayload = clientSelectionne?.id ?? null;
+
       if (enModeEdition && devisExistantId !== null) {
         const updatePayload: DevisUpdate = {
           payload_input: payloadInput,
@@ -225,6 +244,7 @@ export function OptimisationChiffrage() {
           quantite_totale: quantiteTotale,
           lots: lotsPayload,
           reduction_pct: reductionValide ? reductionNum : 0,
+          client_id: clientIdPayload,
           ...briefPayload,
         };
         const devis = await updateDevis(devisExistantId, updatePayload);
@@ -241,6 +261,7 @@ export function OptimisationChiffrage() {
           statut: "brouillon",
           quantite_totale: quantiteTotale,
           lots: lotsPayload,
+          client_id: clientIdPayload,
           ...briefPayload,
         };
         const devis = await createDevis(createPayload);
@@ -332,6 +353,53 @@ export function OptimisationChiffrage() {
           ← Retour rebobinage
         </Button>
       </header>
+
+      {/* Sprint 16 auto-fill — sélecteur client synchronisé avec
+          l'étape rebobinage via le store (source de vérité unique).
+          Affiché ici aussi pour permettre une dernière correction
+          avant POST/PUT devis. */}
+      <Card data-testid="chiffrage-client-section">
+        <CardHeader>
+          <CardTitle>Client du devis</CardTitle>
+          <CardDescription>
+            Synchronisé avec le sélecteur de l&apos;étape rebobinage —
+            un seul client, deux points d&apos;accès.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {clientsLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Chargement des clients…
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="chiffrage-client">Client</Label>
+              <select
+                id="chiffrage-client"
+                data-testid="chiffrage-client-select"
+                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={clientSelectionne?.id ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value
+                    ? Number(e.target.value)
+                    : null;
+                  const next = id !== null
+                    ? clients.find((c) => c.id === id) ?? null
+                    : null;
+                  setClientSelectionne(next);
+                }}
+              >
+                <option value="">— Aucun client sélectionné —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.raison_sociale}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* --- Options de fabrication globales --- */}

@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
 
 import type {
+  Client,
   OptimisationConfigOut,
   RebobinageResultat,
 } from "@/lib/api";
@@ -23,6 +24,40 @@ const useRebobineusesMock = vi.fn();
 vi.mock("./useRebobineusesDuTenant", () => ({
   useRebobineusesDuTenant: () => useRebobineusesMock(),
 }));
+
+// Mock du hook useClientsListe — par défaut liste vide (= comportement
+// "pas de client", préserve les tests existants). Les tests d'auto-fill
+// Sprint 16 surchargent via mockReturnValue pour injecter des clients.
+const useClientsListeMock = vi.fn();
+vi.mock("./useClientsListe", () => ({
+  useClientsListe: () => useClientsListeMock(),
+}));
+
+function buildClient(overrides: Partial<Client> = {}): Client {
+  return {
+    id: 1,
+    raison_sociale: "ACME Étiquettes",
+    siret: null,
+    adresse_fact: null,
+    cp_fact: null,
+    ville_fact: null,
+    contact: null,
+    email: null,
+    tel: null,
+    segment: null,
+    date_creation: null,
+    marquage_bobine_requis: false,
+    mandrin_fourni_par_client: false,
+    film_protection_requis: false,
+    diametre_mandrin_mm: null,
+    diametre_max_bobine_mm: null,
+    nb_etiq_par_bobine_fixe: null,
+    sens_enroulement: null,
+    marquage_bobine_format: null,
+    conditionnement_souhaite: null,
+    ...overrides,
+  };
+}
 
 function machine(
   id: number,
@@ -168,6 +203,10 @@ function setupRebobinage(opts: {
     diametre_max_bobine_mm?: number | null;
   };
   mandrinInitial?: number;
+  // Sprint 16 — client pré-sélectionné dans le store avant le mount
+  // de OptimisationRebobinage (simule le sélecteur déjà utilisé OU
+  // l'hydratation depuis un devis existant).
+  clientInitial?: Client | null;
 }) {
   function Inner() {
     const {
@@ -178,9 +217,13 @@ function setupRebobinage(opts: {
       toggleSelection,
       setQuantiteLot,
       setMatiereLot,
+      setClientSelectionne,
     } = useOptimisationPose();
     useEffect(() => {
       if (opts.briefClient) setBriefClient(opts.briefClient);
+      if (opts.clientInitial !== undefined) {
+        setClientSelectionne(opts.clientInitial);
+      }
       const candidat = buildFakeCandidat();
       goCandidats([candidat], 12000, 100, 80, opts.mandrinInitial ?? 76);
       toggleSelection(candidat);
@@ -262,6 +305,14 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
     // hardcode id=1" plus bas surchargent via mockReturnValue.
     useRebobineusesMock.mockReturnValue({
       machines: [machine(1, "Daco D250")],
+      loading: false,
+      error: null,
+    });
+    // Par défaut : liste clients vide — préserve les tests existants
+    // qui ne testent pas l'auto-fill. Les tests Sprint 16 auto-fill
+    // surchargent via useClientsListeMock.mockReturnValue.
+    useClientsListeMock.mockReturnValue({
+      clients: [],
       loading: false,
       error: null,
     });
@@ -515,5 +566,249 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
       "rebobinage-continuer",
     ) as HTMLButtonElement;
     expect(continuer).toBeDisabled();
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Sprint 16 auto-fill — profil rebobinage client
+  // ──────────────────────────────────────────────────────────────────
+
+  it("auto-fill : profil client rempli prend priorité sur le brief client (3 numériques + sens_enroulement)", async () => {
+    // Brief client distinct du profil → on prouve que le profil prime.
+    const client = buildClient({
+      id: 42,
+      diametre_mandrin_mm: 40,
+      diametre_max_bobine_mm: 280,
+      nb_etiq_par_bobine_fixe: 2200,
+      sens_enroulement: 4,
+    });
+    useClientsListeMock.mockReturnValue({
+      clients: [client],
+      loading: false,
+      error: null,
+    });
+    setupRebobinage({
+      briefClient: {
+        nb_etiquettes_par_rouleau: 9999, // ignoré au profit du profil
+        diametre_max_bobine_mm: 600, // ignoré au profit du profil
+      },
+      mandrinInitial: 76, // ignoré au profit du profil
+      clientInitial: client,
+    });
+
+    // Les 3 numériques prennent les valeurs profil, pas brief / saisie.
+    const diamMax = (await screen.findByLabelText(
+      /Ø Max bobine livrée/i,
+    )) as HTMLInputElement;
+    const nbEtiq = screen.getByLabelText(
+      /Nb étiquettes \/ bobine/i,
+    ) as HTMLInputElement;
+    const mandrin = screen.getByLabelText(
+      /Ø Mandrin bobine/i,
+    ) as HTMLSelectElement;
+    expect(diamMax.value).toBe("280");
+    expect(nbEtiq.value).toBe("2200");
+    expect(mandrin.value).toBe("40");
+
+    // sens_enroulement profil pré-rempli dans l'input dédié.
+    const sens = screen.getByTestId(
+      "sens-enroulement-input",
+    ) as HTMLInputElement;
+    expect(sens.value).toBe("4");
+  });
+
+  it("auto-fill + override : la valeur overridée part au POST /api/rebobinage/calculer (pas la valeur profil)", async () => {
+    const client = buildClient({
+      id: 42,
+      diametre_mandrin_mm: 40,
+      diametre_max_bobine_mm: 280,
+      nb_etiq_par_bobine_fixe: 2200,
+    });
+    useClientsListeMock.mockReturnValue({
+      clients: [client],
+      loading: false,
+      error: null,
+    });
+    setupRebobinage({
+      briefClient: { diametre_max_bobine_mm: 600 },
+      clientInitial: client,
+    });
+
+    const diamMax = (await screen.findByLabelText(
+      /Ø Max bobine livrée/i,
+    )) as HTMLInputElement;
+    await waitFor(() => expect(diamMax.value).toBe("280"));
+
+    // Override : on remplace 280 par 350.
+    await userEvent.clear(diamMax);
+    await userEvent.type(diamMax, "350");
+
+    // Recalcul manuel pour vérifier le body envoyé.
+    await userEvent.click(screen.getByTestId("rebobinage-recalculer"));
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.find((c) =>
+          String(c[0]).includes("/api/rebobinage/calculer"),
+        ),
+      ).toBeTruthy(),
+    );
+    const lastCalc = [...fetchSpy.mock.calls]
+      .reverse()
+      .find((c) => String(c[0]).includes("/api/rebobinage/calculer"));
+    const body = JSON.parse((lastCalc?.[1] as RequestInit).body as string);
+    expect(body.profil_client.diametre_max_bobine_mm).toBe(350);
+  });
+
+  it("pas de client sélectionné : aucun auto-fill, comportement actuel préservé (brief + saisie)", async () => {
+    // Pas de clientInitial → comportement Lot D : auto-fill depuis brief +
+    // saisie étape 1 uniquement.
+    setupRebobinage({
+      briefClient: {
+        nb_etiquettes_par_rouleau: 1500,
+        diametre_max_bobine_mm: 250,
+      },
+      mandrinInitial: 40,
+    });
+
+    const diamMax = (await screen.findByLabelText(
+      /Ø Max bobine livrée/i,
+    )) as HTMLInputElement;
+    const nbEtiq = screen.getByLabelText(
+      /Nb étiquettes \/ bobine/i,
+    ) as HTMLInputElement;
+    const mandrin = screen.getByLabelText(
+      /Ø Mandrin bobine/i,
+    ) as HTMLSelectElement;
+    expect(diamMax.value).toBe("250");
+    expect(nbEtiq.value).toBe("1500");
+    expect(mandrin.value).toBe("40");
+
+    // Pas de bandeau exigences (pas de client).
+    expect(screen.queryByTestId("exigences-client-bandeau")).toBeNull();
+    // L'input sens enroulement est vide (pas de profil).
+    const sens = screen.getByTestId(
+      "sens-enroulement-input",
+    ) as HTMLInputElement;
+    expect(sens.value).toBe("");
+  });
+
+  it("bandeau exigences : visible si au moins une exigence client renseignée, masqué sinon", async () => {
+    // 1. Client SANS aucune exigence : bandeau absent.
+    const clientVide = buildClient({ id: 1, diametre_max_bobine_mm: 300 });
+    useClientsListeMock.mockReturnValue({
+      clients: [clientVide],
+      loading: false,
+      error: null,
+    });
+    const { unmount } = setupRebobinage({ clientInitial: clientVide });
+    await screen.findByTestId("client-section");
+    expect(screen.queryByTestId("exigences-client-bandeau")).toBeNull();
+    unmount();
+
+    // 2. Client AVEC exigences : bandeau visible avec les bonnes lignes.
+    const clientExigeant = buildClient({
+      id: 2,
+      diametre_max_bobine_mm: 300,
+      marquage_bobine_requis: true,
+      film_protection_requis: true,
+      mandrin_fourni_par_client: false, // false → pas dans la liste
+      marquage_bobine_format: "Étiquette A6",
+      conditionnement_souhaite: null, // null → pas dans la liste
+    });
+    useClientsListeMock.mockReturnValue({
+      clients: [clientExigeant],
+      loading: false,
+      error: null,
+    });
+    setupRebobinage({ clientInitial: clientExigeant });
+
+    const bandeau = await screen.findByTestId("exigences-client-bandeau");
+    expect(
+      within(bandeau).getByTestId("exigence-marquage"),
+    ).toBeInTheDocument();
+    expect(
+      within(bandeau).getByTestId("exigence-film"),
+    ).toBeInTheDocument();
+    expect(
+      within(bandeau).getByTestId("exigence-marquage-format"),
+    ).toHaveTextContent("Étiquette A6");
+    // Booléens à false ou textes null → absents du bandeau.
+    expect(
+      within(bandeau).queryByTestId("exigence-mandrin"),
+    ).toBeNull();
+    expect(
+      within(bandeau).queryByTestId("exigence-conditionnement"),
+    ).toBeNull();
+  });
+
+  it("sens_enroulement : pré-rempli depuis le profil → présent dans le store, override propagé", async () => {
+    // Spy sur sensEnroulementClient du store via un sous-composant.
+    function SensSpy() {
+      const { sensEnroulementClient } = useOptimisationPose();
+      return (
+        <div data-testid="store-sens">
+          {sensEnroulementClient === null ? "null" : String(sensEnroulementClient)}
+        </div>
+      );
+    }
+    const client = buildClient({
+      id: 5,
+      diametre_max_bobine_mm: 300,
+      sens_enroulement: 7,
+    });
+    useClientsListeMock.mockReturnValue({
+      clients: [client],
+      loading: false,
+      error: null,
+    });
+
+    function Inner() {
+      const {
+        etape,
+        goRebobinage,
+        goCandidats,
+        toggleSelection,
+        setQuantiteLot,
+        setMatiereLot,
+        setClientSelectionne,
+      } = useOptimisationPose();
+      useEffect(() => {
+        setClientSelectionne(client);
+        const candidat = buildFakeCandidat();
+        goCandidats([candidat], 12000, 100, 80, 76);
+        toggleSelection(candidat);
+        const idCandidat = `${candidat.cylindre_id}-${candidat.machine_id}-${candidat.nb_poses_dev}x${candidat.nb_poses_laize}-${candidat.sens_enroulement}`;
+        setQuantiteLot(idCandidat, 12000);
+        setMatiereLot(idCandidat, 1);
+        goRebobinage();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return (
+        <>
+          <SensSpy />
+          {etape === "rebobinage" && <OptimisationRebobinage />}
+        </>
+      );
+    }
+    render(
+      <OptimisationPoseProvider>
+        <Inner />
+      </OptimisationPoseProvider>,
+    );
+
+    // Pré-rempli depuis profil.
+    await waitFor(() =>
+      expect(screen.getByTestId("store-sens")).toHaveTextContent("7"),
+    );
+    const sens = screen.getByTestId(
+      "sens-enroulement-input",
+    ) as HTMLInputElement;
+    expect(sens.value).toBe("7");
+
+    // Override : 7 → 2. Le store reflète l'override.
+    await userEvent.clear(sens);
+    await userEvent.type(sens, "2");
+    await waitFor(() =>
+      expect(screen.getByTestId("store-sens")).toHaveTextContent("2"),
+    );
   });
 });
