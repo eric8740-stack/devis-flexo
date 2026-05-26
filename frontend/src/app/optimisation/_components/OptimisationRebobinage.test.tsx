@@ -13,6 +13,24 @@ import {
   OptimisationPoseProvider,
   useOptimisationPose,
 } from "./OptimisationPoseStore";
+import type { MachineRebobineuseLite } from "./useRebobineusesDuTenant";
+
+// Mock du hook useRebobineusesDuTenant — permet d'injecter les 3 cas
+// (1 machine, N machines, 0 machine) sans dépendre du placeholder du
+// hook. Le câblage final remplacera le corps du hook par un fetch ;
+// la signature de retour testée ici restera identique.
+const useRebobineusesMock = vi.fn();
+vi.mock("./useRebobineusesDuTenant", () => ({
+  useRebobineusesDuTenant: () => useRebobineusesMock(),
+}));
+
+function machine(
+  id: number,
+  nom: string,
+  actif = true,
+): MachineRebobineuseLite {
+  return { id, nom, actif };
+}
 
 // Sprint 16 Lot D câblage — tests de non-régression du composant après
 // remplacement des mocks par l'API réelle (POST /api/rebobinage/calculer).
@@ -229,6 +247,14 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
   beforeEach(() => {
     window.localStorage.clear();
     installFetchMock();
+    // Par défaut : 1 rebobineuse — comportement attendu par les tests
+    // existants (auto-sélection, pas de picker). Les tests "fin du
+    // hardcode id=1" plus bas surchargent via mockReturnValue.
+    useRebobineusesMock.mockReturnValue({
+      machines: [machine(1, "Daco D250")],
+      loading: false,
+      error: null,
+    });
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -393,5 +419,91 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
       expect(screen.getByTestId("calcul-nb-bobines")).toHaveTextContent("6"),
     );
     expect(screen.getByTestId("calcul-cout")).toHaveTextContent("15,42");
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Sélection rebobineuse — fin du hardcode id=1
+  // ──────────────────────────────────────────────────────────────────
+
+  it("1 rebobineuse : affichage lecture seule, pas de picker, id envoyé au calcul = id réel du tenant", async () => {
+    useRebobineusesMock.mockReturnValue({
+      machines: [machine(42, "Karlville K200 (tenant XYZ)")],
+      loading: false,
+      error: null,
+    });
+    setupRebobinage({
+      briefClient: { diametre_max_bobine_mm: 300 },
+    });
+
+    // Lecture seule + nom de la machine visible.
+    expect(
+      await screen.findByTestId("rebobineuse-unique"),
+    ).toHaveTextContent("Karlville K200 (tenant XYZ)");
+    expect(screen.queryByTestId("rebobineuse-select")).toBeNull();
+
+    // Le 1er fetch doit utiliser l'id réel (42), pas 1 hardcodé.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const firstInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    const firstBody = JSON.parse(firstInit.body as string);
+    expect(firstBody.machine_rebobineuse_id).toBe(42);
+  });
+
+  it("N rebobineuses : picker rendu, sélection d'une autre machine envoie son id au prochain calcul", async () => {
+    useRebobineusesMock.mockReturnValue({
+      machines: [
+        machine(10, "Daco D250"),
+        machine(11, "Karlville K200"),
+        machine(12, "GM rebobineuse"),
+      ],
+      loading: false,
+      error: null,
+    });
+    setupRebobinage({
+      briefClient: { diametre_max_bobine_mm: 300 },
+    });
+
+    const select = (await screen.findByTestId(
+      "rebobineuse-select",
+    )) as HTMLSelectElement;
+    expect(select.options).toHaveLength(3);
+    // Auto-sélection sur la 1ère machine.
+    expect(select.value).toBe("10");
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const firstBody = JSON.parse(
+      (fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string,
+    );
+    expect(firstBody.machine_rebobineuse_id).toBe(10);
+
+    // Bascule sur la 3e rebobineuse → re-calcul auto avec id=12.
+    await userEvent.selectOptions(select, "12");
+    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThan(1));
+    const lastBody = JSON.parse(
+      (fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1]?.[1] as RequestInit)
+        .body as string,
+    );
+    expect(lastBody.machine_rebobineuse_id).toBe(12);
+  });
+
+  it("0 rebobineuse : message clair, calcul ne part pas, bouton Continuer désactivé", async () => {
+    useRebobineusesMock.mockReturnValue({
+      machines: [],
+      loading: false,
+      error: null,
+    });
+    setupRebobinage({
+      briefClient: { diametre_max_bobine_mm: 300 },
+    });
+
+    expect(
+      await screen.findByTestId("aucune-rebobineuse"),
+    ).toHaveTextContent(/Aucune rebobineuse configurée/i);
+    // Pas de fetch déclenché tant qu'il n'y a pas de machine.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // Le bouton "Continuer vers chiffrage" doit être désactivé.
+    const continuer = screen.getByTestId(
+      "rebobinage-continuer",
+    ) as HTMLButtonElement;
+    expect(continuer).toBeDisabled();
   });
 });

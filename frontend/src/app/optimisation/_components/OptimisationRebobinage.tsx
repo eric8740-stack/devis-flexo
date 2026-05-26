@@ -46,6 +46,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useOptimisationPose } from "./OptimisationPoseStore";
+import { useRebobineusesDuTenant } from "./useRebobineusesDuTenant";
 
 const MODE_LABEL: Record<ModeRebobinageApplique, string> = {
   pre_coupe: "Pré-coupé",
@@ -72,13 +73,6 @@ const TARIFS_DEFAULTS = {
   cout_fixe_decoupe_interne_eur: "5.00",
 };
 
-// TODO commit 2 : remplacer par la liste réelle des rebobineuses du
-// tenant via un futur GET /api/machines-rebobineuses. Pour l'instant
-// le compte demo (entreprise_id=1) a 2 rebobineuses seedées par la
-// migration q1f3a5d7e9c2 — on cible la 1ère (Daco D250). Un 404 sur
-// machine_rebobineuse_id => message d'erreur dans l'UI.
-const MACHINE_REBOBINEUSE_ID_DEFAUT = 1;
-
 const MOTIF_MIN_LENGTH = 10;
 
 export function OptimisationRebobinage() {
@@ -93,6 +87,29 @@ export function OptimisationRebobinage() {
     setRebobinage,
     rebobinageRequest,
   } = useOptimisationPose();
+
+  // ──────────────────────────────────────────────────────────────────
+  // Sélection rebobineuse (correctif fin du hardcode id=1).
+  // Le hook fournit la liste des rebobineuses du tenant ; on auto-sélectionne
+  // si N=1, on rend un select si N>1, et on bloque le calcul si N=0.
+  // ──────────────────────────────────────────────────────────────────
+  const {
+    machines: rebobineuses,
+    loading: rebobineusesLoading,
+    error: rebobineusesError,
+  } = useRebobineusesDuTenant();
+
+  const [machineRebobineuseId, setMachineRebobineuseId] = useState<
+    number | null
+  >(rebobinageRequest?.machine_rebobineuse_id ?? null);
+
+  // Auto-sélection de la 1ère rebobineuse une fois la liste chargée, si
+  // rien n'a été choisi via un retour-depuis-chiffrage.
+  useEffect(() => {
+    if (machineRebobineuseId === null && rebobineuses.length > 0) {
+      setMachineRebobineuseId(rebobineuses[0]!.id);
+    }
+  }, [machineRebobineuseId, rebobineuses]);
 
   // ──────────────────────────────────────────────────────────────────
   // Pré-remplissage : si le store contient déjà un request rebobinage
@@ -179,6 +196,11 @@ export function OptimisationRebobinage() {
   // ──────────────────────────────────────────────────────────────────
   const buildRequest = useCallback((): RebobinageCalculerRequest | null => {
     if (nbEtiquettesTotal <= 0 || diametreMaxValide === null) return null;
+    // Garde "0 rebobineuse" : sans machine sélectionnée, on ne peut PAS
+    // partir au backend (404 garanti). Le composant affiche un message
+    // d'erreur explicite plus bas, mais on coupe ici pour ne pas tenter
+    // un fetch certain de tomber.
+    if (machineRebobineuseId === null) return null;
     const mode: ModeRebobinageIn = forcerMode ? modeForce : "auto";
     const motif = forcerMode ? motifForce.trim() : null;
     return {
@@ -192,7 +214,7 @@ export function OptimisationRebobinage() {
         diametre_max_bobine_mm: diametreMaxValide,
         nb_etiq_par_bobine_fixe: nbEtiqBobineFixe,
       },
-      machine_rebobineuse_id: MACHINE_REBOBINEUSE_ID_DEFAUT,
+      machine_rebobineuse_id: machineRebobineuseId,
       tarifs_mandrins: {
         prix_pre_coupe_par_mandrin_eur: prixPreCoupe,
         cout_decoupe_interne_par_mandrin_eur: coutDecoupeInterne,
@@ -204,6 +226,7 @@ export function OptimisationRebobinage() {
   }, [
     nbEtiquettesTotal,
     diametreMaxValide,
+    machineRebobineuseId,
     forcerMode,
     modeForce,
     motifForce,
@@ -246,25 +269,20 @@ export function OptimisationRebobinage() {
     }
   }, [buildRequest]);
 
-  // Calcul initial une fois au mount si on a tout ce qu'il faut.
-  // Recalcul manuel via le bouton ; pas d'auto-recalcul sur change pour
-  // éviter de spammer l'API et pour laisser l'opérateur valider sa saisie.
+  // Calcul auto déclenché par l'arrivée d'une rebobineuse sélectionnée
+  // (auto-sélection initiale OU changement utilisateur dans le select).
+  // Recalcul des autres paramètres = bouton "Recalculer" manuel pour ne
+  // pas spammer l'API à chaque frappe d'input.
   useEffect(() => {
-    if (result === null && rebobinageRequest === null && diametreMaxValide) {
+    if (
+      !calculLoading &&
+      diametreMaxValide &&
+      machineRebobineuseId !== null
+    ) {
       void calculer();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Si on revient sur l'étape avec un request déjà stocké, on relance le
-  // calcul une seule fois pour afficher le résultat (le store ne tient
-  // pas le résultat séparé si on a effacé local state).
-  useEffect(() => {
-    if (result === null && rebobinageRequest !== null && !calculLoading) {
-      void calculer();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [machineRebobineuseId]);
 
   const modeRetenuFinal: ModeRebobinageApplique = useMemo(() => {
     if (result?.arbitrage.mode_applique) {
@@ -323,6 +341,92 @@ export function OptimisationRebobinage() {
           obligatoire (≥{MOTIF_MIN_LENGTH} caractères).
         </p>
       </header>
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* Rebobineuse — sélection scopée tenant (fin du hardcode id=1) */}
+      {/* ────────────────────────────────────────────────────────── */}
+      <Card data-testid="rebobineuse-section">
+        <CardHeader>
+          <CardTitle>Rebobineuse</CardTitle>
+          <CardDescription>
+            Machine du parc qui exécutera le rebobinage. Le calcul de
+            temps et de coût utilise sa vitesse pratique et son coût
+            horaire.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {rebobineusesLoading && (
+            <p className="text-sm text-muted-foreground">
+              Chargement des rebobineuses du parc…
+            </p>
+          )}
+          {!rebobineusesLoading && rebobineusesError && (
+            <div
+              role="alert"
+              data-testid="rebobineuses-erreur"
+              className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              Chargement impossible : {rebobineusesError}
+            </div>
+          )}
+          {!rebobineusesLoading &&
+            !rebobineusesError &&
+            rebobineuses.length === 0 && (
+              <div
+                role="alert"
+                data-testid="aucune-rebobineuse"
+                className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+              >
+                Aucune rebobineuse configurée pour ce tenant. Le calcul
+                rebobinage n&apos;est pas disponible. Configurez au moins
+                une rebobineuse dans le parc avant de continuer.
+              </div>
+            )}
+          {!rebobineusesLoading &&
+            !rebobineusesError &&
+            rebobineuses.length === 1 && (
+              <div
+                data-testid="rebobineuse-unique"
+                className="rounded-md border border-border bg-muted/30 p-3 text-sm"
+              >
+                Rebobineuse utilisée :{" "}
+                <strong>{rebobineuses[0]!.nom}</strong>
+                {!rebobineuses[0]!.actif && (
+                  <span className="ml-2 rounded bg-gray-200 px-2 py-0.5 text-xs text-gray-700">
+                    Désactivée
+                  </span>
+                )}
+              </div>
+            )}
+          {!rebobineusesLoading &&
+            !rebobineusesError &&
+            rebobineuses.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="rebob-machine">Rebobineuse du parc</Label>
+                <select
+                  id="rebob-machine"
+                  data-testid="rebobineuse-select"
+                  className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={machineRebobineuseId ?? ""}
+                  onChange={(e) =>
+                    setMachineRebobineuseId(Number(e.target.value))
+                  }
+                >
+                  {rebobineuses.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nom}
+                      {!r.actif ? " (désactivée)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Le calcul se recalcule automatiquement au changement
+                  de machine.
+                </p>
+              </div>
+            )}
+        </CardContent>
+      </Card>
 
       {/* ────────────────────────────────────────────────────────── */}
       {/* Paramètres bobine client (pré-remplis)                      */}
@@ -650,7 +754,11 @@ export function OptimisationRebobinage() {
         <Button
           size="lg"
           onClick={() => void validerEtContinuer()}
-          disabled={calculLoading}
+          disabled={
+            calculLoading ||
+            machineRebobineuseId === null ||
+            rebobineuses.length === 0
+          }
           data-testid="rebobinage-continuer"
           className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg disabled:opacity-50"
         >
