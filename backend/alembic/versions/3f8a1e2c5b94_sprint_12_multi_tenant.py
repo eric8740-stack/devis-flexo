@@ -1,7 +1,7 @@
 """Sprint 12 multi-tenant — add user table + scope all tables by entreprise
 
 Revision ID: 3f8a1e2c5b94
-Revises: 7c2e4d1f9a3b
+Revises: p35a1c7d2f9e8
 Create Date: 2026-05-04 14:00:00.000000
 
 Sprint 12 MVP multi-tenant — fondation auth + scope par entreprise.
@@ -49,7 +49,13 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "3f8a1e2c5b94"
-down_revision: Union[str, Sequence[str], None] = "7c2e4d1f9a3b"
+# Issue #35 fix (2026-05-26) — re-pointe vers la migration corrective
+# `p35a1c7d2f9e8` qui insère un stub entreprise(id=1) AVANT le
+# backfill `UPDATE tarif_poste SET entreprise_id = 1` de cette
+# migration. Sans ce stub, la FK CASCADE ajoutée plus bas plante sur
+# DB Postgres vierge (Issue #35). En prod, alembic_version est déjà
+# au-delà de cette migration → no-op de la chaîne ré-écrite.
+down_revision: Union[str, Sequence[str], None] = "p35a1c7d2f9e8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
