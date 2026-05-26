@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
+  applyRebobinageDevis,
   createDevis,
   getOptionsDisponibles,
   previewCoutsDevis,
@@ -64,6 +65,7 @@ export function OptimisationChiffrage() {
     devEtiqMm,
     mandrinMm,
     goRebobinage,
+    rebobinageRequest,
     optionsCodes,
     toggleOption,
     margeOverridePct,
@@ -213,6 +215,9 @@ export function OptimisationChiffrage() {
       // shape DevisCreate/DevisUpdate (gère null → omis sur sous-stockage).
       const briefPayload = briefClientToPayload(briefClient);
 
+      let devisId: number;
+      let devisNumero: string;
+
       if (enModeEdition && devisExistantId !== null) {
         const updatePayload: DevisUpdate = {
           payload_input: payloadInput,
@@ -223,11 +228,12 @@ export function OptimisationChiffrage() {
           ...briefPayload,
         };
         const devis = await updateDevis(devisExistantId, updatePayload);
+        devisId = devis.id;
+        devisNumero = devis.numero;
         toast({
           title: "Devis mis à jour ✓",
           description: `Devis ${devis.numero} mis à jour — direction ta page détail.`,
         });
-        router.push(`/devis/${devis.id}`);
       } else {
         const createPayload: DevisCreate = {
           payload_input: payloadInput,
@@ -238,12 +244,34 @@ export function OptimisationChiffrage() {
           ...briefPayload,
         };
         const devis = await createDevis(createPayload);
+        devisId = devis.id;
+        devisNumero = devis.numero;
         toast({
           title: "Devis créé ✓",
           description: `Devis ${devis.numero} créé avec ${selection.length} lot(s).`,
         });
-        router.push(`/devis/${devis.id}`);
       }
+
+      // Sprint 16 Lot D — applique la ligne rebobinage sur le devis si
+      // l'étape rebobinage a propagé un request au store. Échec ici ≠
+      // échec du devis : on log un warning sans bloquer la navigation,
+      // l'opérateur pourra ré-appliquer plus tard depuis la fiche devis.
+      if (rebobinageRequest !== null) {
+        try {
+          await applyRebobinageDevis(devisId, rebobinageRequest);
+        } catch (rebobErr) {
+          toast({
+            title: "Rebobinage non appliqué",
+            description:
+              rebobErr instanceof Error
+                ? `Devis ${devisNumero} créé/mis à jour mais la ligne rebobinage a échoué : ${rebobErr.message}`
+                : "Devis créé/mis à jour mais la ligne rebobinage a échoué.",
+            variant: "destructive",
+          });
+        }
+      }
+
+      router.push(`/devis/${devisId}`);
     } catch (err) {
       toast({
         title: enModeEdition

@@ -1,32 +1,30 @@
 "use client";
 
 /**
- * Sprint 16 Lot D — Étape Rebobinage.
+ * Sprint 16 Lot D — Étape Rebobinage (câblage backend Lots A/B/C).
  *
  * Insérée APRÈS l'optimisation de pose (étape "detail") et AVANT le
  * chiffrage final. Trois rôles :
  *
  *   1. Saisir / ajuster les paramètres bobine du client (diamètre
- *      mandrin, diamètre max bobine, sens d'enroulement, nb étiq/bobine,
- *      marquage, film protection, conditionnement). Champs pré-remplis
- *      depuis le brief client + saisie initiale (mandrin, sens).
+ *      mandrin, diamètre max bobine, nb étiq/bobine fixe optionnel).
+ *      Pré-remplis depuis le brief client + saisie initiale ; le
+ *      pré-remplissage du profil client complet (marquage, film,
+ *      conditionnement…) attend l'ALTER client 9 colonnes (commit 2).
  *
- *   2. Afficher le calcul auto (nb bobines, temps estimé, coût) et
- *      l'arbitrage pré-coupé vs découpe interne (mode optimal +
- *      alternatif + écart % + délais).
+ *   2. Afficher le calcul auto (nb bobines, temps, coût) et
+ *      l'arbitrage pré-coupé vs découpe interne renvoyés par
+ *      `POST /api/rebobinage/calculer` (Lot C).
  *
  *   3. Souveraineté commerciale : le commercial peut FORCER un mode
- *      (pré-coupé ou découpe interne) ; un motif est OBLIGATOIRE
- *      (10 caractères mini) pour traçabilité.
+ *      (pré-coupé ou découpe interne). L'UI exige un motif ≥10 chars
+ *      pour traçabilité — le backend tolère plus court (cf.
+ *      arbitrage_mandrins.py) ; on choisit la version stricte.
  *
  * Mobile-first : grilles 1 col par défaut → 2 col en sm+. Pas de
  * tooltip au survol — toute info utile en texte visible.
- *
- * ⚠️ Lot C backend (calculs + arbitrage côté serveur) pas encore
- * disponible : les sections "Calcul" et "Arbitrage" affichent un
- * payload MOCK, clairement étiqueté, à remplacer au câblage Lot C.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -38,36 +36,48 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  postRebobinageCalculer,
+  type ModeRebobinageApplique,
+  type ModeRebobinageIn,
+  type RebobinageCalculerRequest,
+  type RebobinageResultat,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { useOptimisationPose } from "./OptimisationPoseStore";
 
-export type ModeRebobinage = "pre_coupe" | "decoupe_interne";
-
-const MODE_LABEL: Record<ModeRebobinage, string> = {
+const MODE_LABEL: Record<ModeRebobinageApplique, string> = {
   pre_coupe: "Pré-coupé",
   decoupe_interne: "Découpe interne",
 };
 
-const MODE_DESCRIPTION: Record<ModeRebobinage, string> = {
+const MODE_DESCRIPTION: Record<ModeRebobinageApplique, string> = {
   pre_coupe:
     "Mandrins reçus déjà coupés à la longueur. Pas d'usinage interne, mise en route rapide.",
   decoupe_interne:
     "Mandrins découpés en interne avant rebobinage. Cycle plus long mais flexible sur les longueurs.",
 };
 
-const SENS_OPTIONS = ["SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8"] as const;
-
 // Diamètres mandrin courants flexo (alignés sur la saisie étape 1).
 const DIAMETRES_MANDRIN_MM = [25, 38, 40, 50, 76] as const;
 
-// Conditionnements typiques (à confirmer avec Lot C — choix par défaut MVP).
-const CONDITIONNEMENT_OPTIONS = [
-  { value: "bobine_standard", label: "Bobine standard (carton)" },
-  { value: "carton_protect", label: "Carton renforcé (export)" },
-  { value: "palette_filmee", label: "Palette filmée" },
-  { value: "caisse_bois", label: "Caisse bois (fragile)" },
-] as const;
+// Tarifs mandrins par défaut UI (à confirmer / persister au commit 2 quand
+// le profil tenant exposera ses tarifs propres). Documenté ici pour que
+// le commercial sache d'où vient le calcul tant qu'on n'a pas de dropdown
+// "Tarifs catalogue".
+const TARIFS_DEFAULTS = {
+  prix_pre_coupe_par_mandrin_eur: "0.50",
+  cout_decoupe_interne_par_mandrin_eur: "0.15",
+  cout_fixe_decoupe_interne_eur: "5.00",
+};
+
+// TODO commit 2 : remplacer par la liste réelle des rebobineuses du
+// tenant via un futur GET /api/machines-rebobineuses. Pour l'instant
+// le compte demo (entreprise_id=1) a 2 rebobineuses seedées par la
+// migration q1f3a5d7e9c2 — on cible la 1ère (Daco D250). Un 404 sur
+// machine_rebobineuse_id => message d'erreur dans l'UI.
+const MACHINE_REBOBINEUSE_ID_DEFAUT = 1;
 
 const MOTIF_MIN_LENGTH = 10;
 
@@ -77,103 +87,230 @@ export function OptimisationRebobinage() {
     mandrinMm,
     sommeQuantitesLots,
     quantiteTotale,
+    selection,
     goDetail,
     goChiffrage,
+    setRebobinage,
+    rebobinageRequest,
   } = useOptimisationPose();
 
   // ──────────────────────────────────────────────────────────────────
-  // Pré-remplissage depuis le store (brief client + saisie initiale).
-  // L'opérateur peut tout ajuster avant validation.
+  // Pré-remplissage : si le store contient déjà un request rebobinage
+  // (retour depuis l'étape chiffrage par exemple), on restore les
+  // inputs ; sinon on initialise depuis le brief client + saisie.
   // ──────────────────────────────────────────────────────────────────
-  const [diametreMandrin, setDiametreMandrin] = useState<number>(mandrinMm);
-  const [diametreMaxBobine, setDiametreMaxBobine] = useState<string>(
-    briefClient.diametre_max_bobine_mm !== null
-      ? String(briefClient.diametre_max_bobine_mm)
-      : ""
-  );
-  const [sensEnroulement, setSensEnroulement] = useState<string>("SE1");
-  const [nbEtiqParBobine, setNbEtiqParBobine] = useState<string>(
-    briefClient.nb_etiquettes_par_rouleau !== null
-      ? String(briefClient.nb_etiquettes_par_rouleau)
-      : ""
-  );
-  const [marquage, setMarquage] = useState<boolean>(false);
-  const [filmProtection, setFilmProtection] = useState<boolean>(false);
-  const [conditionnement, setConditionnement] = useState<string>(
-    "bobine_standard"
-  );
+  const initialMandrin =
+    rebobinageRequest?.profil_client.diametre_mandrin_mm ?? mandrinMm;
+  const initialDiamMax =
+    rebobinageRequest?.profil_client.diametre_max_bobine_mm !== undefined &&
+    rebobinageRequest?.profil_client.diametre_max_bobine_mm !== null
+      ? String(rebobinageRequest.profil_client.diametre_max_bobine_mm)
+      : briefClient.diametre_max_bobine_mm !== null
+        ? String(briefClient.diametre_max_bobine_mm)
+        : "";
+  const initialNbEtiq =
+    rebobinageRequest?.profil_client.nb_etiq_par_bobine_fixe != null
+      ? String(rebobinageRequest.profil_client.nb_etiq_par_bobine_fixe)
+      : briefClient.nb_etiquettes_par_rouleau !== null
+        ? String(briefClient.nb_etiquettes_par_rouleau)
+        : "";
 
-  // ──────────────────────────────────────────────────────────────────
-  // Forçage commercial : choix du mode + motif obligatoire si forcé.
-  // ──────────────────────────────────────────────────────────────────
-  const [forcerMode, setForcerMode] = useState<boolean>(false);
-  const [modeForce, setModeForce] = useState<ModeRebobinage>("pre_coupe");
-  const [motifForce, setMotifForce] = useState<string>("");
+  const [diametreMandrin, setDiametreMandrin] =
+    useState<number>(initialMandrin);
+  const [diametreMaxBobine, setDiametreMaxBobine] =
+    useState<string>(initialDiamMax);
+  const [nbEtiqParBobine, setNbEtiqParBobine] = useState<string>(initialNbEtiq);
+
+  // Tarifs mandrins (defaults projet UI tant que pas de catalogue tenant).
+  const [prixPreCoupe, setPrixPreCoupe] = useState<string>(
+    rebobinageRequest?.tarifs_mandrins.prix_pre_coupe_par_mandrin_eur ??
+      TARIFS_DEFAULTS.prix_pre_coupe_par_mandrin_eur,
+  );
+  const [coutDecoupeInterne, setCoutDecoupeInterne] = useState<string>(
+    rebobinageRequest?.tarifs_mandrins.cout_decoupe_interne_par_mandrin_eur ??
+      TARIFS_DEFAULTS.cout_decoupe_interne_par_mandrin_eur,
+  );
+  const [coutFixeDecoupeInterne, setCoutFixeDecoupeInterne] =
+    useState<string>(
+      rebobinageRequest?.tarifs_mandrins.cout_fixe_decoupe_interne_eur ??
+        TARIFS_DEFAULTS.cout_fixe_decoupe_interne_eur,
+    );
+
+  // Forçage commercial : mode + motif obligatoire si activé.
+  const [forcerMode, setForcerMode] = useState<boolean>(
+    rebobinageRequest ? rebobinageRequest.mode !== "auto" : false,
+  );
+  const [modeForce, setModeForce] = useState<ModeRebobinageApplique>(
+    (rebobinageRequest?.mode === "pre_coupe" ||
+      rebobinageRequest?.mode === "decoupe_interne")
+      ? rebobinageRequest.mode
+      : "pre_coupe",
+  );
+  const [motifForce, setMotifForce] = useState<string>(
+    rebobinageRequest?.motif_force ?? "",
+  );
   const [motifErreur, setMotifErreur] = useState<string | null>(null);
 
   // ──────────────────────────────────────────────────────────────────
-  // MOCK Lot D — calcul + arbitrage. Branchement Lot C backend à venir.
-  // On dérive un mock plausible de la quantité totale + nb étiq/bobine
-  // pour que les valeurs affichées soient cohérentes avec la saisie.
+  // Spec lot : on lit intervalle_dev + épaisseur depuis le 1er candidat
+  // sélectionné en étape "detail". Si pas de selection (cas dégradé), on
+  // utilise des defaults — le backend lèvera une erreur si tout est
+  // incohérent, l'UI l'affiche.
   // ──────────────────────────────────────────────────────────────────
-  const qteEffective = sommeQuantitesLots || quantiteTotale || 0;
+  const premierCandidat = selection[0]?.candidat ?? null;
+  const intervalleDevMm = premierCandidat?.intervalle_dev_applique_mm ?? 2;
+  const epaisseurMatiereUm = premierCandidat?.epaisseur_appliquee_um ?? 150;
+  const epaisseurMatiereMm = epaisseurMatiereUm / 1000;
+
+  const nbEtiquettesTotal = sommeQuantitesLots || quantiteTotale || 0;
   const parsedNbEtiqBobine = parseInt(nbEtiqParBobine, 10);
-  const nbEtiqBobineValide =
+  const nbEtiqBobineFixe =
     Number.isFinite(parsedNbEtiqBobine) && parsedNbEtiqBobine > 0
       ? parsedNbEtiqBobine
-      : 1000;
-  const calculMock = useMemo(() => {
-    const nbBobines = Math.max(1, Math.ceil(qteEffective / nbEtiqBobineValide));
-    return {
-      nb_bobines: nbBobines,
-      // ~2 min par bobine en pré-coupé (mock).
-      temps_estime_h: Math.round((nbBobines * 2) / 60 * 100) / 100,
-      // ~0.45 € par bobine en pré-coupé (mock).
-      cout_eur: Math.round(nbBobines * 0.45 * 100) / 100,
-    };
-  }, [qteEffective, nbEtiqBobineValide]);
+      : null;
+  const parsedDiamMax = parseInt(diametreMaxBobine, 10);
+  const diametreMaxValide =
+    Number.isFinite(parsedDiamMax) && parsedDiamMax > 0 ? parsedDiamMax : null;
 
-  const arbitrageMock = useMemo(() => {
-    // Pré-coupé légèrement plus cher mais plus rapide ; découpe interne
-    // moins cher mais délai plus long. Écart % calculé sur le coût.
-    const coutPreCoupe = calculMock.cout_eur;
-    const coutDecoupeInterne = Math.round(coutPreCoupe * 0.72 * 100) / 100;
-    const ecart =
-      coutDecoupeInterne > 0
-        ? Math.round(((coutPreCoupe - coutDecoupeInterne) / coutDecoupeInterne) * 100)
-        : 0;
+  // ──────────────────────────────────────────────────────────────────
+  // Construit le payload backend depuis les inputs UI.
+  // Retourne null si paramètres incomplets (diamMax manquant) pour
+  // éviter un fetch inutile.
+  // ──────────────────────────────────────────────────────────────────
+  const buildRequest = useCallback((): RebobinageCalculerRequest | null => {
+    if (nbEtiquettesTotal <= 0 || diametreMaxValide === null) return null;
+    const mode: ModeRebobinageIn = forcerMode ? modeForce : "auto";
+    const motif = forcerMode ? motifForce.trim() : null;
     return {
-      mode_optimal: "decoupe_interne" as ModeRebobinage,
-      mode_alternatif: "pre_coupe" as ModeRebobinage,
-      ecart_pct: ecart,
-      delais_optimal_jours: 5,
-      delais_alternatif_jours: 2,
-      cout_optimal_eur: coutDecoupeInterne,
-      cout_alternatif_eur: coutPreCoupe,
+      spec_lot: {
+        nb_etiquettes_total: nbEtiquettesTotal,
+        intervalle_developpe_mm: String(intervalleDevMm),
+        epaisseur_matiere_mm: String(epaisseurMatiereMm),
+      },
+      profil_client: {
+        diametre_mandrin_mm: diametreMandrin,
+        diametre_max_bobine_mm: diametreMaxValide,
+        nb_etiq_par_bobine_fixe: nbEtiqBobineFixe,
+      },
+      machine_rebobineuse_id: MACHINE_REBOBINEUSE_ID_DEFAUT,
+      tarifs_mandrins: {
+        prix_pre_coupe_par_mandrin_eur: prixPreCoupe,
+        cout_decoupe_interne_par_mandrin_eur: coutDecoupeInterne,
+        cout_fixe_decoupe_interne_eur: coutFixeDecoupeInterne,
+      },
+      mode,
+      motif_force: motif && motif.length > 0 ? motif : null,
     };
-  }, [calculMock.cout_eur]);
+  }, [
+    nbEtiquettesTotal,
+    diametreMaxValide,
+    forcerMode,
+    modeForce,
+    motifForce,
+    intervalleDevMm,
+    epaisseurMatiereMm,
+    diametreMandrin,
+    nbEtiqBobineFixe,
+    prixPreCoupe,
+    coutDecoupeInterne,
+    coutFixeDecoupeInterne,
+  ]);
 
-  const modeRetenuFinal: ModeRebobinage = forcerMode
-    ? modeForce
-    : arbitrageMock.mode_optimal;
+  // ──────────────────────────────────────────────────────────────────
+  // Calcul rebobinage (preview, pas de persist côté backend).
+  // ──────────────────────────────────────────────────────────────────
+  const [result, setResult] = useState<RebobinageResultat | null>(
+    null,
+  );
+  const [calculLoading, setCalculLoading] = useState<boolean>(false);
+  const [calculError, setCalculError] = useState<string | null>(null);
+
+  const calculer = useCallback(async () => {
+    const req = buildRequest();
+    if (req === null) {
+      setCalculError(
+        "Renseignez Ø max bobine et vérifiez la quantité totale avant de lancer le calcul.",
+      );
+      return;
+    }
+    setCalculLoading(true);
+    setCalculError(null);
+    try {
+      const res = await postRebobinageCalculer(req);
+      setResult(res);
+    } catch (err) {
+      setResult(null);
+      setCalculError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setCalculLoading(false);
+    }
+  }, [buildRequest]);
+
+  // Calcul initial une fois au mount si on a tout ce qu'il faut.
+  // Recalcul manuel via le bouton ; pas d'auto-recalcul sur change pour
+  // éviter de spammer l'API et pour laisser l'opérateur valider sa saisie.
+  useEffect(() => {
+    if (result === null && rebobinageRequest === null && diametreMaxValide) {
+      void calculer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Si on revient sur l'étape avec un request déjà stocké, on relance le
+  // calcul une seule fois pour afficher le résultat (le store ne tient
+  // pas le résultat séparé si on a effacé local state).
+  useEffect(() => {
+    if (result === null && rebobinageRequest !== null && !calculLoading) {
+      void calculer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const modeRetenuFinal: ModeRebobinageApplique = useMemo(() => {
+    if (result?.arbitrage.mode_applique) {
+      return result.arbitrage.mode_applique;
+    }
+    return forcerMode ? modeForce : "pre_coupe";
+  }, [result, forcerMode, modeForce]);
 
   // ──────────────────────────────────────────────────────────────────
   // Validation & navigation
   // ──────────────────────────────────────────────────────────────────
-  const validerEtContinuer = () => {
+  const validerEtContinuer = async () => {
     if (forcerMode) {
       const motifTrim = motifForce.trim();
       if (motifTrim.length < MOTIF_MIN_LENGTH) {
         setMotifErreur(
-          `Motif obligatoire (${MOTIF_MIN_LENGTH} caractères minimum) pour tracer le forçage commercial.`
+          `Motif obligatoire (${MOTIF_MIN_LENGTH} caractères minimum) pour tracer le forçage commercial.`,
         );
         return;
       }
     }
     setMotifErreur(null);
-    // TODO Lot C : avant goChiffrage, persister params + mode retenu
-    // dans le store pour que l'étape chiffrage récupère le coût rebobinage.
-    goChiffrage();
+
+    // Recalcul final + propagation au store avant passage chiffrage.
+    // Le calcul est idempotent côté backend (preview), pas d'effet de bord.
+    const req = buildRequest();
+    if (req === null) {
+      setCalculError(
+        "Renseignez Ø max bobine et vérifiez la quantité totale avant de continuer.",
+      );
+      return;
+    }
+    setCalculLoading(true);
+    setCalculError(null);
+    try {
+      const res = await postRebobinageCalculer(req);
+      setResult(res);
+      // Propage au store → OptimisationChiffrage appliquera la ligne
+      // sur le devis via applyRebobinageDevis après création/update.
+      setRebobinage(req, res);
+      goChiffrage();
+    } catch (err) {
+      setCalculError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setCalculLoading(false);
+    }
   };
 
   return (
@@ -183,29 +320,19 @@ export function OptimisationRebobinage() {
         <p className="text-sm text-muted-foreground sm:text-base">
           Paramètres bobines client, calcul auto et arbitrage pré-coupé /
           découpe interne. Le commercial peut forcer un mode avec motif
-          obligatoire.
+          obligatoire (≥{MOTIF_MIN_LENGTH} caractères).
         </p>
       </header>
 
-      <div
-        role="note"
-        className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
-      >
-        <strong>Données calcul + arbitrage en mock</strong> tant que le Lot C
-        backend (moteur rebobinage + endpoint arbitrage) n&apos;est pas
-        câblé. Les paramètres saisis ci-dessous sont déjà persistables ;
-        seuls les chiffres « Calcul » et « Arbitrage » seront remplacés.
-      </div>
-
       {/* ────────────────────────────────────────────────────────── */}
-      {/* Section paramètres bobine client (pré-remplie)              */}
+      {/* Paramètres bobine client (pré-remplis)                      */}
       {/* ────────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle>Paramètres bobines client</CardTitle>
           <CardDescription>
-            Pré-remplis depuis le brief client. Ajustez si le commercial a
-            validé d&apos;autres valeurs avec ce client.
+            Pré-remplis depuis le brief client + saisie initiale. Ajustez si
+            le commercial a validé d&apos;autres valeurs avec ce client.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -244,31 +371,13 @@ export function OptimisationRebobinage() {
                 placeholder="ex: 300"
               />
               <p className="text-xs text-muted-foreground">
-                Pré-rempli depuis le brief client (peut être laissé vide si
-                contrainte non spécifiée).
+                Pré-rempli depuis le brief client. Requis pour le calcul.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="rebob-sens">Sens d&apos;enroulement</Label>
-              <select
-                id="rebob-sens"
-                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={sensEnroulement}
-                onChange={(e) => setSensEnroulement(e.target.value)}
-              >
-                {SENS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                SE1-4 face extérieur, SE5-8 face intérieur (convention
-                métier flexo).
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rebob-nb-etiq">Nb étiquettes / bobine</Label>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="rebob-nb-etiq">
+                Nb étiquettes / bobine (optionnel)
+              </Label>
               <Input
                 id="rebob-nb-etiq"
                 type="number"
@@ -276,128 +385,163 @@ export function OptimisationRebobinage() {
                 step={1}
                 value={nbEtiqParBobine}
                 onChange={(e) => setNbEtiqParBobine(e.target.value)}
-                placeholder="ex: 1000"
+                placeholder="laisser vide pour optimisation auto"
               />
               <p className="text-xs text-muted-foreground">
-                Pré-rempli depuis le brief client. Pilote le nombre de
-                bobines à produire.
+                Pré-rempli depuis le brief. Si vide, le moteur calcule le
+                nombre optimal pour saturer le Ø max bobine.
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-3 text-sm">
-              <input
-                type="checkbox"
-                checked={marquage}
-                onChange={(e) => setMarquage(e.target.checked)}
-                className="mt-0.5 h-4 w-4 cursor-pointer accent-foreground"
-              />
-              <div>
-                <div className="font-medium">Marquage bobine</div>
-                <div className="text-xs text-muted-foreground">
-                  Étiquette d&apos;identification collée sur chaque bobine.
-                </div>
-              </div>
-            </label>
-            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-3 text-sm">
-              <input
-                type="checkbox"
-                checked={filmProtection}
-                onChange={(e) => setFilmProtection(e.target.checked)}
-                className="mt-0.5 h-4 w-4 cursor-pointer accent-foreground"
-              />
-              <div>
-                <div className="font-medium">Film protection</div>
-                <div className="text-xs text-muted-foreground">
-                  Film polyéthylène autour de chaque bobine (transport
-                  longue distance).
-                </div>
-              </div>
-            </label>
-            <div className="space-y-2">
-              <Label htmlFor="rebob-conditionnement">Conditionnement</Label>
-              <select
-                id="rebob-conditionnement"
-                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={conditionnement}
-                onChange={(e) => setConditionnement(e.target.value)}
-              >
-                {CONDITIONNEMENT_OPTIONS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* Tarifs mandrins (saisie tenant)                             */}
+      {/* ────────────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tarifs mandrins</CardTitle>
+          <CardDescription>
+            Prix d&apos;achat des mandrins selon le mode. Defaults projet
+            tant qu&apos;un catalogue tenant n&apos;est pas dispo — ajustez
+            si vos tarifs fournisseurs sont différents.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="rebob-prix-precoupe">Pré-coupé (€/mandrin)</Label>
+            <Input
+              id="rebob-prix-precoupe"
+              type="number"
+              min={0}
+              step={0.01}
+              value={prixPreCoupe}
+              onChange={(e) => setPrixPreCoupe(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rebob-cout-decoupe">
+              Découpe interne (€/mandrin)
+            </Label>
+            <Input
+              id="rebob-cout-decoupe"
+              type="number"
+              min={0}
+              step={0.01}
+              value={coutDecoupeInterne}
+              onChange={(e) => setCoutDecoupeInterne(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rebob-cout-fixe">Coût fixe découpe (€)</Label>
+            <Input
+              id="rebob-cout-fixe"
+              type="number"
+              min={0}
+              step={0.01}
+              value={coutFixeDecoupeInterne}
+              onChange={(e) => setCoutFixeDecoupeInterne(e.target.value)}
+            />
           </div>
         </CardContent>
       </Card>
 
       {/* ────────────────────────────────────────────────────────── */}
-      {/* Section calcul auto (MOCK Lot D)                            */}
+      {/* Calcul auto + arbitrage                                     */}
       {/* ────────────────────────────────────────────────────────── */}
-      <Card>
+      <Card data-testid="calcul-section">
         <CardHeader>
-          <CardTitle>Calcul rebobinage</CardTitle>
-          <CardDescription>
-            Sur la base de {qteEffective.toLocaleString("fr-FR")} étiquettes
-            à produire / {nbEtiqBobineValide.toLocaleString("fr-FR")} par
-            bobine.
-          </CardDescription>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <CardTitle>Calcul rebobinage</CardTitle>
+              <CardDescription>
+                Sur la base de {nbEtiquettesTotal.toLocaleString("fr-FR")}{" "}
+                étiquettes · intervalle dév {intervalleDevMm} mm · épaisseur{" "}
+                {epaisseurMatiereUm} µm.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void calculer()}
+              disabled={calculLoading}
+              data-testid="rebobinage-recalculer"
+            >
+              {calculLoading ? "Calcul…" : "Recalculer"}
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <KPI
-              label="Nombre de bobines"
-              value={calculMock.nb_bobines.toLocaleString("fr-FR")}
-              testId="calcul-nb-bobines"
-            />
-            <KPI
-              label="Temps estimé"
-              value={`${calculMock.temps_estime_h.toLocaleString("fr-FR")} h`}
-              testId="calcul-temps"
-            />
-            <KPI
-              label="Coût"
-              value={`${calculMock.cout_eur.toLocaleString("fr-FR", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })} €`}
-              testId="calcul-cout"
-            />
-          </dl>
-        </CardContent>
-      </Card>
+        <CardContent className="space-y-4">
+          {calculError && (
+            <div
+              role="alert"
+              data-testid="calcul-erreur"
+              className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {calculError}
+            </div>
+          )}
 
-      {/* ────────────────────────────────────────────────────────── */}
-      {/* Section arbitrage pré-coupé vs découpe interne (MOCK Lot D) */}
-      {/* ────────────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Arbitrage pré-coupé / découpe interne</CardTitle>
-          <CardDescription>
-            Le moteur compare les deux modes sur coût + délai. Le mode
-            optimal est mis en avant ; le mode alternatif reste visible
-            pour décision commerciale.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ModeArbitrageCard
-            mode={arbitrageMock.mode_optimal}
-            recommande
-            coutEur={arbitrageMock.cout_optimal_eur}
-            delaisJours={arbitrageMock.delais_optimal_jours}
-            testId="arbitrage-optimal"
-          />
-          <ModeArbitrageCard
-            mode={arbitrageMock.mode_alternatif}
-            recommande={false}
-            coutEur={arbitrageMock.cout_alternatif_eur}
-            delaisJours={arbitrageMock.delais_alternatif_jours}
-            ecartPct={arbitrageMock.ecart_pct}
-            testId="arbitrage-alternatif"
-          />
+          {result ? (
+            <>
+              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <KPI
+                  label="Nombre de bobines"
+                  value={result.bobines.nb_bobines.toLocaleString("fr-FR")}
+                  testId="calcul-nb-bobines"
+                />
+                <KPI
+                  label="Temps total"
+                  value={`${formaterDecimal(result.temps.temps_total_min)} min`}
+                  testId="calcul-temps"
+                />
+                <KPI
+                  label="Coût total rebobinage"
+                  value={formaterEuros(result.cout_total_rebobinage_eur)}
+                  testId="calcul-cout"
+                />
+              </dl>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <ModeArbitrageCard
+                  mode={result.arbitrage.mode_applique}
+                  recommande={
+                    result.arbitrage.mode_applique ===
+                    result.arbitrage.mode_optimal
+                  }
+                  coutEur={
+                    result.arbitrage.mode_applique === "pre_coupe"
+                      ? result.arbitrage.cout_pre_coupe_total_eur
+                      : result.arbitrage.cout_decoupe_interne_total_eur
+                  }
+                  testId="arbitrage-applique"
+                />
+                <ModeArbitrageCard
+                  mode={
+                    result.arbitrage.mode_applique === "pre_coupe"
+                      ? "decoupe_interne"
+                      : "pre_coupe"
+                  }
+                  recommande={false}
+                  coutEur={
+                    result.arbitrage.mode_applique === "pre_coupe"
+                      ? result.arbitrage.cout_decoupe_interne_total_eur
+                      : result.arbitrage.cout_pre_coupe_total_eur
+                  }
+                  ecartPct={result.arbitrage.ecart_pct}
+                  testId="arbitrage-alternatif"
+                />
+              </div>
+            </>
+          ) : (
+            !calculError && (
+              <p className="text-sm text-muted-foreground">
+                Renseignez les paramètres puis cliquez « Recalculer ».
+              </p>
+            )
+          )}
         </CardContent>
       </Card>
 
@@ -409,7 +553,7 @@ export function OptimisationRebobinage() {
           <CardTitle>Souveraineté commerciale</CardTitle>
           <CardDescription>
             Le commercial peut écraser la recommandation moteur. Le mode
-            forcé et le motif sont tracés.
+            forcé et le motif sont tracés sur le devis.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -437,7 +581,7 @@ export function OptimisationRebobinage() {
                   className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={modeForce}
                   onChange={(e) =>
-                    setModeForce(e.target.value as ModeRebobinage)
+                    setModeForce(e.target.value as ModeRebobinageApplique)
                   }
                 >
                   <option value="pre_coupe">{MODE_LABEL.pre_coupe}</option>
@@ -464,8 +608,8 @@ export function OptimisationRebobinage() {
                   placeholder="Contrainte client, urgence, capacité atelier saturée…"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Le motif est consigné avec l&apos;identité du commercial
-                  pour traçabilité.
+                  Le motif est persisté avec la décision sur le devis pour
+                  traçabilité.
                 </p>
               </div>
               {motifErreur && (
@@ -482,7 +626,9 @@ export function OptimisationRebobinage() {
 
           <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
             <strong>Mode retenu :</strong>{" "}
-            <span data-testid="mode-retenu">{MODE_LABEL[modeRetenuFinal]}</span>{" "}
+            <span data-testid="mode-retenu">
+              {MODE_LABEL[modeRetenuFinal]}
+            </span>{" "}
             {forcerMode ? (
               <span className="text-amber-800">(forcé commercial)</span>
             ) : (
@@ -503,15 +649,40 @@ export function OptimisationRebobinage() {
         </Button>
         <Button
           size="lg"
-          onClick={validerEtContinuer}
+          onClick={() => void validerEtContinuer()}
+          disabled={calculLoading}
           data-testid="rebobinage-continuer"
-          className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg"
+          className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg disabled:opacity-50"
         >
-          Continuer vers chiffrage →
+          {calculLoading
+            ? "Calcul en cours…"
+            : "Continuer vers chiffrage →"}
         </Button>
       </div>
     </main>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Helpers d'affichage
+// ──────────────────────────────────────────────────────────────────
+
+function formaterDecimal(str: string): string {
+  const n = parseFloat(str);
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formaterEuros(str: string): string {
+  const n = parseFloat(str);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -546,17 +717,16 @@ function ModeArbitrageCard({
   mode,
   recommande,
   coutEur,
-  delaisJours,
   ecartPct,
   testId,
 }: {
-  mode: ModeRebobinage;
+  mode: ModeRebobinageApplique;
   recommande: boolean;
-  coutEur: number;
-  delaisJours: number;
-  ecartPct?: number;
+  coutEur: string;
+  ecartPct?: string;
   testId?: string;
 }) {
+  const ecartNumber = ecartPct !== undefined ? parseFloat(ecartPct) : null;
   return (
     <div
       data-testid={testId}
@@ -564,14 +734,14 @@ function ModeArbitrageCard({
         "rounded-md border-2 p-4",
         recommande
           ? "border-emerald-400 bg-emerald-50"
-          : "border-border bg-background"
+          : "border-border bg-background",
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-base font-semibold">{MODE_LABEL[mode]}</div>
         {recommande ? (
           <span className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white">
-            Recommandé
+            Appliqué
           </span>
         ) : (
           <span className="rounded bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">
@@ -582,32 +752,23 @@ function ModeArbitrageCard({
       <p className="mt-1 text-xs text-muted-foreground">
         {MODE_DESCRIPTION[mode]}
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+      <dl className="mt-3 grid grid-cols-1 gap-3 text-sm">
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-            Coût
+            Coût (mandrins + machine)
           </dt>
-          <dd className="font-mono font-semibold">
-            {coutEur.toLocaleString("fr-FR", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            €
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-            Délai
-          </dt>
-          <dd className="font-mono font-semibold">{delaisJours} j</dd>
+          <dd className="font-mono font-semibold">{formaterEuros(coutEur)}</dd>
         </div>
       </dl>
-      {ecartPct !== undefined && ecartPct !== 0 && (
+      {ecartNumber !== null && ecartNumber !== 0 && (
         <div className="mt-2 text-xs text-amber-800">
-          Écart vs optimal :{" "}
+          Écart vs appliqué :{" "}
           <strong>
-            {ecartPct > 0 ? "+" : ""}
-            {ecartPct} %
+            {ecartNumber > 0 ? "+" : ""}
+            {ecartNumber.toLocaleString("fr-FR", {
+              maximumFractionDigits: 1,
+            })}{" "}
+            %
           </strong>
         </div>
       )}

@@ -25,6 +25,8 @@ import type {
   DevisDetail,
   LotProductionRead,
   OptimisationConfigOut,
+  RebobinageCalculerRequest,
+  RebobinageResultat,
   SensEnroulement,
 } from "@/lib/api";
 import type { MatcherOutilMatch } from "@/lib/api/matcherOutil";
@@ -145,6 +147,19 @@ interface OptimisationPoseContextValue {
   // (pas que l'id) pour permettre l'affichage récap sans re-fetch.
   outilSelectionne: MatcherOutilMatch | null;
   setOutilSelectionne: (match: MatcherOutilMatch | null) => void;
+
+  // Sprint 16 Lot D câblage — request et result du dernier calcul
+  // rebobinage. Persistés côté store pour : (1) restaurer l'écran si
+  // l'opérateur revient depuis chiffrage, (2) permettre à
+  // OptimisationChiffrage d'appliquer la ligne sur le devis via
+  // applyRebobinageDevis après création/update.
+  rebobinageRequest: RebobinageCalculerRequest | null;
+  rebobinageResult: RebobinageResultat | null;
+  setRebobinage: (
+    req: RebobinageCalculerRequest,
+    result: RebobinageResultat,
+  ) => void;
+  clearRebobinage: () => void;
 
   // Brief #33 commit 3 — hydratation depuis un devis existant. Reconstruit
   // selection + candidats minimum à partir de `lots_production`, lit
@@ -273,6 +288,25 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
   // Sprint 14 Lot 4.5 — outil sélectionné via matcher-outil.
   const [outilSelectionne, setOutilSelectionne] =
     useState<MatcherOutilMatch | null>(null);
+
+  // Sprint 16 Lot D — request et result du dernier calcul rebobinage.
+  const [rebobinageRequest, setRebobinageRequest] =
+    useState<RebobinageCalculerRequest | null>(null);
+  const [rebobinageResult, setRebobinageResult] =
+    useState<RebobinageResultat | null>(null);
+
+  const setRebobinage = useCallback(
+    (req: RebobinageCalculerRequest, result: RebobinageResultat) => {
+      setRebobinageRequest(req);
+      setRebobinageResult(result);
+    },
+    [],
+  );
+
+  const clearRebobinage = useCallback(() => {
+    setRebobinageRequest(null);
+    setRebobinageResult(null);
+  }, []);
 
   const goSaisie = useCallback(() => {
     setEtape("saisie");
@@ -460,6 +494,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setBriefClient,
       outilSelectionne,
       setOutilSelectionne,
+      rebobinageRequest,
+      rebobinageResult,
+      setRebobinage,
+      clearRebobinage,
       hydrateFromDevisExistant,
     }),
     [
@@ -489,6 +527,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       briefClient,
       setBriefClient,
       outilSelectionne,
+      rebobinageRequest,
+      rebobinageResult,
+      setRebobinage,
+      clearRebobinage,
       hydrateFromDevisExistant,
     ]
   );
