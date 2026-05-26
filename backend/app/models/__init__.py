@@ -22,7 +22,9 @@ from app.models.lot_production import LotProduction
 from app.models.fournisseur import Fournisseur
 from app.models.machine import Machine
 from app.models.machine_imprimerie import MachineImprimerie
+from app.models.machine_rebobineuse import MachineRebobineuse
 from app.models.matiere import Matiere
+from app.models.parametre_mandrin import MODES_PAR_DEFAUT, ParametreMandrin
 from app.models.operation_finition import OperationFinition
 from app.models.option_fabrication import OptionFabrication
 from app.models.outil_decoupe import OutilDecoupe
@@ -59,6 +61,10 @@ __all__ = [
     # Sprint 15 Lot 3 — BAT de référence par devis
     "BAT_MIME_TYPES_AUTORISES",
     "BatReference",
+    # Sprint 16 Lot A — Module Rebobinage
+    "MachineRebobineuse",
+    "MODES_PAR_DEFAUT",
+    "ParametreMandrin",
     # Modèles existants (Sprint 0 à 12)
     "Catalogue",
     "ChargeMachineMensuelle",
