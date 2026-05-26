@@ -1463,13 +1463,23 @@ export interface CylindreCreatePayload {
 
 export type CylindreUpdatePayload = Partial<CylindreCreatePayload>;
 
-export const listCylindres = (actif: boolean | null = true) => {
-  const params = new URLSearchParams();
-  if (actif === false) params.set("actif", "false");
-  else if (actif === null) params.set("actif", "");
-  return apiFetch<CylindreParc[]>(
-    `/api/cylindres${params.toString() ? `?${params}` : ""}`
-  );
+export const listCylindres = async (
+  actif: boolean | null = true
+): Promise<CylindreParc[]> => {
+  // Mode "tous" (`actif=null`) : on doit faire 2 fetch + concat car le
+  // contrat backend `/api/cylindres` a `actif: bool | None = Query(True)`
+  // (default True), ce qui empêche un appel unique "actifs + désactivés".
+  // Coût acceptable : appelé uniquement depuis l'écran Mon Parc, parcs
+  // typiques < 50 cylindres. Tri actifs d'abord (UX Mon Parc).
+  if (actif === null) {
+    const [actifs, inactifs] = await Promise.all([
+      apiFetch<CylindreParc[]>("/api/cylindres?actif=true"),
+      apiFetch<CylindreParc[]>("/api/cylindres?actif=false"),
+    ]);
+    return [...actifs, ...inactifs];
+  }
+  const param = actif ? "true" : "false";
+  return apiFetch<CylindreParc[]>(`/api/cylindres?actif=${param}`);
 };
 export const createCylindre = (data: CylindreCreatePayload) =>
   apiFetch<CylindreParc>("/api/cylindres", {
@@ -1525,16 +1535,24 @@ export interface PorteClicheUpdatePayload {
   actif?: boolean;
 }
 
-export const listPorteCliches = (
+export const listPorteCliches = async (
   options: { actif?: boolean | null; machine_id?: number } = {}
-) => {
+): Promise<PorteCliche[]> => {
   const { actif = true, machine_id } = options;
-  const params = new URLSearchParams();
-  if (actif === false) params.set("actif", "false");
-  else if (actif === null) params.set("actif", "");
-  if (machine_id !== undefined) params.set("machine_id", String(machine_id));
+  const machineParam =
+    machine_id !== undefined ? `&machine_id=${machine_id}` : "";
+  // Idem listCylindres : mode "tous" → 2 fetch + concat (contrat backend
+  // `/api/porte-cliches` a `actif: bool | None = Query(True)`).
+  if (actif === null) {
+    const [actifs, inactifs] = await Promise.all([
+      apiFetch<PorteCliche[]>(`/api/porte-cliches?actif=true${machineParam}`),
+      apiFetch<PorteCliche[]>(`/api/porte-cliches?actif=false${machineParam}`),
+    ]);
+    return [...actifs, ...inactifs];
+  }
+  const actifParam = actif ? "true" : "false";
   return apiFetch<PorteCliche[]>(
-    `/api/porte-cliches${params.toString() ? `?${params}` : ""}`
+    `/api/porte-cliches?actif=${actifParam}${machineParam}`
   );
 };
 export const createPorteCliche = (data: PorteClicheCreatePayload) =>

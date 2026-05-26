@@ -35,7 +35,6 @@ const PETIT_CYL_SEUIL_DENTS = 80;
 export function CylindresOnglet() {
   const { toast } = useToast();
   const [cyls, setCyls] = useState<CylindreParc[] | null>(null);
-  const [voirInactifs, setVoirInactifs] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [dialogOuvert, setDialogOuvert] = useState(false);
   const [cylEnCoursModif, setCylEnCoursModif] = useState<CylindreParc | null>(
@@ -44,7 +43,10 @@ export function CylindresOnglet() {
 
   const rafraichir = async () => {
     try {
-      const data = await listCylindres(voirInactifs ? null : true);
+      // Toujours charger actifs + désactivés. Les désactivés restent
+      // affichés grisés avec badge → l'opérateur peut les réactiver sans
+      // option à activer au préalable (fix UX 2026-05-24).
+      const data = await listCylindres(null);
       setCyls(data);
     } catch (err) {
       toast({
@@ -58,7 +60,7 @@ export function CylindresOnglet() {
   useEffect(() => {
     rafraichir();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voirInactifs]);
+  }, []);
 
   const ouvrirAjout = () => {
     setCylEnCoursModif(null);
@@ -135,15 +137,6 @@ export function CylindresOnglet() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
-        <label className="flex cursor-pointer items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={voirInactifs}
-            onChange={(e) => setVoirInactifs(e.target.checked)}
-            className="h-4 w-4 accent-foreground"
-          />
-          <span>Voir aussi les désactivés</span>
-        </label>
         <Input
           type="search"
           placeholder="Recherche dents, notes…"
@@ -222,13 +215,18 @@ function CylindreCard({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-wrap items-baseline gap-2">
             <span className="text-base font-semibold text-ink">
               {cyl.nb_dents} dents
             </span>
             <span className="text-sm text-muted-foreground">
               Z = {cyl.developpe_mm} mm
             </span>
+            {!cyl.actif && (
+              <span className="inline-flex items-center gap-1 rounded bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                Désactivé
+              </span>
+            )}
             {petit && (
               <span
                 title="Cylindre de petit diamètre — vérifie visuellement la planéité du tirage si tu doutes"

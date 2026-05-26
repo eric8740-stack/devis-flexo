@@ -54,12 +54,16 @@ export function PorteClichesOnglet() {
   const [machines, setMachines] = useState<Machine[] | null>(null);
   const [cylindres, setCylindres] = useState<CylindreParc[] | null>(null);
   const [machineFilter, setMachineFilter] = useState<number | null>(null);
-  const [voirInactifs, setVoirInactifs] = useState(false);
+  // `initialized` distingue le mount initial (où machineFilter=null par
+  // défaut, on n'a pas encore les machines) de l'état "utilisateur a choisi
+  // Toutes" (machineFilter=null après init) — sinon le `useEffect` filtre
+  // ne déclencherait jamais sur le choix "Toutes" (bug d'affichage 2026-05-24).
+  const [initialized, setInitialized] = useState(false);
   const [dialogOuvert, setDialogOuvert] = useState(false);
   const [enCoursModif, setEnCoursModif] = useState<PorteCliche | null>(null);
 
-  // Chargement initial : machines + cylindres actifs (référentiels) +
-  // items selon filtre courant.
+  // Chargement initial : machines + cylindres actifs (référentiels). Les
+  // items eux-mêmes sont chargés par le 2e useEffect une fois `initialized`.
   useEffect(() => {
     let cancelled = false;
     Promise.all([listMachines(), listCylindres(true)])
@@ -68,9 +72,10 @@ export function PorteClichesOnglet() {
         setMachines(m);
         setCylindres(c);
         // Auto-sélection : 1ère machine active pour pré-filtrer la liste.
-        if (machineFilter === null && m.length > 0) {
+        if (m.length > 0) {
           setMachineFilter(m[0].id);
         }
+        setInitialized(true);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -88,8 +93,11 @@ export function PorteClichesOnglet() {
 
   const rafraichir = async () => {
     try {
+      // Toujours actifs + désactivés. Les désactivés restent affichés
+      // grisés avec badge → l'opérateur peut les réactiver sans option
+      // à activer au préalable (fix UX 2026-05-24).
       const data = await listPorteCliches({
-        actif: voirInactifs ? null : true,
+        actif: null,
         machine_id: machineFilter ?? undefined,
       });
       setItems(data);
@@ -103,9 +111,13 @@ export function PorteClichesOnglet() {
   };
 
   useEffect(() => {
-    if (machineFilter !== null) rafraichir();
+    // On rafraîchit pour toute valeur de machineFilter une fois les
+    // référentiels chargés — y compris `null` (= filtre "Toutes"). Avant
+    // le fix, `if (machineFilter !== null) rafraichir()` figeait la liste
+    // sur "Toutes" car le fetch n'était jamais déclenché.
+    if (initialized) rafraichir();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineFilter, voirInactifs]);
+  }, [machineFilter, initialized]);
 
   const machineActive = useMemo(
     () => (machines ?? []).find((m) => m.id === machineFilter) ?? null,
@@ -193,15 +205,6 @@ export function PorteClichesOnglet() {
             ))}
           </select>
         </label>
-        <label className="flex cursor-pointer items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={voirInactifs}
-            onChange={(e) => setVoirInactifs(e.target.checked)}
-            className="h-4 w-4 accent-foreground"
-          />
-          <span>Voir aussi les désactivés</span>
-        </label>
       </div>
 
       {items === null && (
@@ -278,13 +281,18 @@ function PorteClicheCard({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-wrap items-baseline gap-2">
             <span className="text-base font-semibold text-ink">
               🔧 {pc.cylindre_nb_dents} dents
             </span>
             <span className="text-sm text-muted-foreground">
               Z = {pc.cylindre_developpe_mm} mm
             </span>
+            {!pc.actif && (
+              <span className="inline-flex items-center gap-1 rounded bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                Désactivé
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             <strong>{pc.quantite}</strong> porte-cliché
