@@ -1574,3 +1574,97 @@ export const toggleActifPorteCliche = (id: number) =>
   apiFetch<PorteCliche>(`/api/porte-cliches/${id}/toggle-actif`, {
     method: "POST",
   });
+
+// ---------------------------------------------------------------------------
+// Sprint 16 — Module rebobinage (Lots A/B/C backend mergés)
+// ---------------------------------------------------------------------------
+// Contrat aligné sur `backend/app/schemas/rebobinage.py` :
+//   POST   /api/rebobinage/calculer             → preview, pas de persist
+//   POST   /api/devis/{devis_id}/rebobinage     → apply, persist sur devis
+//   DELETE /api/devis/{devis_id}/rebobinage     → retire la ligne
+// Decimals sérialisés en string par Pydantic v2 (pattern projet).
+
+export type ModeRebobinageIn = "auto" | "pre_coupe" | "decoupe_interne";
+export type ModeRebobinageApplique = "pre_coupe" | "decoupe_interne";
+
+export interface RebobinageSpecLot {
+  nb_etiquettes_total: number;
+  intervalle_developpe_mm: string;
+  epaisseur_matiere_mm: string;
+}
+
+export interface RebobinageProfilClient {
+  diametre_mandrin_mm: number;
+  diametre_max_bobine_mm: number;
+  // Forcer un nombre d'étiquettes par bobine (sinon le moteur l'optimise).
+  nb_etiq_par_bobine_fixe: number | null;
+}
+
+export interface RebobinageTarifsMandrins {
+  prix_pre_coupe_par_mandrin_eur: string;
+  cout_decoupe_interne_par_mandrin_eur: string;
+  cout_fixe_decoupe_interne_eur: string;
+}
+
+export interface RebobinageCalculerRequest {
+  spec_lot: RebobinageSpecLot;
+  profil_client: RebobinageProfilClient;
+  machine_rebobineuse_id: number;
+  tarifs_mandrins: RebobinageTarifsMandrins;
+  // `auto` = pas de forçage, le moteur applique le mode optimal.
+  // `pre_coupe` / `decoupe_interne` = forçage commercial ; motif obligatoire
+  // si le mode forcé ≠ optimal (cf. arbitrage_mandrins.py Lot B).
+  mode: ModeRebobinageIn;
+  motif_force: string | null;
+}
+
+export interface RebobinageResultatBobines {
+  nb_etiq_par_bobine: number;
+  nb_bobines: number;
+  bobine_partielle: boolean;
+  nb_etiq_derniere_bobine: number;
+  longueur_totale_m: string;
+}
+
+export interface RebobinageResultatTemps {
+  temps_roulage_min: string;
+  temps_changements_min: string;
+  temps_total_min: string;
+  cout_machine_eur: string;
+}
+
+export interface RebobinageResultatArbitrage {
+  mode_optimal: ModeRebobinageApplique;
+  cout_pre_coupe_total_eur: string;
+  cout_decoupe_interne_total_eur: string;
+  ecart_pct: string;
+  mode_applique: ModeRebobinageApplique;
+  motif_force: string | null;
+}
+
+export interface RebobinageResultat {
+  bobines: RebobinageResultatBobines;
+  temps: RebobinageResultatTemps;
+  arbitrage: RebobinageResultatArbitrage;
+  cout_mandrins_eur: string;
+  cout_total_rebobinage_eur: string;
+  machine_rebobineuse_id: number;
+}
+
+export const postRebobinageCalculer = (payload: RebobinageCalculerRequest) =>
+  apiFetch<RebobinageResultat>("/api/rebobinage/calculer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const applyRebobinageDevis = (
+  devisId: number,
+  payload: RebobinageCalculerRequest,
+) =>
+  apiFetch<RebobinageResultat>(`/api/devis/${devisId}/rebobinage`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const retirerRebobinageDevis = (devisId: number) =>
+  apiFetch<void>(`/api/devis/${devisId}/rebobinage`, { method: "DELETE" });
