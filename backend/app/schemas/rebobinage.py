@@ -124,3 +124,27 @@ class ResultatRebobinageOut(BaseModel):
     # Snapshot ID de la machine rebobineuse utilisée (utile pour l'UI
     # qui veut afficher le nom de la machine sans rappeler /api/machines).
     machine_rebobineuse_id: int
+
+
+# ---------------------------------------------------------------------------
+# Liste des rebobineuses du tenant (sélecteur UI)
+# ---------------------------------------------------------------------------
+
+
+class MachineRebobineuseListItem(BaseModel):
+    """Item retourné par GET /api/machines-rebobineuses.
+
+    Champs minimaux pour alimenter un sélecteur côté UI — pas de coût
+    horaire ni détails techniques (récupérables via /api/machines-
+    rebobineuses/{id} si on l'ajoute plus tard).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nom: str
+    marque: str | None
+    modele: str | None
+    laize_max_mm: Decimal
+    diametre_max_mm: int
+    actif: bool
