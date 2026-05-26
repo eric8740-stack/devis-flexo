@@ -6,12 +6,22 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SEGMENTS, type ClientCreate } from "@/lib/api";
+
+// Convertit la value d'un <input type="number"> en `number | null`. Une
+// chaîne vide est traitée comme "non renseigné" (null) — cohérent avec
+// le reste du formulaire qui normalise `value || null` pour les texte.
+function parseNumOrNull(v: string): number | null {
+  if (v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 const EMPTY_CLIENT: ClientCreate = {
   raison_sociale: "",
@@ -24,6 +34,17 @@ const EMPTY_CLIENT: ClientCreate = {
   tel: null,
   segment: null,
   date_creation: null,
+  // Sprint 16 — profil rebobinage. Booléens à false (server_default
+  // backend), 6 autres à null (champs optionnels).
+  marquage_bobine_requis: false,
+  mandrin_fourni_par_client: false,
+  film_protection_requis: false,
+  diametre_mandrin_mm: null,
+  diametre_max_bobine_mm: null,
+  nb_etiq_par_bobine_fixe: null,
+  sens_enroulement: null,
+  marquage_bobine_format: null,
+  conditionnement_souhaite: null,
 };
 
 interface ClientFormProps {
@@ -174,6 +195,173 @@ export function ClientForm({
                 onChange={(e) =>
                   setField("date_creation", e.target.value || null)
                 }
+              />
+            </div>
+          </div>
+
+        </CardContent>
+      </Card>
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* Sprint 16 — Profil rebobinage client                        */}
+      {/* ────────────────────────────────────────────────────────── */}
+      <Card className="mt-6" data-testid="client-rebobinage-section">
+        <CardHeader>
+          <CardTitle>Rebobinage</CardTitle>
+          <CardDescription>
+            Exigences et spécifications du client pour le rebobinage des
+            bobines livrées. Ces champs auto-remplissent l&apos;étape
+            rebobinage des devis créés pour ce client.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          {/* 3 booléens : exigences client */}
+          <fieldset className="grid gap-3 sm:grid-cols-3">
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-3 text-sm">
+              <input
+                id="marquage_bobine_requis"
+                type="checkbox"
+                checked={data.marquage_bobine_requis}
+                onChange={(e) =>
+                  setField("marquage_bobine_requis", e.target.checked)
+                }
+                className="mt-0.5 h-4 w-4 cursor-pointer accent-foreground"
+              />
+              <span>Marquage bobine requis</span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-3 text-sm">
+              <input
+                id="mandrin_fourni_par_client"
+                type="checkbox"
+                checked={data.mandrin_fourni_par_client}
+                onChange={(e) =>
+                  setField("mandrin_fourni_par_client", e.target.checked)
+                }
+                className="mt-0.5 h-4 w-4 cursor-pointer accent-foreground"
+              />
+              <span>Mandrin fourni par le client</span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border p-3 text-sm">
+              <input
+                id="film_protection_requis"
+                type="checkbox"
+                checked={data.film_protection_requis}
+                onChange={(e) =>
+                  setField("film_protection_requis", e.target.checked)
+                }
+                className="mt-0.5 h-4 w-4 cursor-pointer accent-foreground"
+              />
+              <span>Film protection requis</span>
+            </label>
+          </fieldset>
+
+          {/* 4 numériques : spécifications bobine */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="diametre_mandrin_mm">
+                Ø Mandrin bobine (mm)
+              </Label>
+              <Input
+                id="diametre_mandrin_mm"
+                type="number"
+                min={1}
+                step={1}
+                value={data.diametre_mandrin_mm ?? ""}
+                onChange={(e) =>
+                  setField("diametre_mandrin_mm", parseNumOrNull(e.target.value))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="diametre_max_bobine_mm">
+                Ø Max bobine livrée (mm)
+              </Label>
+              <Input
+                id="diametre_max_bobine_mm"
+                type="number"
+                min={1}
+                step={1}
+                value={data.diametre_max_bobine_mm ?? ""}
+                onChange={(e) =>
+                  setField(
+                    "diametre_max_bobine_mm",
+                    parseNumOrNull(e.target.value),
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="nb_etiq_par_bobine_fixe">
+                Nb étiquettes / bobine (fixe)
+              </Label>
+              <Input
+                id="nb_etiq_par_bobine_fixe"
+                type="number"
+                min={1}
+                step={1}
+                value={data.nb_etiq_par_bobine_fixe ?? ""}
+                onChange={(e) =>
+                  setField(
+                    "nb_etiq_par_bobine_fixe",
+                    parseNumOrNull(e.target.value),
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sens_enroulement">
+                Sens d&apos;enroulement (1..8)
+              </Label>
+              <Input
+                id="sens_enroulement"
+                type="number"
+                min={1}
+                max={8}
+                step={1}
+                value={data.sens_enroulement ?? ""}
+                onChange={(e) =>
+                  setField("sens_enroulement", parseNumOrNull(e.target.value))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Convention SE1-SE8 (stockage brut). La validation 1..8 est
+                appliquée côté serveur.
+              </p>
+            </div>
+          </div>
+
+          {/* 2 textes : détails */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="marquage_bobine_format">
+                Format du marquage
+              </Label>
+              <Input
+                id="marquage_bobine_format"
+                value={data.marquage_bobine_format ?? ""}
+                onChange={(e) =>
+                  setField(
+                    "marquage_bobine_format",
+                    e.target.value || null,
+                  )
+                }
+                placeholder="Ex : étiquette identification A6"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="conditionnement_souhaite">
+                Conditionnement souhaité
+              </Label>
+              <Input
+                id="conditionnement_souhaite"
+                value={data.conditionnement_souhaite ?? ""}
+                onChange={(e) =>
+                  setField(
+                    "conditionnement_souhaite",
+                    e.target.value || null,
+                  )
+                }
+                placeholder="Ex : carton renforcé export"
               />
             </div>
           </div>
