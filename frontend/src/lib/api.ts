@@ -164,6 +164,22 @@ export interface Client {
   tel: string | null;
   segment: string | null;
   date_creation: string | null;
+  // Sprint 16 — profil rebobinage client. Les 9 champs (3 booléens + 4
+  // numériques + 2 texte) alimentent l'auto-remplissage de l'étape
+  // rebobinage du workflow optimisation. Booléens NOT NULL côté backend
+  // (server_default false) ; les 6 autres sont nullable. À confirmer
+  // alignement nominal avec le schema Pydantic au merge backend.
+  marquage_bobine_requis: boolean;
+  mandrin_fourni_par_client: boolean;
+  film_protection_requis: boolean;
+  diametre_mandrin_mm: number | null;
+  diametre_max_bobine_mm: number | null;
+  nb_etiq_par_bobine_fixe: number | null;
+  // Entier 1..8 (convention SE1-SE8 stockée brute, simple). La logique
+  // métier rotation/orientation reste côté workflow optimisation, pas ici.
+  sens_enroulement: number | null;
+  marquage_bobine_format: string | null;
+  conditionnement_souhaite: string | null;
 }
 
 export type ClientCreate = Omit<Client, "id">;
