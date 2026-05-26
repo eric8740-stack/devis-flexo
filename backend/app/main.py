@@ -29,6 +29,7 @@ from app.routers import (
     parametres_options,
     partenaire_st,
     porte_cliche,
+    rebobinage,
     tarif_poste,
 )
 from app.services.cost_engine import CostEngineError
@@ -90,6 +91,8 @@ app.include_router(parametres_options.router)
 app.include_router(matiere.router)
 app.include_router(cylindre.router)  # Brief #29 — CRUD parc cylindres
 app.include_router(porte_cliche.router)  # Brief #29 — CRUD porte-clichés
+# Sprint 16 Lot C — Module Rebobinage (preview + apply/retire sur devis)
+app.include_router(rebobinage.router)
 # 2026-05-16 TEMPORAIRE — endpoint audit prod seeds. À retirer après diagnostic.
 app.include_router(admin_audit.router)
 
