@@ -43,6 +43,7 @@ from app.models import (
     User,
 )
 from app.schemas.rebobinage import (
+    MachineRebobineuseListItem,
     RebobinageCalculerRequest,
     ResultatRebobinageOut,
 )
@@ -232,6 +233,35 @@ def _executer_moteur(
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/api/machines-rebobineuses",
+    response_model=list[MachineRebobineuseListItem],
+)
+def list_machines_rebobineuses(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[MachineRebobineuseListItem]:
+    """Liste les rebobineuses du tenant courant.
+
+    Sert au sélecteur côté UI rebobinage (correctif prod du
+    `machine_rebobineuse_id` hardcodé à 1 dans le câblage initial —
+    cassait 404 pour tous les tenants ≠ compte demo).
+
+    Scope strict sur `user.entreprise_id` — un tenant ne voit JAMAIS
+    les rebobineuses d'un autre tenant. Pattern identique aux autres
+    listes scopées (`/api/cylindres`, `/api/porte-cliches`, etc.).
+
+    Tri par `nom` ASC pour un sélecteur stable. Tie-break par id ASC.
+    """
+    rows = (
+        db.query(MachineRebobineuse)
+        .filter(MachineRebobineuse.entreprise_id == user.entreprise_id)
+        .order_by(MachineRebobineuse.nom.asc(), MachineRebobineuse.id.asc())
+        .all()
+    )
+    return [MachineRebobineuseListItem.model_validate(r) for r in rows]
 
 
 @router.post(
