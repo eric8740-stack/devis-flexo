@@ -63,7 +63,7 @@ export function OptimisationChiffrage() {
     laizeEtiqMm,
     devEtiqMm,
     mandrinMm,
-    goDetail,
+    goRebobinage,
     optionsCodes,
     toggleOption,
     margeOverridePct,
@@ -300,8 +300,8 @@ export function OptimisationChiffrage() {
             chaque clic — pas besoin de revalider.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={goDetail}>
-          ← Retour détail lots
+        <Button variant="outline" size="sm" onClick={goRebobinage}>
+          ← Retour rebobinage
         </Button>
       </header>
 

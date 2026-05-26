@@ -47,7 +47,7 @@ export function OptimisationPoseDetailLots() {
     mandrinMm,
     goCandidats,
     goSaisie,
-    goChiffrage,
+    goRebobinage,
   } = useOptimisationPose();
   const { toast } = useToast();
 
@@ -74,10 +74,9 @@ export function OptimisationPoseDetailLots() {
   const tousLotsOntMatiere = selection.every((s) => s.matiere_id !== null);
   const sommeQuantites = selection.reduce((acc, s) => acc + s.quantite, 0);
   const sommeOK = sommeQuantites === quantiteTotale && selection.length > 0;
-  // Brief #33 — l'étape 3 ne crée plus le devis : elle bascule vers
-  // l'étape 4 chiffrage qui gère options globales, marge override,
-  // réduction commerciale et POST/PUT final.
-  const peutPasserChiffrage = tousLotsOntMatiere && sommeOK;
+  // Sprint 16 Lot D — l'étape 3 bascule désormais vers "rebobinage" puis
+  // "chiffrage". Avant Sprint 16 : étape 3 → chiffrage direct (Brief #33).
+  const peutPasserSuivant = tousLotsOntMatiere && sommeOK;
 
   return (
     <section className="space-y-4">
@@ -152,9 +151,9 @@ export function OptimisationPoseDetailLots() {
         ))}
       </div>
 
-      {/* Brief #33 — étape 3 → étape 4 chiffrage. Le devis sera créé
-          depuis l'étape 4 (options globales, marge override, réduction
-          commerciale, récap brut/net live). */}
+      {/* Sprint 16 Lot D — étape 3 → rebobinage → chiffrage. L'étape
+          rebobinage (paramètres bobine client + arbitrage pré-coupé /
+          découpe interne) est intercalée avant le chiffrage final. */}
       <div className="rounded-lg border-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-amber-50/30 p-6">
         <div className="space-y-1 text-center">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -169,17 +168,17 @@ export function OptimisationPoseDetailLots() {
         <div className="mt-5 flex justify-center">
           <Button
             size="lg"
-            onClick={goChiffrage}
-            disabled={!peutPasserChiffrage}
+            onClick={goRebobinage}
+            disabled={!peutPasserSuivant}
             className="bg-gradient-to-r from-blue-700 to-amber-600 px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:from-blue-800 hover:to-amber-700 hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 disabled:shadow-none"
           >
-            Étape suivante : chiffrage →
+            Étape suivante : rebobinage →
           </Button>
         </div>
 
         {!tousLotsOntMatiere && (
           <p className="mt-3 text-center text-sm text-amber-700">
-            ℹ Renseigne une matière pour chaque lot avant de passer au chiffrage.
+            ℹ Renseigne une matière pour chaque lot avant de passer au rebobinage.
           </p>
         )}
         {tousLotsOntMatiere && !sommeOK && (

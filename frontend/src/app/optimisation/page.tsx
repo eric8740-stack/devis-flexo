@@ -34,6 +34,7 @@ import {
   OptimisationPoseProvider,
   useOptimisationPose,
 } from "./_components/OptimisationPoseStore";
+import { OptimisationRebobinage } from "./_components/OptimisationRebobinage";
 
 /**
  * Simulateur d'optimisation FlexoCompare — PR #9.1 BAT MVP.
@@ -187,6 +188,7 @@ function OptimisationPageInner() {
       {etape === "saisie" && <OptimisationPoseSaisie />}
       {etape === "candidats" && <OptimisationPoseCandidats />}
       {etape === "detail" && <OptimisationPoseDetailLots />}
+      {etape === "rebobinage" && <OptimisationRebobinage />}
       {etape === "chiffrage" && <OptimisationChiffrage />}
     </>
   );
