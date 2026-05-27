@@ -27,6 +27,9 @@ from app.models import (
     ChargeMensuelle,
     Client,
     Complexe,
+    ConfigChangements,
+    ConfigCouts,
+    ConfigRoulage,
     CorrespondanceLaizeMetrage,
     Devis,
     Entreprise,
@@ -367,6 +370,54 @@ def seed_complexe(session: Session) -> int:
     return len(rows)
 
 
+def seed_config_strategique(session: Session) -> int:
+    """Brief stratégique v2 Phase 1 — config template NEUTRE du tenant démo.
+
+    Valeurs par défaut neutres (cf. brief section IV) : chaque entreprise les
+    ajuste ensuite via l'onglet Stratégique. Singletons couts/changements +
+    2 formats roulage d'exemple. Pas de données ICE ici (ICE → fixtures test).
+    """
+    session.add(
+        ConfigCouts(
+            entreprise_id=DEMO_ENTREPRISE_ID,
+            cout_exploitation_machine_eur_h=50.0,
+            cout_operateur_eur_h=25.0,
+            cout_energies_eur_h=3.5,
+            cout_fixe_atelier_eur_mois=2500.0,
+            cout_fixe_maintenance_eur_mois=800.0,
+            marge_standard_pct=35.0,
+            buffer_rebut_pct=2.5,
+            buffer_setup_pct=1.0,
+        )
+    )
+    session.add(
+        ConfigChangements(
+            entreprise_id=DEMO_ENTREPRISE_ID,
+            changement_couleur_duree_min=15,
+            changement_couleur_cout_eur=12.5,
+            changement_format_duree_min=25,
+            changement_format_cout_eur=18.0,
+            nettoyage_duree_min=45,
+            nettoyage_cout_eur=35.0,
+        )
+    )
+    roulages = [
+        ("A5", 280, "helicoidal", 3.0),
+        ("A4", 250, "alterne", 5.0),
+    ]
+    for fmt, debit, mode, rebut in roulages:
+        session.add(
+            ConfigRoulage(
+                entreprise_id=DEMO_ENTREPRISE_ID,
+                format_libelle=fmt,
+                debit_mm_s=debit,
+                mode_roulage=mode,
+                rebut_pct=rebut,
+            )
+        )
+    return 2 + len(roulages)
+
+
 def seed_catalogue(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "catalogue.csv")
     for row in rows:
@@ -615,6 +666,10 @@ def run_seed() -> dict[str, int]:
         session.query(ChargeMachineMensuelle).delete()
         # S5
         session.query(OutilDecoupe).delete()
+        # Brief stratégique v2 Phase 1 — config par entreprise (FK entreprise)
+        session.query(ConfigRoulage).delete()
+        session.query(ConfigChangements).delete()
+        session.query(ConfigCouts).delete()
         session.flush()  # commit logique des DELETE en transaction
 
         # Phase 2 — INSERT ascendant + flush entre chaque pour respecter FK
@@ -640,6 +695,8 @@ def run_seed() -> dict[str, int]:
             ("charge_machine_mensuelle", seed_charge_machine_mensuelle),
             # S5 Lot 5a — catalogue outils de découpe
             ("outil_decoupe", seed_outil_decoupe),
+            # Brief stratégique v2 Phase 1 — config template neutre par tenant
+            ("config_strategique", seed_config_strategique),
         ):
             counts[name] = fn(session)
             session.flush()

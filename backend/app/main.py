@@ -13,6 +13,7 @@ from app.routers import (
     charge_mensuelle,
     client,
     complexe,
+    config_strategique,
     cost,
     cylindre,
     devis,
@@ -64,6 +65,7 @@ app.include_router(operation_finition.router)
 app.include_router(partenaire_st.router)
 app.include_router(charge_mensuelle.router)
 app.include_router(complexe.router)
+app.include_router(config_strategique.router)
 app.include_router(catalogue.router)
 # Sprint 3 Lot 3f
 app.include_router(cost.router)

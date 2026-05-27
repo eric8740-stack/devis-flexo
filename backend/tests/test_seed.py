@@ -24,6 +24,9 @@ EXPECTED_COUNTS = {
     "outil_decoupe": 4,
     # Sprint 12 multi-tenant — compte admin Eric (lié à entreprise_id=1)
     "user_admin": 1,
+    # Brief stratégique v2 Phase 1 — config template neutre du tenant démo
+    # (config_couts + config_changements singletons + 2 formats roulage)
+    "config_strategique": 4,
 }
 
 
