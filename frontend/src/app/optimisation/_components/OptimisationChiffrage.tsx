@@ -65,6 +65,7 @@ export function OptimisationChiffrage() {
     laizeEtiqMm,
     devEtiqMm,
     mandrinMm,
+    nbCouleursImpression,
     goRebobinage,
     rebobinageRequest,
     optionsCodes,
@@ -146,6 +147,16 @@ export function OptimisationChiffrage() {
       // backend accepte les clés inconnues dans payload_input (dict
       // Pydantic non typé, cf. DevisCreate schemas/devis_persist.py).
       sens_enroulement: sensEnroulementClient,
+      // Fix couleurs — compteurs de couleurs consommés par le Poste 2
+      // Encres (fix backend CC1). Seul `impression` provient du store
+      // (saisie étape 1) ; pantone/blanc/vernis ne sont pas encore saisis
+      // dans le workflow optim → 0. Envoyé identique sur preview + POST.
+      nb_couleurs: {
+        impression: nbCouleursImpression,
+        pantone: 0,
+        blanc: 0,
+        vernis: 0,
+      },
     };
   }, [
     selection,
@@ -155,6 +166,7 @@ export function OptimisationChiffrage() {
     optionsCodes,
     margeOverridePct,
     sensEnroulementClient,
+    nbCouleursImpression,
   ]);
 
   const lotsPayload = useMemo<LotProductionCreatePayload[]>(

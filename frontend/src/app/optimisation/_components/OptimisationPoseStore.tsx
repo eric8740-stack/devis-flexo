@@ -117,6 +117,15 @@ interface OptimisationPoseContextValue {
   devEtiqMm: number;
   mandrinMm: number;
 
+  // Fix couleurs — nb de couleurs d'impression saisi à l'étape 1, transporté
+  // jusqu'au chiffrage pour alimenter `payload_input.nb_couleurs.impression`
+  // (POST /devis + preview live). Le backend (fix CC1) lit ce champ pour le
+  // Poste 2 Encres ; sans lui, le devis optim est sous-évalué (encres = 0).
+  // Seul `impression` provient du store : pantone/blanc/vernis n'existent pas
+  // encore à la saisie → envoyés à 0 par OptimisationChiffrage.
+  nbCouleursImpression: number;
+  setNbCouleursImpression: (n: number) => void;
+
   candidats: OptimisationConfigOut[];
   selection: SelectionLot[];
   toggleSelection: (candidat: OptimisationConfigOut) => void;
@@ -283,6 +292,10 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
   const [laizeEtiqMm, setLaizeEtiqMm] = useState<number>(0);
   const [devEtiqMm, setDevEtiqMm] = useState<number>(0);
   const [mandrinMm, setMandrinMm] = useState<number>(76);
+  // Fix couleurs — nb couleurs impression (étape 1). Défaut 0 : si l'opérateur
+  // n'est pas passé par la saisie (ex. édition hydratée), on n'invente pas de
+  // couleurs ; le backend retombe sur 0 encre, cohérent avec l'ancien comportement.
+  const [nbCouleursImpression, setNbCouleursImpression] = useState<number>(0);
 
   // Brief #33 — étape 4 state.
   const [optionsCodes, setOptionsCodes] = useState<string[]>([]);
@@ -428,6 +441,17 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
         ? payloadInput.mandrin_mm
         : 76
     );
+    // Fix couleurs — restaure nb couleurs impression depuis le nouveau
+    // champ `nb_couleurs.impression` (devis créés après le fix). Devis
+    // antérieurs : champ absent → 0.
+    const nbCouleurs = payloadInput.nb_couleurs as
+      | { impression?: unknown }
+      | undefined;
+    setNbCouleursImpression(
+      nbCouleurs && typeof nbCouleurs.impression === "number"
+        ? nbCouleurs.impression
+        : 0
+    );
 
     // 3. Restaure état étape 4 depuis payload_input.
     setOptionsCodes(
@@ -541,6 +565,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       laizeEtiqMm,
       devEtiqMm,
       mandrinMm,
+      nbCouleursImpression,
+      setNbCouleursImpression,
       candidats,
       selection,
       toggleSelection,
@@ -581,6 +607,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       laizeEtiqMm,
       devEtiqMm,
       mandrinMm,
+      nbCouleursImpression,
+      setNbCouleursImpression,
       candidats,
       selection,
       toggleSelection,

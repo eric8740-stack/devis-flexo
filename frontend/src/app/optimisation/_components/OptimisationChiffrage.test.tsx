@@ -208,6 +208,7 @@ function buildFakeCandidat(): OptimisationConfigOut {
 function setupChiffrage(opts: {
   client: Client | null;
   sensEnroulementOverride?: number | null;
+  nbCouleursImpression?: number;
 }) {
   function Inner() {
     const {
@@ -218,6 +219,7 @@ function setupChiffrage(opts: {
       setMatiereLot,
       setClientSelectionne,
       setSensEnroulementClient,
+      setNbCouleursImpression,
     } = useOptimisationPose();
     useEffect(() => {
       const candidat = buildFakeCandidat();
@@ -229,6 +231,9 @@ function setupChiffrage(opts: {
       setClientSelectionne(opts.client);
       if (opts.sensEnroulementOverride !== undefined) {
         setSensEnroulementClient(opts.sensEnroulementOverride);
+      }
+      if (opts.nbCouleursImpression !== undefined) {
+        setNbCouleursImpression(opts.nbCouleursImpression);
       }
       goChiffrage();
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,6 +352,39 @@ describe("OptimisationChiffrage — Sprint 16 propagation auto-fill", () => {
       (postDevisCall?.[1] as RequestInit).body as string,
     );
     expect(body.payload_input.sens_enroulement).toBe(2);
+  });
+
+  it("nb_couleurs impression du store → payload_input.nb_couleurs (pantone/blanc/vernis à 0) au POST devis", async () => {
+    setupChiffrage({ client: null, nbCouleursImpression: 6 });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() => {
+      const calls = fetchSpy.mock.calls.filter(
+        (c) =>
+          String(c[0]).endsWith("/api/devis") &&
+          (c[1] as RequestInit)?.method === "POST",
+      );
+      expect(calls.length).toBeGreaterThan(0);
+    });
+    const postDevisCall = fetchSpy.mock.calls.find(
+      (c) =>
+        String(c[0]).endsWith("/api/devis") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    const body = JSON.parse(
+      (postDevisCall?.[1] as RequestInit).body as string,
+    );
+    expect(body.payload_input.nb_couleurs).toEqual({
+      impression: 6,
+      pantone: 0,
+      blanc: 0,
+      vernis: 0,
+    });
   });
 
   it("preview chiffrage incomplet → bandeau d'erreur, aucun prix affiché (pas de 0,00 €)", async () => {
