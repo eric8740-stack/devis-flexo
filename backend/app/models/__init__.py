@@ -6,6 +6,9 @@ from app.models.charge_machine_mensuelle import ChargeMachineMensuelle
 from app.models.charge_mensuelle import ChargeMensuelle
 from app.models.client import Client
 from app.models.complexe import Complexe
+from app.models.config_changements import ConfigChangements
+from app.models.config_couts import ConfigCouts
+from app.models.config_roulage import MODES_ROULAGE, ConfigRoulage
 from app.models.configuration_pose import ConfigurationPose
 from app.models.controle_bat import (
     ACTIONS_CORRECTION_SENS,
@@ -65,6 +68,11 @@ __all__ = [
     "MachineRebobineuse",
     "MODES_PAR_DEFAUT",
     "ParametreMandrin",
+    # Brief stratégique v2 Phase 1 — socle Stratégique (config par entreprise)
+    "ConfigChangements",
+    "ConfigCouts",
+    "ConfigRoulage",
+    "MODES_ROULAGE",
     # Modèles existants (Sprint 0 à 12)
     "Catalogue",
     "ChargeMachineMensuelle",
