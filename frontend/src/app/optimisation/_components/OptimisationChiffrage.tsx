@@ -65,6 +65,7 @@ export function OptimisationChiffrage() {
     laizeEtiqMm,
     devEtiqMm,
     mandrinMm,
+    nbCouleursImpression,
     goRebobinage,
     rebobinageRequest,
     optionsCodes,
@@ -146,6 +147,16 @@ export function OptimisationChiffrage() {
       // backend accepte les clés inconnues dans payload_input (dict
       // Pydantic non typé, cf. DevisCreate schemas/devis_persist.py).
       sens_enroulement: sensEnroulementClient,
+      // Fix couleurs — compteurs de couleurs consommés par le Poste 2
+      // Encres (fix backend CC1). Seul `impression` provient du store
+      // (saisie étape 1) ; pantone/blanc/vernis ne sont pas encore saisis
+      // dans le workflow optim → 0. Envoyé identique sur preview + POST.
+      nb_couleurs: {
+        impression: nbCouleursImpression,
+        pantone: 0,
+        blanc: 0,
+        vernis: 0,
+      },
     };
   }, [
     selection,
@@ -155,6 +166,7 @@ export function OptimisationChiffrage() {
     optionsCodes,
     margeOverridePct,
     sensEnroulementClient,
+    nbCouleursImpression,
   ]);
 
   const lotsPayload = useMemo<LotProductionCreatePayload[]>(
@@ -523,61 +535,76 @@ export function OptimisationChiffrage() {
           {selection.length} lot{selection.length > 1 ? "s" : ""} ·{" "}
           {quantiteTotale.toLocaleString("fr-FR")} étiquettes au total
         </p>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Coût brut HT
+        {/* Fix bandeau erreur chiffrage — si le backend signale un chiffrage
+            incomplet (chiffrage_auto_erreur), on n'affiche AUCUN prix (pas de
+            « 0,00 € » trompeur) : on remplace tout le bloc par un bandeau
+            d'erreur explicite. Sinon, récap brut / réduction / net habituel. */}
+        {preview?.chiffrage_auto_erreur ? (
+          <div
+            role="alert"
+            data-testid="chiffrage-erreur-bandeau"
+            className="rounded-xl border-2 border-red-300 bg-red-50 px-5 py-4 text-red-900"
+          >
+            <p className="text-base font-semibold">
+              ⚠ Chiffrage incomplet — aucun prix calculé
             </p>
-            <p
-              className="mt-1 text-2xl font-bold text-blue-900"
-              style={{ fontFamily: "Fraunces, serif" }}
-            >
-              {previewLoading
-                ? "…"
-                : preview
-                  ? `${formaterEuros(preview.cout_brut_ht_eur)} €`
-                  : "—"}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Réduction
-            </p>
-            <p
-              className="mt-1 text-2xl font-bold text-emerald-700"
-              style={{ fontFamily: "Fraunces, serif" }}
-            >
-              {previewLoading
-                ? "…"
-                : preview
-                  ? `−${formaterEuros(preview.reduction_eur)} €`
-                  : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {preview ? `${formaterEuros(preview.reduction_pct)} %` : ""}
+            <p className="mt-1 text-sm">{preview.chiffrage_auto_erreur}</p>
+            <p className="mt-2 text-xs text-red-700">
+              Corrige la cause ci-dessus puis recalcule. Tant que le chiffrage
+              n&apos;aboutit pas, le devis ne porte pas de prix valide.
             </p>
           </div>
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Coût net HT
-            </p>
-            <p
-              className="mt-1 bg-gradient-to-r from-blue-700 to-amber-700 bg-clip-text text-4xl font-extrabold text-transparent"
-              style={{ fontFamily: "Fraunces, serif" }}
-            >
-              {previewLoading
-                ? "…"
-                : preview
-                  ? `${formaterEuros(preview.cout_net_ht_eur)} €`
-                  : "—"}
-            </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Coût brut HT
+              </p>
+              <p
+                className="mt-1 text-2xl font-bold text-blue-900"
+                style={{ fontFamily: "Fraunces, serif" }}
+              >
+                {previewLoading
+                  ? "…"
+                  : preview
+                    ? `${formaterEuros(preview.cout_brut_ht_eur)} €`
+                    : "—"}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Réduction
+              </p>
+              <p
+                className="mt-1 text-2xl font-bold text-emerald-700"
+                style={{ fontFamily: "Fraunces, serif" }}
+              >
+                {previewLoading
+                  ? "…"
+                  : preview
+                    ? `−${formaterEuros(preview.reduction_eur)} €`
+                    : "—"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {preview ? `${formaterEuros(preview.reduction_pct)} %` : ""}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Coût net HT
+              </p>
+              <p
+                className="mt-1 bg-gradient-to-r from-blue-700 to-amber-700 bg-clip-text text-4xl font-extrabold text-transparent"
+                style={{ fontFamily: "Fraunces, serif" }}
+              >
+                {previewLoading
+                  ? "…"
+                  : preview
+                    ? `${formaterEuros(preview.cout_net_ht_eur)} €`
+                    : "—"}
+              </p>
+            </div>
           </div>
-        </div>
-
-        {preview?.chiffrage_erreur && (
-          <p className="mt-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
-            ⚠ Chiffrage auto en mode dégradé : {preview.chiffrage_erreur}
-          </p>
         )}
 
         <div className="mt-6 flex justify-center">

@@ -35,7 +35,7 @@ vi.mock("./useClientsListe", () => ({
 // ──────────────────────────────────────────────────────────────────
 let fetchSpy: ReturnType<typeof vi.fn>;
 
-function installFetchMock() {
+function installFetchMock(previewErreur?: string) {
   fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === "string"
@@ -52,20 +52,31 @@ function installFetchMock() {
         json: async () => [],
       } as Response;
     }
-    // Preview coûts : on retourne un brut/net minimal cohérent.
+    // Preview coûts : on retourne un brut/net minimal cohérent, OU un
+    // chiffrage incomplet (chiffrage_auto_erreur non-null) si demandé.
     if (url.includes("/api/devis/preview-couts")) {
       return {
         ok: true,
         status: 200,
         statusText: "OK",
-        json: async () => ({
-          cout_brut_ht_eur: "1000.00",
-          reduction_pct: "0",
-          reduction_eur: "0.00",
-          cout_net_ht_eur: "1000.00",
-          nb_lots: 1,
-          chiffrage_erreur: null,
-        }),
+        json: async () =>
+          previewErreur
+            ? {
+                cout_brut_ht_eur: "0.00",
+                reduction_pct: "0",
+                reduction_eur: "0.00",
+                cout_net_ht_eur: "0.00",
+                nb_lots: 1,
+                chiffrage_auto_erreur: previewErreur,
+              }
+            : {
+                cout_brut_ht_eur: "1000.00",
+                reduction_pct: "0",
+                reduction_eur: "0.00",
+                cout_net_ht_eur: "1000.00",
+                nb_lots: 1,
+                chiffrage_auto_erreur: null,
+              },
       } as Response;
     }
     // POST /api/devis (création).
@@ -197,6 +208,7 @@ function buildFakeCandidat(): OptimisationConfigOut {
 function setupChiffrage(opts: {
   client: Client | null;
   sensEnroulementOverride?: number | null;
+  nbCouleursImpression?: number;
 }) {
   function Inner() {
     const {
@@ -207,6 +219,7 @@ function setupChiffrage(opts: {
       setMatiereLot,
       setClientSelectionne,
       setSensEnroulementClient,
+      setNbCouleursImpression,
     } = useOptimisationPose();
     useEffect(() => {
       const candidat = buildFakeCandidat();
@@ -218,6 +231,9 @@ function setupChiffrage(opts: {
       setClientSelectionne(opts.client);
       if (opts.sensEnroulementOverride !== undefined) {
         setSensEnroulementClient(opts.sensEnroulementOverride);
+      }
+      if (opts.nbCouleursImpression !== undefined) {
+        setNbCouleursImpression(opts.nbCouleursImpression);
       }
       goChiffrage();
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -336,5 +352,56 @@ describe("OptimisationChiffrage — Sprint 16 propagation auto-fill", () => {
       (postDevisCall?.[1] as RequestInit).body as string,
     );
     expect(body.payload_input.sens_enroulement).toBe(2);
+  });
+
+  it("nb_couleurs impression du store → payload_input.nb_couleurs (pantone/blanc/vernis à 0) au POST devis", async () => {
+    setupChiffrage({ client: null, nbCouleursImpression: 6 });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() => {
+      const calls = fetchSpy.mock.calls.filter(
+        (c) =>
+          String(c[0]).endsWith("/api/devis") &&
+          (c[1] as RequestInit)?.method === "POST",
+      );
+      expect(calls.length).toBeGreaterThan(0);
+    });
+    const postDevisCall = fetchSpy.mock.calls.find(
+      (c) =>
+        String(c[0]).endsWith("/api/devis") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    const body = JSON.parse(
+      (postDevisCall?.[1] as RequestInit).body as string,
+    );
+    expect(body.payload_input.nb_couleurs).toEqual({
+      impression: 6,
+      pantone: 0,
+      blanc: 0,
+      vernis: 0,
+    });
+  });
+
+  it("preview chiffrage incomplet → bandeau d'erreur, aucun prix affiché (pas de 0,00 €)", async () => {
+    // Override du fetch mock : le preview renvoie un chiffrage_auto_erreur.
+    installFetchMock(
+      "Complexe id=1 (BOPP_BLANC_50) n'a pas de grammage_g_m2 défini, requis pour P1",
+    );
+    setupChiffrage({ client: null });
+
+    // Le bandeau d'erreur apparaît une fois le preview résolu.
+    const bandeau = await screen.findByTestId("chiffrage-erreur-bandeau");
+    expect(bandeau).toHaveTextContent(/Chiffrage incomplet/i);
+    expect(bandeau).toHaveTextContent(/grammage_g_m2/);
+
+    // Aucun prix « 0,00 € » ne doit être rendu comme un montant valide.
+    expect(screen.queryByText(/0,00\s*€/)).not.toBeInTheDocument();
+    // Les libellés du récap chiffré ne sont pas montés.
+    expect(screen.queryByText(/Coût net HT/i)).not.toBeInTheDocument();
   });
 });

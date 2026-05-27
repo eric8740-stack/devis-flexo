@@ -195,7 +195,7 @@ function OptimisationPageInner() {
 }
 
 function OptimisationPoseSaisie() {
-  const { goCandidats } = useOptimisationPose();
+  const { goCandidats, setNbCouleursImpression } = useOptimisationPose();
   const { toast } = useToast();
 
   const [options, setOptions] = useState<OptionDisponible[] | null>(null);
@@ -368,6 +368,10 @@ function OptimisationPoseSaisie() {
           variant: "destructive",
         });
       } else {
+        // Fix couleurs — propage le nb couleurs impression saisi ici
+        // jusqu'au chiffrage (payload_input.nb_couleurs). Le moteur backend
+        // s'en sert pour le Poste 2 Encres.
+        setNbCouleursImpression(parseInt(nbCouleurs, 10) || 0);
         // Sprint 13 avenant : push les candidats dans le store et bascule
         // vers étape 2 (tableau multi-sélection).
         goCandidats(
