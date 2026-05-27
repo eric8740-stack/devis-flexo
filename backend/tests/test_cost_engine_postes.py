@@ -9,6 +9,7 @@ from decimal import Decimal
 import pytest
 
 from app.db import SessionLocal
+from app.models import Complexe
 from app.schemas.devis import DevisInput, PartenaireSTForfait
 from app.services.cost_engine import CostEngineError
 from app.services.cost_engine.poste_1_matiere import CalculateurPoste1Matiere
@@ -60,9 +61,16 @@ def test_p1_matiere_derive_prix_kg_from_complexe():
 
 
 def test_p1_matiere_raises_when_complexe_has_no_grammage():
-    """Complexe id=1 (BOPP_BLANC_50) a grammage_g_m2 NULL — erreur explicite."""
+    """P1 lève une erreur explicite si le complexe n'a pas de grammage.
+
+    Depuis le Lot 1 complexe enrichi, tous les complexes seedés ont un
+    grammage ; on force id=1 à NULL dans la session pour exercer ce garde
+    (grammage requis pour passer du m² au kg)."""
     devis = _devis_median().model_copy(update={"complexe_id": 1})
     with SessionLocal() as db:
+        complexe = db.get(Complexe, 1)
+        complexe.grammage_g_m2 = None
+        db.flush()
         with pytest.raises(CostEngineError, match="grammage_g_m2"):
             CalculateurPoste1Matiere(db, entreprise_id=1).calculer(devis)
 
