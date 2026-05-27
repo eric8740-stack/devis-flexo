@@ -31,6 +31,7 @@ from app.routers import (
     partenaire_st,
     porte_cliche,
     rebobinage,
+    tarif_encre,
     tarif_poste,
 )
 from app.services.cost_engine import CostEngineError
@@ -75,6 +76,7 @@ app.include_router(outil_decoupe.router)
 app.include_router(devis.router)
 # Sprint 9 v2 Lot 9c — paramétrabilité tarifs
 app.include_router(tarif_poste.router)
+app.include_router(tarif_encre.router)
 # Sprint 12 Lot S12-B — auth multi-tenant
 app.include_router(auth.router)
 # Sprint 12 Lot S12-D — admin endpoints (Eric only)
