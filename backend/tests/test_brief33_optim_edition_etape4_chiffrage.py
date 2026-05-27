@@ -3,7 +3,7 @@
 8 tests couvrant :
 1. POST /api/devis/preview-couts : recalcul brut/net live sans persister.
 2. preview-couts avec réduction commerciale (cout_net = brut × (1 - red%)).
-3. preview-couts en mode dégradé (échec chiffrage → chiffrage_erreur non null).
+3. preview-couts en mode dégradé (échec chiffrage → chiffrage_auto_erreur non null).
 4. POST /api/devis avec snapshot payload_visuel → persiste correctement.
 5. GET /api/devis/{id} retourne payload_visuel dans lots_production.
 6. PUT /api/devis/{id} avec nouveaux lots → remplace les lots et payload_visuel.
@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from app.main import app
 from app.models import (
+    Complexe,
     CylindreMagnetique,
     Devis,
     LotProduction,
@@ -26,6 +27,30 @@ from app.models import (
 from tests.test_lot_production_model import _onboard_if_needed
 
 client = TestClient(app)
+
+
+def _assurer_grammage_complexe() -> None:
+    """Sprint 16 fix chiffrage — donne un grammage au 1er complexe (best-effort).
+
+    Le chiffrage auto sélectionne le 1er complexe du tenant (pas encore de
+    pont matière↔complexe). Sur le seed démo, ce complexe (BOPP_BLANC_50)
+    n'a pas de grammage_g_m2 → P1 Matière impossible → chiffrage échoue.
+
+    Avant le fix "fin du 0 silencieux", l'échec retournait brut=0 et ces
+    tests passaient à VIDE (0 == 0). Désormais l'échec retourne brut=None
+    (option B). Pour que ces tests exercent RÉELLEMENT le calcul brut/net,
+    on garantit un grammage → chiffrage qui réussit avec des montants réels.
+    """
+    with SessionLocal() as db:
+        premier = (
+            db.query(Complexe)
+            .filter_by(entreprise_id=1)
+            .order_by(Complexe.id)
+            .first()
+        )
+        if premier is not None and premier.grammage_g_m2 is None:
+            premier.grammage_g_m2 = 90
+            db.commit()
 
 
 def _fks_tenant1() -> tuple[int, int, int]:
@@ -134,6 +159,7 @@ def _clean_devis():
 def test_preview_couts_retourne_brut_et_net():
     machine_id, cyl_id, mat_id = _fks_tenant1()
     _clean_devis()
+    _assurer_grammage_complexe()  # chiffrage réussit → brut/net réels (non None)
     body = {
         "payload_input": {
             "machine_id": machine_id,
@@ -161,6 +187,8 @@ def test_preview_couts_retourne_brut_et_net():
     assert "cout_brut_ht_eur" in data
     assert "cout_net_ht_eur" in data
     assert data["nb_lots"] == 1
+    # Chiffrage réussi (grammage assuré) → montants non None.
+    assert data["cout_brut_ht_eur"] is not None
     # Réduction 0 → brut == net.
     assert Decimal(data["cout_brut_ht_eur"]) == Decimal(data["cout_net_ht_eur"])
     assert Decimal(data["reduction_eur"]) == Decimal("0.00")
@@ -172,6 +200,7 @@ def test_preview_couts_retourne_brut_et_net():
 def test_preview_couts_applique_reduction():
     machine_id, cyl_id, mat_id = _fks_tenant1()
     _clean_devis()
+    _assurer_grammage_complexe()  # chiffrage réussit → la réduction porte sur un brut réel
     body = {
         "payload_input": {
             "machine_id": machine_id,
@@ -196,13 +225,14 @@ def test_preview_couts_applique_reduction():
     r = client.post("/api/devis/preview-couts", json=body)
     assert r.status_code == 200, r.text
     data = r.json()
+    # Chiffrage réussi (grammage assuré) → montants non None, réduction réelle.
+    assert data["cout_brut_ht_eur"] is not None
     brut = Decimal(data["cout_brut_ht_eur"])
     net = Decimal(data["cout_net_ht_eur"])
-    # Si brut > 0 (chiffrage OK), net = brut × 0.80, sinon mode dégradé.
-    if brut > 0:
-        attendu_net = (brut * Decimal("0.80")).quantize(Decimal("0.01"))
-        assert net == attendu_net
-        assert Decimal(data["reduction_eur"]) == (brut - net)
+    assert brut > 0
+    attendu_net = (brut * Decimal("0.80")).quantize(Decimal("0.01"))
+    assert net == attendu_net
+    assert Decimal(data["reduction_eur"]) == (brut - net)
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +240,17 @@ def test_preview_couts_applique_reduction():
 # ---------------------------------------------------------------------------
 def test_preview_couts_mode_degrade_retourne_chiffrage_erreur():
     """Si le chiffrage échoue (FK invalide), preview-couts retourne 200
-    avec chiffrage_erreur non null et brut=0 (mode dégradé)."""
-    machine_id, cyl_id, _mat = _fks_tenant1()
+    avec chiffrage_auto_erreur non null et montants à None (mode dégradé).
+
+    Sprint 16 fix "fin du 0 silencieux" (option B) : auparavant ce test
+    attendait brut == 0 — un 0 € trompeur. Désormais l'échec retourne
+    explicitement brut/net = None pour que l'UI affiche "chiffrage
+    indisponible" plutôt qu'un faux prix nul.
+    """
+    machine_id, _cyl, mat_id = _fks_tenant1()
+    # cylindre_id invalide → `_construire_devis_input_pour_lot` lève
+    # ValueError ("Cyl introuvable — FK cassée"), échec robuste quel que
+    # soit l'état du grammage du complexe (tests précédents le renseignent).
     body = {
         "payload_input": {
             "machine_id": machine_id,
@@ -221,13 +260,13 @@ def test_preview_couts_mode_degrade_retourne_chiffrage_erreur():
         },
         "lots": [
             {
-                "cylindre_id": cyl_id,
+                "cylindre_id": 999_999,  # FK invalide → chiffrage échoue
                 "machine_id": machine_id,
                 "nb_poses_dev": 2,
                 "nb_poses_laize": 3,
                 "sens_enroulement": 1,
                 "quantite": 10000,
-                "matiere_id": 999_999,  # FK invalide
+                "matiere_id": mat_id,
             }
         ],
         "reduction_pct": 0,
@@ -235,9 +274,11 @@ def test_preview_couts_mode_degrade_retourne_chiffrage_erreur():
     r = client.post("/api/devis/preview-couts", json=body)
     assert r.status_code == 200, r.text
     data = r.json()
-    # Mode dégradé : chiffrage_erreur renseigné, brut/net à 0.
-    assert data["chiffrage_erreur"] is not None
-    assert Decimal(data["cout_brut_ht_eur"]) == Decimal("0")
+    # Mode dégradé (option B) : chiffrage_auto_erreur renseigné, brut/net
+    # à None (pas de 0 € trompeur). Nom de champ unifié avec POST /devis.
+    assert data["chiffrage_auto_erreur"] is not None
+    assert data["cout_brut_ht_eur"] is None
+    assert data["cout_net_ht_eur"] is None
 
 
 # ---------------------------------------------------------------------------

@@ -52,6 +52,8 @@ def preview_couts_devis(
         lots_data=lots_data,
         payload_input=payload.payload_input,
         reduction_pct=payload.reduction_pct,
+        # Sprint 16 fix chiffrage : propage les compteurs couleurs (P2 Encres).
+        nb_couleurs_par_type=crud._mapper_nb_couleurs(payload.nb_couleurs),
     )
     return PreviewCoutsOut(**result)
 

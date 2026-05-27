@@ -92,6 +92,28 @@ class LotProductionRead(BaseModel):
     payload_visuel: dict | None = None
 
 
+class NbCouleursIn(BaseModel):
+    """Sprint 16 fix chiffrage — compteurs de couleurs du devis.
+
+    Alimente le Poste 2 Encres du cost_engine (via mapping vers les
+    `type_encre` réels en base). Champs à 0 par défaut (rétro-compatible :
+    un payload sans `nb_couleurs` → P2 Encres = 0, comportement antérieur).
+
+    Mapping côté CRUD vers `nb_couleurs_par_type` :
+      - impression → "process_cmj"   (process quadri)
+      - pantone    → "pantone"
+      - blanc      → "blanc_high_opaque"
+      - vernis     → NON mappé (le vernis est une finition P6, pas une encre P2)
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    impression: int = Field(default=0, ge=0)
+    pantone: int = Field(default=0, ge=0)
+    blanc: int = Field(default=0, ge=0)
+    vernis: int = Field(default=0, ge=0)
+
+
 class DevisCreate(BaseModel):
     """Body POST /api/devis.
 
@@ -129,6 +151,11 @@ class DevisCreate(BaseModel):
         "vierge", "bat_pro_fourni", "a_designer"
     ] = "a_designer"
     conditions_stockage: dict | None = None
+
+    # Sprint 16 fix chiffrage — compteurs couleurs pour le Poste 2 Encres.
+    # Optionnel : None → P2 Encres = 0 (comportement antérieur préservé).
+    # CC2 enverra ce champ depuis le store optim (nb couleurs saisi étape 1).
+    nb_couleurs: NbCouleursIn | None = None
 
     @model_validator(mode="after")
     def _valider_somme_quantites_lots(self) -> "DevisCreate":
@@ -205,7 +232,9 @@ class DevisListItem(BaseModel):
     machine_nom: str
     format_h_mm: Decimal
     format_l_mm: Decimal
-    ht_total_eur: Decimal
+    # Sprint 16 fix chiffrage : Optional — un devis "chiffrage incomplet"
+    # (option B) a ht_total_eur NULL, distinct d'un 0 € trompeur.
+    ht_total_eur: Decimal | None
     mode_calcul: str
 
 
@@ -230,7 +259,9 @@ class DevisDetail(BaseModel):
     cylindre_choisi_nb_etiq: int | None
     format_h_mm: Decimal
     format_l_mm: Decimal
-    ht_total_eur: Decimal
+    # Sprint 16 fix chiffrage : Optional — devis "chiffrage incomplet"
+    # (option B) → ht_total_eur NULL au lieu d'un 0 € trompeur.
+    ht_total_eur: Decimal | None
     # Brief #32 — réduction commerciale (default 0, voir CRUD).
     reduction_pct: Decimal = Decimal(0)
     # Sprint 13 avenant — lots de production (liste vide si devis legacy
@@ -273,6 +304,8 @@ class PreviewCoutsIn(BaseModel):
     payload_input: dict
     lots: list[LotProductionCreate] = Field(min_length=1)
     reduction_pct: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    # Sprint 16 fix chiffrage — compteurs couleurs pour le preview live.
+    nb_couleurs: NbCouleursIn | None = None
 
 
 class PreviewCoutsOut(BaseModel):
@@ -284,10 +317,15 @@ class PreviewCoutsOut(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    cout_brut_ht_eur: Decimal
+    # Sprint 16 fix chiffrage : montants Optional. Quand
+    # `chiffrage_auto_erreur` est non-null (ex: matière non reliée à un
+    # complexe), les montants valent None — jamais un 0 € trompeur. L'UI
+    # affiche "chiffrage indisponible" au lieu d'un faux prix nul.
+    cout_brut_ht_eur: Decimal | None
     reduction_pct: Decimal
-    reduction_eur: Decimal
-    cout_net_ht_eur: Decimal
+    reduction_eur: Decimal | None
+    cout_net_ht_eur: Decimal | None
     nb_lots: int
-    # Note pour transparence si le chiffrage auto a échoué (mode dégradé).
-    chiffrage_erreur: str | None = None
+    # Nom de champ unifié avec la réponse POST /devis (payload_output.
+    # chiffrage_auto_erreur) — CC2 consomme ce nom exact pour le bandeau.
+    chiffrage_auto_erreur: str | None = None

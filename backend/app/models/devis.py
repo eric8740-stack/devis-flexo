@@ -91,7 +91,11 @@ class Devis(Base):
     cylindre_choisi_nb_etiq: Mapped[int | None] = mapped_column(Integer)
 
     # Champs dénormalisés pour la liste paginée (évite parsing JSON par ligne).
-    ht_total_eur: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    # Sprint 16 fix chiffrage : nullable depuis la migration t4i6d8b2a9c5.
+    # Un devis dont le chiffrage auto a échoué (ex: matière non reliée à un
+    # complexe de coût) est créé en "chiffrage incomplet" avec ht_total_eur
+    # NULL + payload_output.chiffrage_auto_erreur — jamais un 0 € trompeur.
+    ht_total_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     format_h_mm: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
     format_l_mm: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
     machine_id: Mapped[int] = mapped_column(
