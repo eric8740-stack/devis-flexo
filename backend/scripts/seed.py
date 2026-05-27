@@ -101,6 +101,14 @@ def _to_bool(value: str | None) -> bool:
     return value.strip().lower() in ("true", "1", "yes")
 
 
+def _to_json_list(value: str | None) -> list[str] | None:
+    # CSV → liste JSON pour colonnes JSON (certifications). Cellule vide → None.
+    # Plusieurs valeurs séparées par ';' (le ',' est le séparateur CSV).
+    if not value or not value.strip():
+        return None
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
 # ---------------------------------------------------------------------------
 # Sprint 0-1 : entreprise / client / fournisseur
 # ---------------------------------------------------------------------------
@@ -338,12 +346,22 @@ def seed_complexe(session: Session) -> int:
                 reference=row["reference"],
                 famille=row["famille"],
                 face_matiere=row.get("face_matiere"),
-                grammage_g_m2=_to_int(row.get("grammage_g_m2")),
+                # Lot 1 complexe enrichi : grammage Numeric (films décimaux).
+                grammage_g_m2=_to_float(row.get("grammage_g_m2")),
                 adhesif_type=row.get("adhesif_type"),
                 prix_m2_eur=_to_float(row["prix_m2_eur"]),
                 fournisseur_id=_to_int(row.get("fournisseur_id")),
                 actif=actif,
                 commentaire=row.get("commentaire"),
+                # Lot 1 complexe enrichi — champs optim + certifs.
+                epaisseur_microns=_to_int(row.get("epaisseur_microns")),
+                est_transparent=_to_bool(row.get("est_transparent")),
+                opacite_pct=_to_float(row.get("opacite_pct")),
+                sous_type=row.get("sous_type") or None,
+                certifications_sanitaires=_to_json_list(
+                    row.get("certifications_sanitaires")
+                ),
+                certifications_env=_to_json_list(row.get("certifications_env")),
             )
         )
     return len(rows)

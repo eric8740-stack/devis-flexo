@@ -23,10 +23,26 @@ from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
 from app.main import app
-from app.models import Devis
+from app.models import Complexe, Devis
 from tests.test_creation_devis_calcule_prix_aggregate import _payload_devis_1_lot
 
 client = TestClient(app)
+
+
+def _annuler_grammage_premier_complexe() -> None:
+    """Lot 1 complexe enrichi : désormais TOUS les complexes ont un grammage.
+    Pour exercer le chemin option B "complexe best-effort sans grammage",
+    on remet à NULL le grammage du 1er complexe (celui que le chiffrage
+    best-effort sélectionne via order_by(id).first())."""
+    with SessionLocal() as db:
+        premier = (
+            db.query(Complexe)
+            .filter_by(entreprise_id=1)
+            .order_by(Complexe.id)
+            .first()
+        )
+        premier.grammage_g_m2 = None
+        db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +57,7 @@ def test_post_devis_complexe_sans_grammage_chiffrage_incomplet():
     with SessionLocal() as db:
         db.query(Devis).delete()
         db.commit()
+    _annuler_grammage_premier_complexe()  # Lot 1 : tous ont un grammage → on en force un NULL
 
     r = client.post("/api/devis", json=_payload_devis_1_lot())
     assert r.status_code == 201, r.text  # PAS de 500
@@ -65,6 +82,7 @@ def test_preview_couts_chiffrage_indisponible_montants_none():
     from tests.test_creation_devis_calcule_prix_aggregate import _fks_tenant1
 
     machine_id, cyl_id, mat_id = _fks_tenant1()
+    _annuler_grammage_premier_complexe()  # Lot 1 : force un complexe sans grammage
     payload = {
         "payload_input": {
             "machine_id": machine_id,

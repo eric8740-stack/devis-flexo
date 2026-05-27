@@ -7,7 +7,9 @@ from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
 from app.main import app
+from app.models import Complexe
 
 client = TestClient(app)
 
@@ -70,7 +72,15 @@ def test_post_cost_calculer_unknown_type_encre_returns_422():
 
 
 def test_post_cost_calculer_complexe_without_grammage_returns_422():
-    """Complexe id=1 (BOPP_BLANC_50) a grammage NULL → CostEngineError → 422."""
+    """Complexe sans grammage → CostEngineError → 422.
+
+    Depuis le Lot 1 complexe enrichi, tous les complexes seedés ont un
+    grammage ; on force id=1 à NULL (commit) pour exercer la conversion
+    CostEngineError → 422."""
+    with SessionLocal() as db:
+        complexe = db.get(Complexe, 1)
+        complexe.grammage_g_m2 = None
+        db.commit()
     payload = _payload_median() | {"complexe_id": 1}
     response = client.post("/api/cost/calculer", json=payload)
     assert response.status_code == 422
