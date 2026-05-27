@@ -26,10 +26,21 @@ from app.models import (
 )
 from app.schemas.devis import DevisInput
 from app.schemas.devis_persist import DevisCreate, DevisUpdate
+from app.services.cost_engine.errors import CostEngineError
 from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.numero_devis_service import generate_next_numero
 
 logger = logging.getLogger(__name__)
+
+# Sprint 16 fix chiffrage — message métier affiché quand le chiffrage auto
+# d'un devis multi-lots optim échoue (cause connue : matière du lot non
+# reliée à un complexe de coût — les catalogues `matiere` (optim) et
+# `complexe` (cost_engine) ne sont pas encore pontés). Option B : devis
+# créé en "chiffrage incomplet" (ht_total_eur NULL), jamais un 0 € trompeur.
+MSG_CHIFFRAGE_INDISPONIBLE = (
+    "Matière du lot non reliée à un complexe de coût — chiffrage auto "
+    "indisponible, devis à finaliser manuellement."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +288,11 @@ def create_devis(
 
         # Brief #32 commit 1 — chiffrage cost_engine automatique.
         _chiffrer_devis_multilots(
-            db, devis, lots_persistes, data.payload_input, entreprise_id
+            db,
+            devis,
+            lots_persistes,
+            data.payload_input,
+            entreprise_id,
         )
 
     db.commit()
@@ -300,8 +315,9 @@ def preview_couts_multilots(
     de l'étape 4 chiffrage.
 
     En cas d'échec (validation Pydantic, complexe manquant), retourne un
-    payload avec `chiffrage_erreur` non null et brut=0 pour permettre à
-    l'UI de gérer le mode dégradé.
+    payload avec `chiffrage_auto_erreur` non null et montants à None —
+    nom de champ unifié avec la réponse POST /devis (CC2 consomme ce nom
+    exact pour le bandeau "chiffrage indisponible").
     """
     # Construit des LotProduction transitoires (non persistés) pour
     # réutiliser `_construire_devis_input_pour_lot()` qui les attend.
@@ -329,11 +345,24 @@ def preview_couts_multilots(
         ]
         cout_agrege = calculer_devis_multilots(db, entreprise_id, devis_inputs)
         cout_brut = cout_agrege.prix_vente_ht_total_eur
-        chiffrage_erreur = None
-    except Exception as exc:
-        logger.warning("preview_couts_multilots erreur : %s", exc)
-        cout_brut = Decimal(0)
-        chiffrage_erreur = str(exc)
+        chiffrage_auto_erreur = None
+    except (CostEngineError, ValueError) as exc:
+        # Échec MÉTIER attendu : pas de 0 € trompeur. Montants à None +
+        # erreur explicite — l'UI affiche le mode "chiffrage indisponible".
+        logger.warning("preview_couts_multilots indisponible : %s", exc)
+        cout_brut = None
+        chiffrage_auto_erreur = MSG_CHIFFRAGE_INDISPONIBLE
+    # Toute autre exception (bug inattendu) n'est PAS masquée : elle remonte.
+
+    if cout_brut is None:
+        return {
+            "cout_brut_ht_eur": None,
+            "reduction_pct": reduction_pct,
+            "reduction_eur": None,
+            "cout_net_ht_eur": None,
+            "nb_lots": len(lots_data),
+            "chiffrage_auto_erreur": chiffrage_auto_erreur,
+        }
 
     reduction_eur = (cout_brut * reduction_pct / Decimal(100)).quantize(
         Decimal("0.01")
@@ -346,7 +375,7 @@ def preview_couts_multilots(
         "reduction_eur": reduction_eur,
         "cout_net_ht_eur": cout_net,
         "nb_lots": len(lots_data),
-        "chiffrage_erreur": chiffrage_erreur,
+        "chiffrage_auto_erreur": chiffrage_auto_erreur,
     }
 
 
@@ -378,22 +407,29 @@ def _chiffrer_devis_multilots(
             for lot in lots
         ]
         cout_agrege = calculer_devis_multilots(db, entreprise_id, devis_inputs)
-    except Exception as exc:
+    except (CostEngineError, ValueError) as exc:
+        # Échec MÉTIER attendu (matière non reliée à un complexe, complexe
+        # sans grammage, onboarding incomplet...). Option B : on NE met PAS
+        # un 0 € trompeur — on laisse ht_total_eur à NULL et on remonte une
+        # erreur explicite. Le devis EST créé (HTTP 201), à finaliser à la main.
         logger.warning(
-            "Chiffrage automatique multi-lots impossible pour devis %s : %s. "
-            "Devis créé en brouillon, à finaliser via /devis/[id]/edit.",
+            "Chiffrage automatique multi-lots indisponible pour devis %s : %s. "
+            "Devis créé en chiffrage incomplet (ht_total_eur NULL).",
             devis.numero,
             exc,
         )
-        # Note dans payload_output pour transparence côté UI.
+        devis.ht_total_eur = None
         po = dict(devis.payload_output)
-        po["chiffrage_auto_erreur"] = str(exc)
+        po["chiffrage_auto_erreur"] = MSG_CHIFFRAGE_INDISPONIBLE
+        po["chiffrage_auto_detail"] = str(exc)
         po["note"] = (
             "Chiffrage indisponible automatiquement — finalise via "
             "Modifier ce devis."
         )
         devis.payload_output = po
         return
+    # Toute autre exception (bug inattendu) n'est PAS masquée : elle remonte
+    # et produit un 500 — on ne veut pas avaler silencieusement un défaut.
 
     # Mise à jour des résultats côté Devis + LotProduction.
     devis.ht_total_eur = cout_agrege.prix_vente_ht_total_eur
