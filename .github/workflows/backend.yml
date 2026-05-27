@@ -15,10 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python 3.13
+      - name: Setup Python 3.13.5
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          # Patch exact (et non "3.13" flottant) pour une CI déterministe,
+          # reproductible et alignée sur un interpréteur connu.
+          python-version: "3.13.5"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
@@ -33,6 +35,16 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # Garde-fou parité prod : WeasyPrint est pinné weasyprint==65.1 dans
+      # requirements.txt (source unique, partagée avec le Dockerfile Railway).
+      # Cette étape échoue la CI si la version installée dérive de 65.1 —
+      # on fige la version du moteur PDF sur celle de la prod. On lit la
+      # métadonnée du paquet (pas `import weasyprint`) : la version se
+      # vérifie sans charger les libs natives GTK/Pango.
+      - name: Verify WeasyPrint pinned to prod version (65.1)
+        run: |
+          python -c "from importlib.metadata import version; v = version('weasyprint'); assert v == '65.1', f'WeasyPrint {v} != 65.1 attendu (parite Dockerfile prod)'; print('WeasyPrint', v, 'OK')"
 
       - name: Apply Alembic migrations (cree la DB SQLite + tables)
         run: alembic upgrade head
