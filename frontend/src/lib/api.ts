@@ -780,7 +780,14 @@ export interface DevisDetail {
   cylindre_choisi_nb_etiq: number | null;
   format_h_mm: string;
   format_l_mm: string;
-  ht_total_eur: string;
+  // Fix bandeau erreur chiffrage — le backend renvoie NULL quand le
+  // chiffrage auto est incomplet (cf. `chiffrage_auto_erreur`). Ne JAMAIS
+  // afficher `0,00 €` dans ce cas : surfacer le bandeau d'erreur à la place.
+  ht_total_eur: string | null;
+  // Fix bandeau erreur chiffrage — message d'échec du chiffrage auto
+  // (string) ou null si OK. Exposé top-level par le backend ; le
+  // fallback historique reste `payload_output.chiffrage_auto_erreur`.
+  chiffrage_auto_erreur?: string | null;
   // Brief #32 — réduction commerciale (0..100, défaut 0).
   reduction_pct?: string;
   // Brief #32 — lots de production (vide si devis legacy mono-lot).
@@ -967,7 +974,10 @@ export interface PreviewCoutsResponse {
   reduction_eur: string;
   cout_net_ht_eur: string;
   nb_lots: number;
-  chiffrage_erreur: string | null;
+  // Fix bandeau erreur chiffrage — message d'échec du chiffrage auto
+  // (string) ou null si OK. Quand présent, le hero preview affiche le
+  // bandeau d'erreur au lieu d'un prix (jamais `0,00 €` trompeur).
+  chiffrage_auto_erreur: string | null;
 }
 
 export const previewCoutsDevis = (data: PreviewCoutsRequest) =>

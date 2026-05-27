@@ -79,7 +79,22 @@ export function DevisResultMultiLots({
 }) {
   const lots = devis.lots_production ?? [];
   const reductionPct = parseFloat(devis.reduction_pct ?? "0") || 0;
-  const brut = parseFloat(devis.ht_total_eur) || 0;
+  // Fix bandeau erreur chiffrage — `ht_total_eur` NULL signale un chiffrage
+  // auto incomplet (cf. fix backend CC1). On NE calcule PAS de prix dans ce
+  // cas : surtout pas de `parseFloat(null) || 0` qui afficherait un « 0,00 € »
+  // trompeur. Le message vient du top-level `chiffrage_auto_erreur`, avec
+  // repli sur `payload_output.chiffrage_auto_erreur` (devis créés avant que
+  // le backend ne remonte le champ top-level).
+  const payloadOutput = (devis.payload_output ?? {}) as Record<string, unknown>;
+  const chiffrageErreur =
+    devis.ht_total_eur === null || devis.ht_total_eur === undefined
+      ? devis.chiffrage_auto_erreur ??
+        (typeof payloadOutput.chiffrage_auto_erreur === "string"
+          ? payloadOutput.chiffrage_auto_erreur
+          : null) ??
+        "Le chiffrage automatique n'a pas abouti — aucun prix disponible."
+      : null;
+  const brut = chiffrageErreur === null ? parseFloat(devis.ht_total_eur!) || 0 : 0;
   const apresRemise = brut * (1 - reductionPct / 100);
   // Brief #33 commit 5 — laize/dev/mandrin de l'étiquette pour le
   // SchemaImplantation par lot. Récupérés depuis payload_input (snapshoté
@@ -174,30 +189,50 @@ export function DevisResultMultiLots({
         )}
       </section>
 
-      {/* Récap total HT — card hero gradient bleu→or (§9bis) */}
+      {/* Récap total HT — card hero gradient bleu→or (§9bis).
+          Fix bandeau erreur : si le chiffrage est incomplet, on remplace le
+          prix par un bandeau d'erreur visible (jamais de « 0,00 € » trompeur). */}
       <section className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 via-amber-50/50 to-white p-8 shadow">
-        <div className="space-y-2 text-center">
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">
-            💰 Coût total HT
-          </p>
-          <p
-            className="bg-gradient-to-r from-blue-700 to-amber-600 bg-clip-text text-5xl font-bold text-transparent"
-            style={{ fontFamily: "Fraunces, serif" }}
+        {chiffrageErreur !== null ? (
+          <div
+            role="alert"
+            data-testid="chiffrage-erreur-bandeau"
+            className="rounded-xl border-2 border-red-300 bg-red-50 px-5 py-4 text-red-900"
           >
-            {fmtEuros(reductionPct > 0 ? apresRemise : brut)} €
-          </p>
-          {reductionPct > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Brut <strong>{fmtEuros(brut)} €</strong> − Réduction{" "}
-              <strong>{reductionPct}%</strong> = {fmtEuros(apresRemise)} €
+            <p className="text-base font-semibold">
+              ⚠ Chiffrage incomplet — aucun prix calculé
             </p>
-          )}
-          <p className="text-sm text-muted-foreground">
-            {lots.length} lot{lots.length > 1 ? "s" : ""} ·{" "}
-            {lots.reduce((s, l) => s + l.quantite, 0).toLocaleString("fr-FR")}{" "}
-            étiquettes au total
-          </p>
-        </div>
+            <p className="mt-1 text-sm">{chiffrageErreur}</p>
+            <p className="mt-2 text-xs text-red-700">
+              Ce devis a été enregistré en brouillon mais son prix n&apos;a pas
+              pu être calculé. Reprends-le pour corriger la cause, puis
+              recalcule.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2 text-center">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              💰 Coût total HT
+            </p>
+            <p
+              className="bg-gradient-to-r from-blue-700 to-amber-600 bg-clip-text text-5xl font-bold text-transparent"
+              style={{ fontFamily: "Fraunces, serif" }}
+            >
+              {fmtEuros(reductionPct > 0 ? apresRemise : brut)} €
+            </p>
+            {reductionPct > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Brut <strong>{fmtEuros(brut)} €</strong> − Réduction{" "}
+                <strong>{reductionPct}%</strong> = {fmtEuros(apresRemise)} €
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {lots.length} lot{lots.length > 1 ? "s" : ""} ·{" "}
+              {lots.reduce((s, l) => s + l.quantite, 0).toLocaleString("fr-FR")}{" "}
+              étiquettes au total
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 flex justify-center">
           <Button
