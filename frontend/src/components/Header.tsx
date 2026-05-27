@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { href: "/devis/nouveau", label: "Calculer un devis" },
   // Sprint 13 S13.D — simulateur d'optimisation
   { href: "/optimisation", label: "Optimisation" },
+  // Brief stratégique v2 — onglet config par entreprise (6 sections)
+  { href: "/strategique", label: "Stratégique" },
   // Sprint 13 S13.E — POC IA analyse photo (FlexoCheck)
   { href: "/ia/analyser-photo", label: "Analyser photo" },
   // Feat historique analyses — liste paginée des analyses passées

@@ -1710,3 +1710,107 @@ export const applyRebobinageDevis = (
 
 export const retirerRebobinageDevis = (devisId: number) =>
   apiFetch<void>(`/api/devis/${devisId}/rebobinage`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
+// Brief stratégique v2 — onglet Stratégique (config par entreprise)
+//   /api/strategique/couts        (singleton : GET + PUT)
+//   /api/strategique/changements  (singleton : GET + PUT)
+//   /api/strategique/roulage      (collection : GET/POST/PUT/DELETE)
+//   /api/tarif-encre              (lecture seule, section Encre)
+// ---------------------------------------------------------------------------
+
+export interface ConfigCouts {
+  id: number;
+  cout_exploitation_machine_eur_h: number;
+  cout_operateur_eur_h: number;
+  cout_energies_eur_h: number;
+  cout_fixe_atelier_eur_mois: number;
+  cout_fixe_maintenance_eur_mois: number;
+  marge_standard_pct: number;
+  buffer_rebut_pct: number;
+  buffer_setup_pct: number;
+  date_creation: string;
+  date_maj: string;
+}
+export type ConfigCoutsUpdate = Partial<
+  Omit<ConfigCouts, "id" | "date_creation" | "date_maj">
+>;
+
+export interface ConfigChangements {
+  id: number;
+  changement_couleur_duree_min: number;
+  changement_couleur_cout_eur: number;
+  changement_format_duree_min: number;
+  changement_format_cout_eur: number;
+  nettoyage_duree_min: number;
+  nettoyage_cout_eur: number;
+  date_creation: string;
+  date_maj: string;
+}
+export type ConfigChangementsUpdate = Partial<
+  Omit<ConfigChangements, "id" | "date_creation" | "date_maj">
+>;
+
+export const MODES_ROULAGE = ["helicoidal", "alterne", "custom"] as const;
+export type ModeRoulage = (typeof MODES_ROULAGE)[number];
+
+export interface ConfigRoulage {
+  id: number;
+  format_libelle: string;
+  debit_mm_s: number;
+  mode_roulage: ModeRoulage;
+  rebut_pct: number;
+  date_creation: string;
+  date_maj: string;
+}
+export type ConfigRoulageCreate = Omit<
+  ConfigRoulage,
+  "id" | "date_creation" | "date_maj"
+>;
+export type ConfigRoulageUpdate = Partial<ConfigRoulageCreate>;
+
+export const getConfigCouts = () =>
+  apiFetch<ConfigCouts>("/api/strategique/couts");
+export const updateConfigCouts = (data: ConfigCoutsUpdate) =>
+  apiFetch<ConfigCouts>("/api/strategique/couts", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const getConfigChangements = () =>
+  apiFetch<ConfigChangements>("/api/strategique/changements");
+export const updateConfigChangements = (data: ConfigChangementsUpdate) =>
+  apiFetch<ConfigChangements>("/api/strategique/changements", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const listConfigRoulage = () =>
+  apiFetch<ConfigRoulage[]>("/api/strategique/roulage");
+export const createConfigRoulage = (data: ConfigRoulageCreate) =>
+  apiFetch<ConfigRoulage>("/api/strategique/roulage", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateConfigRoulage = (id: number, data: ConfigRoulageUpdate) =>
+  apiFetch<ConfigRoulage>(`/api/strategique/roulage/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteConfigRoulage = (id: number) =>
+  apiFetch<void>(`/api/strategique/roulage/${id}`, { method: "DELETE" });
+
+export interface TarifEncre {
+  id: number;
+  type_encre: string;
+  libelle: string;
+  prix_kg_defaut: number;
+  prix_kg_min: number | null;
+  prix_kg_max: number | null;
+  ratio_g_m2_couleur: number;
+  actif: boolean;
+  date_creation: string;
+  date_maj: string;
+}
+export const listTarifEncre = () =>
+  apiFetch<TarifEncre[]>("/api/tarif-encre");
