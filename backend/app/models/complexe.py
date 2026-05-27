@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
@@ -41,10 +42,28 @@ class Complexe(Base):
     famille: Mapped[str] = mapped_column(String(50), nullable=False)
 
     face_matiere: Mapped[str | None] = mapped_column(String(150))
-    grammage_g_m2: Mapped[int | None] = mapped_column(Integer)
+    # Lot 1 complexe enrichi : Integer → Numeric(5,1). Les films ont un
+    # grammage de FACE dérivé (épaisseur × densité) non entier (ex. BOPP
+    # 50µ × 0.91 = 45.5 g/m²). Cohérent avec le grammage de face des papiers.
+    grammage_g_m2: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
     adhesif_type: Mapped[str | None] = mapped_column(String(50))
 
     prix_m2_eur: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+
+    # Lot 1 complexe enrichi — champs lus / filtrés par le moteur d'optimisation
+    # (alignés sur la table `matiere` pour préparer le pont matière↔complexe).
+    # epaisseur_microns : films uniquement (NULL pour les papiers, qui se
+    #   caractérisent au grammage). sous_type : granularité sous la famille.
+    # est_transparent : déclenche la règle "spot de détection verso". opacite_pct :
+    #   100 = opaque total, 0 = transparent. certifications_* : filtres pharma/agro.
+    epaisseur_microns: Mapped[int | None] = mapped_column(Integer)
+    est_transparent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    opacite_pct: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+    sous_type: Mapped[str | None] = mapped_column(String(50))
+    certifications_sanitaires: Mapped[list[str] | None] = mapped_column(JSON)
+    certifications_env: Mapped[list[str] | None] = mapped_column(JSON)
 
     fournisseur_id: Mapped[int | None] = mapped_column(
         ForeignKey("fournisseur.id", ondelete="SET NULL")
