@@ -25,7 +25,7 @@ from app.models import (
     MachineImprimerie,
 )
 from app.schemas.devis import DevisInput
-from app.schemas.devis_persist import DevisCreate, DevisUpdate
+from app.schemas.devis_persist import DevisCreate, DevisUpdate, NbCouleursIn
 from app.services.cost_engine.errors import CostEngineError
 from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.numero_devis_service import generate_next_numero
@@ -41,6 +41,37 @@ MSG_CHIFFRAGE_INDISPONIBLE = (
     "Matière du lot non reliée à un complexe de coût — chiffrage auto "
     "indisponible, devis à finaliser manuellement."
 )
+
+
+def _mapper_nb_couleurs(nb_couleurs: NbCouleursIn | None) -> dict[str, int]:
+    """Sprint 16 fix chiffrage — mappe les compteurs couleurs du payload
+    vers `nb_couleurs_par_type` (clés = `tarif_encre.type_encre` réels).
+
+    Clés cibles vérifiées dans seeds/tarif_encre.csv :
+      process_cmj | process_black_hc | pantone | blanc_high_opaque | metallise.
+
+    Mapping retenu :
+      - impression → "process_cmj"        (couleurs process quadri)
+      - pantone    → "pantone"
+      - blanc      → "blanc_high_opaque"
+      - vernis     → NON mappé : le vernis est une finition (Poste 6),
+                     pas une encre (Poste 2). Inclure une clé inexistante
+                     ferait lever CostEngineError côté moteur.
+
+    Seuls les compteurs > 0 sont inclus (le moteur P2 ignore déjà les 0,
+    mais on garde le dict minimal). None ou tout-à-zéro → {} (P2 = 0 €,
+    comportement antérieur préservé pour les payloads sans couleurs).
+    """
+    if nb_couleurs is None:
+        return {}
+    result: dict[str, int] = {}
+    if nb_couleurs.impression > 0:
+        result["process_cmj"] = nb_couleurs.impression
+    if nb_couleurs.pantone > 0:
+        result["pantone"] = nb_couleurs.pantone
+    if nb_couleurs.blanc > 0:
+        result["blanc_high_opaque"] = nb_couleurs.blanc
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -287,12 +318,14 @@ def create_devis(
         db.flush()  # lots ont leurs ids
 
         # Brief #32 commit 1 — chiffrage cost_engine automatique.
+        # Sprint 16 fix : propage les compteurs couleurs (Poste 2 Encres).
         _chiffrer_devis_multilots(
             db,
             devis,
             lots_persistes,
             data.payload_input,
             entreprise_id,
+            _mapper_nb_couleurs(data.nb_couleurs),
         )
 
     db.commit()
@@ -306,6 +339,7 @@ def preview_couts_multilots(
     lots_data: list[dict[str, Any]],
     payload_input: dict[str, Any],
     reduction_pct: Decimal,
+    nb_couleurs_par_type: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Brief #33 commit 1 — preview live des coûts sans persister.
 
@@ -339,7 +373,7 @@ def preview_couts_multilots(
     try:
         devis_inputs = [
             _construire_devis_input_pour_lot(
-                lot, payload_input, db, entreprise_id
+                lot, payload_input, db, entreprise_id, nb_couleurs_par_type
             )
             for lot in lots_transitoires
         ]
@@ -385,6 +419,7 @@ def _chiffrer_devis_multilots(
     lots: list[LotProduction],
     payload_input: dict[str, Any],
     entreprise_id: int,
+    nb_couleurs_par_type: dict[str, int] | None = None,
 ) -> None:
     """Brief #32 commit 1 — chiffrage automatique d'un devis multi-lots
     via cost_engine_aggregator.
@@ -402,7 +437,7 @@ def _chiffrer_devis_multilots(
     try:
         devis_inputs = [
             _construire_devis_input_pour_lot(
-                lot, payload_input, db, entreprise_id
+                lot, payload_input, db, entreprise_id, nb_couleurs_par_type
             )
             for lot in lots
         ]
@@ -460,6 +495,7 @@ def _construire_devis_input_pour_lot(
     payload_input: dict[str, Any],
     db: Session,
     entreprise_id: int,
+    nb_couleurs_par_type: dict[str, int] | None = None,
 ) -> DevisInput:
     """Reconstruit un DevisInput valide pour cost_engine à partir d'un
     LotProduction + le contexte saisie (payload_input).
@@ -537,7 +573,9 @@ def _construire_devis_input_pour_lot(
         complexe_id=complexe.id,
         laize_utile_mm=int(machine_imp.laize_utile_mm or 320),
         ml_total=ml_total,
-        nb_couleurs_par_type={},
+        # Sprint 16 fix chiffrage : nb_couleurs propagé depuis le payload
+        # (mappé en amont). {} si non fourni → P2 Encres = 0 (antérieur).
+        nb_couleurs_par_type=nb_couleurs_par_type or {},
         machine_id=machine_legacy.id,
         format_etiquette_largeur_mm=format_l,
         format_etiquette_hauteur_mm=format_h,

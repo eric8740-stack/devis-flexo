@@ -92,6 +92,28 @@ class LotProductionRead(BaseModel):
     payload_visuel: dict | None = None
 
 
+class NbCouleursIn(BaseModel):
+    """Sprint 16 fix chiffrage — compteurs de couleurs du devis.
+
+    Alimente le Poste 2 Encres du cost_engine (via mapping vers les
+    `type_encre` réels en base). Champs à 0 par défaut (rétro-compatible :
+    un payload sans `nb_couleurs` → P2 Encres = 0, comportement antérieur).
+
+    Mapping côté CRUD vers `nb_couleurs_par_type` :
+      - impression → "process_cmj"   (process quadri)
+      - pantone    → "pantone"
+      - blanc      → "blanc_high_opaque"
+      - vernis     → NON mappé (le vernis est une finition P6, pas une encre P2)
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    impression: int = Field(default=0, ge=0)
+    pantone: int = Field(default=0, ge=0)
+    blanc: int = Field(default=0, ge=0)
+    vernis: int = Field(default=0, ge=0)
+
+
 class DevisCreate(BaseModel):
     """Body POST /api/devis.
 
@@ -129,6 +151,11 @@ class DevisCreate(BaseModel):
         "vierge", "bat_pro_fourni", "a_designer"
     ] = "a_designer"
     conditions_stockage: dict | None = None
+
+    # Sprint 16 fix chiffrage — compteurs couleurs pour le Poste 2 Encres.
+    # Optionnel : None → P2 Encres = 0 (comportement antérieur préservé).
+    # CC2 enverra ce champ depuis le store optim (nb couleurs saisi étape 1).
+    nb_couleurs: NbCouleursIn | None = None
 
     @model_validator(mode="after")
     def _valider_somme_quantites_lots(self) -> "DevisCreate":
@@ -277,6 +304,8 @@ class PreviewCoutsIn(BaseModel):
     payload_input: dict
     lots: list[LotProductionCreate] = Field(min_length=1)
     reduction_pct: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    # Sprint 16 fix chiffrage — compteurs couleurs pour le preview live.
+    nb_couleurs: NbCouleursIn | None = None
 
 
 class PreviewCoutsOut(BaseModel):
