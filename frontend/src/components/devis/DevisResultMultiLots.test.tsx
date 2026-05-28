@@ -126,7 +126,9 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
             nb_lots: 1,
             details_par_lot: [
               {
-                ordre: 1,
+                // CoutLot.ordre est 0-indexé côté backend (vs LotProduction.ordre
+                // 1-indexé). L'alignement front est positional, pas par ordre.
+                ordre: 0,
                 prix_vente_ht_eur: "541.12",
                 cout_revient_eur: "400.00",
                 details: {
@@ -186,6 +188,106 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
     expect(
       screen.getAllByText((content) => content.includes("541,12")).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("aligne le chiffrage par position (multi-lots) même si les ordres divergent", () => {
+    // Régression off-by-one : LotProduction.ordre est 1-indexé (DB), CoutLot.ordre
+    // est 0-indexé (agrégateur). Le rendu doit s'aligner par POSITION, pas par
+    // valeur d'ordre, sinon le rapport ne s'affiche pour aucun lot.
+    const baseLot = (id: number, ordre: number): LotProductionRead => ({
+      id,
+      ordre,
+      cylindre_id: 5,
+      machine_id: 1,
+      nb_poses_dev: 2,
+      nb_poses_laize: 3,
+      sens_enroulement: 1,
+      quantite: 5000,
+      matiere_id: 7,
+      intervalle_dev_reel_mm: null,
+      intervalle_laize_reel_mm: null,
+      largeur_plaque_mm: null,
+      score_optim: null,
+      cout_lot_ht_eur: "200.00",
+      created_at: "2026-05-27T10:00:00Z",
+      updated_at: "2026-05-27T10:00:00Z",
+      machine_nom: "MA-1",
+      cylindre_nb_dents: 80,
+      cylindre_developpe_mm: "254.00",
+      matiere_libelle: "BOPP",
+      sens_enroulement_libelle: "Sens 1",
+      rotation_vue_a_deg: 0,
+      rotation_vue_c_deg: 0,
+      payload_visuel: null,
+    });
+    const makePoste = (n: number, libelle: string, montant: string) => ({
+      poste_numero: n,
+      libelle,
+      montant_eur: montant,
+      details: {} as Record<string, number | string | null>,
+    });
+    render(
+      <DevisResultMultiLots
+        devis={buildDevis({
+          ht_total_eur: "1000.00",
+          lots_production: [baseLot(10, 1), baseLot(11, 2)],
+          payload_output: {
+            mode: "multi-lots",
+            details_par_lot: [
+              {
+                ordre: 0, // 0-indexé backend, 1er lot
+                prix_vente_ht_eur: "400.00",
+                cout_revient_eur: "300.00",
+                details: {
+                  prix_vente_ht_eur: "400.00",
+                  cout_revient_eur: "300.00",
+                  pct_marge_appliquee: "0.30",
+                  prix_au_mille_eur: "80.00",
+                  postes: [
+                    makePoste(1, "Matière LotA", "100.00"),
+                    makePoste(2, "Encres", "0.00"),
+                    makePoste(3, "Clichés", "0.00"),
+                    makePoste(4, "Calage", "100.00"),
+                    makePoste(5, "Roulage", "50.00"),
+                    makePoste(6, "Finitions", "30.00"),
+                    makePoste(7, "MO", "20.00"),
+                  ],
+                },
+              },
+              {
+                ordre: 1, // 0-indexé backend, 2e lot
+                prix_vente_ht_eur: "600.00",
+                cout_revient_eur: "500.00",
+                details: {
+                  prix_vente_ht_eur: "600.00",
+                  cout_revient_eur: "500.00",
+                  pct_marge_appliquee: "0.20",
+                  prix_au_mille_eur: "120.00",
+                  postes: [
+                    makePoste(1, "Matière LotB", "200.00"),
+                    makePoste(2, "Encres", "50.00"),
+                    makePoste(3, "Clichés", "60.00"),
+                    makePoste(4, "Calage", "100.00"),
+                    makePoste(5, "Roulage", "50.00"),
+                    makePoste(6, "Finitions", "30.00"),
+                    makePoste(7, "MO", "10.00"),
+                  ],
+                },
+              },
+            ],
+          },
+        })}
+        pdfUrl="http://x/pdf"
+        onDupliquer={noop}
+        onSupprimer={noop}
+      />,
+    );
+    // Les deux blocs rapport sont rendus (key = lot.ordre, donc 1 et 2).
+    expect(screen.getByTestId("rapport-fabrication-lot-1")).toBeInTheDocument();
+    expect(screen.getByTestId("rapport-fabrication-lot-2")).toBeInTheDocument();
+    // Alignement positional : le 1er lot reçoit "Matière LotA", le 2e "LotB".
+    expect(screen.getByText("Matière LotA")).toBeInTheDocument();
+    expect(screen.getByText("Matière LotB")).toBeInTheDocument();
   });
 
   it("pas de bloc rapport quand details_par_lot est absent", () => {
