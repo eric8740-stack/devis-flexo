@@ -5,16 +5,21 @@ cout_revient + prix_vente_ht. Branche sur `devis.mode_calcul` :
   - 'manuel'   → 1 résultat DevisOutput (Sprint 5, V1a/V1b/V1b forme spé EXACT)
   - 'matching' → 1-3 résultats DevisOutputMatching (Sprint 7, cylindres trouvés)
 
-Le pct_marge appliqué vient de devis.pct_marge_override si fourni, sinon
-de entreprise.pct_marge_defaut. Fallback 0.18 (preset Compétitif PRD).
+Phase 2 Lot 2 (2026-05-28) — marge config-driven et multi-tenant strict :
+le pct_marge appliqué vient de `devis.pct_marge_override` si fourni, sinon
+de **`ConfigCouts.marge_standard_pct` scopée par `entreprise_id`** (table
+Stratégique, Phase 1). Plus de fallback silencieux : si la config est
+absente pour le tenant, on lève `CostEngineError`. L'ancien `Entreprise.
+pct_marge_defaut` + la constante `PCT_MARGE_FALLBACK = 0.18` sont retirés
+(bug multi-tenant `select(Entreprise).limit(1)` corrigé incidemment :
+plus aucune lecture cross-tenant).
 """
 import logging
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Entreprise, Machine
+from app.models import ConfigCouts, Machine
 from app.schemas.devis import (
     CandidatCylindreOutput,
     DevisInput,
@@ -35,8 +40,6 @@ from app.services.cost_engine.poste_6_finitions import CalculateurPoste6Finition
 from app.services.cost_engine.poste_7_mo import CalculateurPoste7MO
 
 logger = logging.getLogger(__name__)
-
-PCT_MARGE_FALLBACK = Decimal("0.18")  # preset Compétitif persona PRD
 
 # Sprint 5 Lot 5c : intervalle default mode manuel = 3 mm.
 # Sprint 7 Lot 7b/7d V2 : applicable seulement si devis.intervalle_mm is None
@@ -227,13 +230,29 @@ class MoteurDevis:
         return DevisOutputMatching(candidats=candidats_output)
 
     def _resolve_pct_marge(self, devis: DevisInput) -> Decimal:
+        """Marge appliquée = override saisi sur le devis (priorité 1) sinon
+        `ConfigCouts.marge_standard_pct` du tenant courant (priorité 2). Pas
+        de fallback : si le tenant n'a pas de ConfigCouts, on lève une erreur
+        explicite — le moteur ne fabrique pas silencieusement un prix.
+
+        Multi-tenant strict : la lecture est `filter_by(entreprise_id=
+        self.entreprise_id)` (corrige le bug pré-Phase 2 `select(Entreprise).
+        limit(1)` qui retournait n'importe quelle entreprise).
+        """
         if devis.pct_marge_override is not None:
             return devis.pct_marge_override
-        entreprise = self.db.scalar(select(Entreprise).limit(1))
-        if entreprise is None:
+        config = (
+            self.db.query(ConfigCouts)
+            .filter_by(entreprise_id=self.entreprise_id)
+            .first()
+        )
+        if config is None:
             raise CostEngineError(
-                "Aucune entreprise configurée en base — pct_marge_defaut introuvable"
+                f"ConfigCouts introuvable pour entreprise_id={self.entreprise_id} "
+                "— marge non résoluble. Initialise la config via "
+                "/api/strategique/couts."
             )
-        if entreprise.pct_marge_defaut is None:
-            return PCT_MARGE_FALLBACK
-        return Decimal(str(entreprise.pct_marge_defaut))
+        # `marge_standard_pct` est stocké en POURCENTAGE (0..100) côté
+        # ConfigCouts (UI Stratégique, défaut template 35.00 %). On convertit
+        # en fraction pour la formule `prix_vente_ht = cout × (1 + marge)`.
+        return Decimal(str(config.marge_standard_pct)) / Decimal(100)
