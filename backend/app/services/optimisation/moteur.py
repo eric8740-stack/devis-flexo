@@ -81,21 +81,39 @@ INTERVALLE_LAIZE_MAX_MM = 5.0
 
 
 def _calcul_intervalle_laize(
-    laize_utile: float, format_largeur: float, variante: int
+    laize_utile: float,
+    format_largeur: float,
+    variante: int,
+    force_intervalle_mm: float | None = None,
 ) -> float | None:
     """Intervalle laize réel entre poses pour une variante.
 
+    Si `force_intervalle_mm` est fourni (souveraineté commerciale), c'est
+    cette valeur qui est utilisée — on vérifie uniquement la faisabilité
+    géométrique (les poses doivent tenir dans la laize utile). Le plafond
+    `INTERVALLE_LAIZE_MAX_MM` est volontairement bypassé : Eric doit
+    pouvoir imposer > 5 mm pour des cas particuliers (rebobinage, etc.).
+
     Returns:
       None si variante n'est pas faisable (poses ne rentrent pas dans
-      la laize). 0 si variante=1 (une seule pose). Sinon
-      min((laize_utile - variante × largeur) / (variante - 1),
-          INTERVALLE_LAIZE_MAX_MM).
+      la laize, y compris avec un forçage trop large). 0 si variante=1
+      (une seule pose, intervalle non défini). Sinon :
+        - forçage : `force_intervalle_mm` si géométriquement faisable
+        - sans forçage : `min((laize_utile - variante × largeur) /
+          (variante - 1), INTERVALLE_LAIZE_MAX_MM)`.
     """
     espace_dispo = laize_utile - variante * format_largeur
     if espace_dispo < 0:
         return None
     if variante <= 1:
         return 0.0
+    if force_intervalle_mm is not None:
+        # Faisabilité : (variante-1) intervalles doivent tenir dans
+        # l'espace restant. Sinon, cette variante est skippée pour
+        # cette machine — d'autres machines/variantes peuvent satisfaire.
+        if (variante - 1) * force_intervalle_mm > espace_dispo:
+            return None
+        return force_intervalle_mm
     intervalle_brut = espace_dispo / (variante - 1)
     return min(intervalle_brut, INTERVALLE_LAIZE_MAX_MM)
 
@@ -263,6 +281,7 @@ def optimiser_pose(inp: OptimisationInput) -> OptimisationOutput:
                     laize_utile=machine.laize_utile_mm,
                     format_largeur=inp.format.largeur_mm,
                     variante=variante,
+                    force_intervalle_mm=inp.intervalle_laize_force_mm,
                 )
                 if intervalle_laize is None:
                     continue

@@ -112,6 +112,12 @@ class OptimisationInput:
     # laize ; les candidats qui ne satisfont pas N * largeur ≤ laize_utile
     # sont skippés.
     nb_poses_laize_force: int | None = None
+    # Forçage souveraineté : si renseigné, l'intervalle laize calculé par
+    # le moteur n'est plus le ratio géométrique clampé à 5 mm — c'est la
+    # valeur fournie. Le moteur ne fait que vérifier la faisabilité
+    # géométrique : `(variante - 1) * forcage ≤ laize_utile - variante *
+    # largeur_format`. Variantes infaisables avec ce forçage → skippées.
+    intervalle_laize_force_mm: float | None = None
 
 
 # ---------------------------------------------------------------------------

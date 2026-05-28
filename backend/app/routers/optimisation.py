@@ -280,6 +280,14 @@ def post_calculer(
         bareme_confort_roulage=baremes["confort_roulage"],
         contrainte_client=moteur_contrainte_client,
         nb_poses_laize_force=payload.nb_poses_laize_force,
+        # Forçage intervalle laize → consommé par le moteur (bypass du
+        # plafond 5 mm, vérification géométrique seule). Si None, le
+        # moteur calcule normalement (palier suggérable / max 5 mm).
+        intervalle_laize_force_mm=(
+            float(payload.intervalle_laize_force_mm)
+            if payload.intervalle_laize_force_mm is not None
+            else None
+        ),
     )
 
     out = optimiser_pose(inp)
@@ -367,19 +375,14 @@ def post_calculer(
     warnings: list[str] = []
     if payload.intervalle_laize_force_mm is not None:
         force_val = float(payload.intervalle_laize_force_mm)
-        # Recommandation moteur top-1 si dispo : indicatif, varie par config.
-        if configurations_out:
-            reco_top1 = configurations_out[0].intervalle_laize_recommande_mm
-            warnings.append(
-                f"Intervalle laize forcé à {force_val:g} mm — le moteur "
-                f"aurait recommandé {reco_top1:g} mm pour la configuration "
-                f"top 1."
-            )
-        else:
-            warnings.append(
-                f"Intervalle laize forcé à {force_val:g} mm — valeur hors "
-                f"recommandation moteur."
-            )
+        # Note : depuis que le moteur consomme `intervalle_laize_force_mm`,
+        # `intervalle_laize_recommande_mm` reflète aussi la valeur forcée
+        # (pas de double-pass moteur libre/forcé). On se contente d'un
+        # rappel explicite que la valeur a été imposée par l'opérateur.
+        warnings.append(
+            f"Intervalle laize forcé à {force_val:g} mm (valeur imposée "
+            f"par l'opérateur, plafond moteur 5 mm bypassé)."
+        )
         motif_norm = (payload.motif_forcage_intervalle_laize or "").strip()
         if len(motif_norm) < 10:
             warnings.append(
