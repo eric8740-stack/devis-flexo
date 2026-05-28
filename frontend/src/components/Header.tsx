@@ -8,9 +8,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  // Sprint 3 — fonctionnalité phare en tête
-  { href: "/devis/nouveau", label: "Calculer un devis" },
-  // Sprint 13 S13.D — simulateur d'optimisation
+  // Sprint 13 S13.D — simulateur d'optimisation (point d'entrée principal
+  // depuis le retrait du raccourci "Calculer un devis" — la route
+  // /devis/nouveau reste accessible directement, juste plus exposée en nav).
   { href: "/optimisation", label: "Optimisation" },
   // Brief stratégique v2 — onglet config par entreprise (6 sections)
   { href: "/strategique", label: "Stratégique" },
