@@ -50,7 +50,7 @@ const fmtMm = (s: string, decimals = 2) =>
 // Sous-composants partagés (mode manuel + matching)
 // ---------------------------------------------------------------------------
 
-function PostesCard({
+export function PostesCard({
   postes,
   coutRevient,
 }: {

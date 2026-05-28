@@ -21,6 +21,7 @@
  */
 import Link from "next/link";
 
+import { PostesCard } from "@/components/DevisResult";
 import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import type {
   DevisDetail,
   LotProductionRead,
   OptimisationConfigOut,
+  PosteResult,
 } from "@/lib/api";
 
 const STATUT_COLORS: Record<string, string> = {
@@ -65,6 +67,38 @@ const fmtEuros = (montant: string | number | null | undefined): string => {
     maximumFractionDigits: 2,
   });
 };
+
+// Brief détail coûts — décomposition 7 postes par lot extraite du dump
+// cost_engine. Le backend stocke `payload_output.details_par_lot[i]` =
+// { ordre, cout_revient_eur, details: { postes: [PosteResult] } } (cf.
+// _chiffrer_devis_multilots). On reconstruit ici un Map<ordre, {postes,
+// coutRevient}> consommé par chaque LotCard pour rendre la PostesCard.
+function extractPostesParLot(
+  payloadOutput: Record<string, unknown>,
+): Map<number, { postes: PosteResult[]; coutRevient: number }> {
+  const out = new Map<number, { postes: PosteResult[]; coutRevient: number }>();
+  const raw = payloadOutput.details_par_lot;
+  if (!Array.isArray(raw)) return out;
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as {
+      ordre?: unknown;
+      cout_revient_eur?: unknown;
+      details?: { postes?: unknown };
+    };
+    if (typeof e.ordre !== "number") continue;
+    const postes = e.details?.postes;
+    if (!Array.isArray(postes) || postes.length === 0) continue;
+    const coutRevient =
+      typeof e.cout_revient_eur === "string"
+        ? parseFloat(e.cout_revient_eur) || 0
+        : typeof e.cout_revient_eur === "number"
+          ? e.cout_revient_eur
+          : 0;
+    out.set(e.ordre, { postes: postes as PosteResult[], coutRevient });
+  }
+  return out;
+}
 
 export function DevisResultMultiLots({
   devis,
@@ -110,6 +144,7 @@ export function DevisResultMultiLots({
       : parseFloat(devis.format_h_mm) || 0;
   const mandrinMm =
     typeof payloadInput.mandrin_mm === "number" ? payloadInput.mandrin_mm : 76;
+  const postesParLot = extractPostesParLot(payloadOutput);
 
   return (
     <div className="space-y-6">
@@ -180,6 +215,7 @@ export function DevisResultMultiLots({
             laizeEtiqMm={laizeEtiqMm}
             devEtiqMm={devEtiqMm}
             mandrinMm={mandrinMm}
+            postesBreakdown={postesParLot.get(lot.ordre) ?? null}
           />
         ))}
         {lots.length === 0 && (
@@ -259,12 +295,14 @@ function LotCard({
   laizeEtiqMm,
   devEtiqMm,
   mandrinMm,
+  postesBreakdown,
 }: {
   lot: LotProductionRead;
   colorClass: string;
   laizeEtiqMm: number;
   devEtiqMm: number;
   mandrinMm: number;
+  postesBreakdown: { postes: PosteResult[]; coutRevient: number } | null;
 }) {
   const posesTotal = lot.nb_poses_dev * lot.nb_poses_laize;
   // Brief #33 commit 5 — payload_visuel = snapshot OptimisationConfigOut
@@ -346,6 +384,18 @@ function LotCard({
             laizeEtiqMm={laizeEtiqMm}
             devEtiqMm={devEtiqMm}
             mandrinMm={mandrinMm}
+          />
+        </div>
+      )}
+
+      {postesBreakdown && (
+        <div
+          data-testid={`postes-breakdown-lot-${lot.ordre}`}
+          className="border-t border-border px-4 pb-4 pt-4 sm:px-6"
+        >
+          <PostesCard
+            postes={postesBreakdown.postes}
+            coutRevient={postesBreakdown.coutRevient}
           />
         </div>
       )}
