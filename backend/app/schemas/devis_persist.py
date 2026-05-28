@@ -329,3 +329,46 @@ class PreviewCoutsOut(BaseModel):
     # Nom de champ unifié avec la réponse POST /devis (payload_output.
     # chiffrage_auto_erreur) — CC2 consomme ce nom exact pour le bandeau.
     chiffrage_auto_erreur: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Cohérence Ø ext ↔ nb étiquettes/bobine — endpoint stateless live UI
+# ---------------------------------------------------------------------------
+
+class CoherenceBobineRequest(BaseModel):
+    """Inputs du check de cohérence bobine (saisie devis, étape brief).
+
+    Stateless : aucune persistance. Les valeurs viennent du formulaire
+    brief client (Ø saisi, nb étiq saisi) et du contexte saisie
+    (`pas_mm = dev_etiq + ecart_dev`, mandrin, épaisseur catalogue).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    diametre_ext_saisi_mm: float = Field(gt=0, le=2000)
+    nb_etiq_saisi: int = Field(ge=1)
+    mandrin_mm: int = Field(gt=0, le=500)
+    pas_mm: float = Field(gt=0, le=1000)
+    # Épaisseur catalogue matière. Si None, le service applique le
+    # fallback EPAISSEUR_FALLBACK_UM (150 µm) et signale la source.
+    epaisseur_catalogue_um: float | None = Field(default=None, gt=0, le=10000)
+    # Ø max accepté par la machine de pose du client (profil sprint 16).
+    # Si fourni, déclenche le check « fit » physique (Ø saisi > Ø max).
+    diametre_max_client_mm: float | None = Field(default=None, gt=0, le=2000)
+    # Tolérance d'acceptabilité (% du nb_max). Param entreprise plus tard.
+    tolerance_pct: float = Field(default=3.0, ge=0, le=50)
+
+
+class CoherenceBobineResponse(BaseModel):
+    """Résultat du check : alerte agrégée + valeurs cohérentes (actionables)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["ok", "info", "warning"]
+    message: str
+    nb_max: int
+    diametre_requis_mm: int
+    fit_severity: Literal["ok", "warning"] | None
+    fit_message: str | None
+    epaisseur_appliquee_um: float
+    epaisseur_source: Literal["catalogue", "fallback"]

@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 
 import { BriefClientForm } from "./_components/BriefClientForm";
+import { CoherenceBobineAlerte } from "./_components/CoherenceBobineAlerte";
 import { MatcherOutilButton } from "./_components/MatcherOutilButton";
 import { OptimisationChiffrage } from "./_components/OptimisationChiffrage";
 import { OptimisationPoseCandidats } from "./_components/OptimisationPoseCandidats";
@@ -434,6 +435,20 @@ function OptimisationPoseSaisie() {
       {/* Sprint 14 Lot 3/4.3 — Brief client unifié, monté AVANT les contraintes
           techniques. State porté par OptimisationPoseProvider (Lot 4.2). */}
       <BriefClientForm />
+
+      {/* Alerte cohérence Ø ext ↔ nb étiquettes/bobine.
+          Source de vérité = backend (calcul_diametre_bobine, VUE B 242 mm).
+          Non bloquante, debouncée 400 ms. Affichée uniquement quand tous les
+          inputs nécessaires sont renseignés. Ecart_dev approximé via
+          `intervalleDevMin` saisi (proxy avant exécution du moteur). */}
+      <CoherenceBobineAlerte
+        devEtiqMm={parseFloat(dev) || 0}
+        ecartDevMm={parseFloat(intervalleDevMin) || 0}
+        mandrinMm={mandrin}
+        epaisseurCatalogueUm={
+          matiereSelectionnee?.epaisseur_microns ?? null
+        }
+      />
 
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
         {/* --- Colonne 1 : Format + impression --- */}
