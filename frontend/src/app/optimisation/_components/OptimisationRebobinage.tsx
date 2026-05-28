@@ -613,14 +613,14 @@ export function OptimisationRebobinage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="rebob-sens-enroulement">
-                Sens d&apos;enroulement (1..8)
+                Sens d&apos;enroulement (0..9)
               </Label>
               <Input
                 id="rebob-sens-enroulement"
                 data-testid="sens-enroulement-input"
                 type="number"
-                min={1}
-                max={8}
+                min={0}
+                max={9}
                 step={1}
                 value={sensEnroulementClient ?? ""}
                 onChange={(e) => {
@@ -638,8 +638,9 @@ export function OptimisationRebobinage() {
               />
               <p className="text-xs text-muted-foreground">
                 Pré-rempli depuis le profil client. Stockage brut
-                (convention SE1-SE8) ; aucune logique de rotation appliquée
-                ici. Propagé dans le devis pour traçabilité.
+                (convention SE0-SE9 — 0 et 9 = bobines vierges sans
+                impression) ; aucune logique de rotation appliquée ici.
+                Propagé dans le devis pour traçabilité.
               </p>
             </div>
           </div>

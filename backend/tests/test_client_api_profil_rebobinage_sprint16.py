@@ -4,7 +4,8 @@ Couvre :
   - POST /api/clients accepte les 9 champs et les persiste
   - GET /api/clients/{id} renvoie les 9 champs
   - PUT /api/clients/{id} met à jour les 9 champs (partial update)
-  - sens_enroulement bornes 1..8 validées par Pydantic (422 hors plage)
+  - sens_enroulement bornes 0..9 validées par Pydantic (422 hors plage).
+    0 et 9 = bobines vierges sans impression (acceptées depuis SE0/SE9 UI).
 """
 from fastapi.testclient import TestClient
 
@@ -126,25 +127,25 @@ def test_put_clients_partial_update_des_champs_rebobinage():
 
 
 def test_post_clients_sens_enroulement_hors_borne_rejete_422():
-    """sens_enroulement ∈ [1, 8] (convention SE1-SE8). 0 ou 9 → 422
-    Pydantic validation (Field ge=1, le=8)."""
+    """sens_enroulement ∈ [0, 9] (convention SE0-SE9, 0/9 = vierges sans
+    impression). -1 ou 10 → 422 Pydantic validation (Field ge=0, le=9)."""
     r = _http.post(
         "/api/clients",
-        json={"raison_sociale": "Test sens invalide", "sens_enroulement": 9},
+        json={"raison_sociale": "Test sens invalide haut", "sens_enroulement": 10},
     )
     assert r.status_code == 422
 
     r2 = _http.post(
         "/api/clients",
-        json={"raison_sociale": "Test sens 0", "sens_enroulement": 0},
+        json={"raison_sociale": "Test sens invalide bas", "sens_enroulement": -1},
     )
     assert r2.status_code == 422
 
 
-def test_post_clients_sens_enroulement_dans_borne_1_a_8_accepte():
-    """Garde de plage Field(ge=1, le=8) — toutes les valeurs SE1-SE8
-    canoniques sont acceptées (201) et persistées correctement."""
-    for sens in (1, 2, 3, 4, 5, 6, 7, 8):
+def test_post_clients_sens_enroulement_dans_borne_0_a_9_accepte():
+    """Garde de plage Field(ge=0, le=9) — les 10 valeurs SE0-SE9 sont
+    acceptées (201) et persistées correctement. SE0/SE9 = bobines vierges."""
+    for sens in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9):
         r = _http.post(
             "/api/clients",
             json={
@@ -160,8 +161,8 @@ def test_post_clients_sens_enroulement_dans_borne_1_a_8_accepte():
 
 
 def test_put_clients_sens_enroulement_garde_appliquee_au_update():
-    """La garde 1..8 s'applique aussi à `ClientUpdate.sens_enroulement`
-    (partial update). Tentative de PUT avec sens=12 → 422."""
+    """La garde 0..9 s'applique aussi à `ClientUpdate.sens_enroulement`
+    (partial update). Tentative de PUT avec sens=12 (hors plage 0..9) → 422."""
     r_post = _http.post(
         "/api/clients",
         json={"raison_sociale": "Test PUT sens"},

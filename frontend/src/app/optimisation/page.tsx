@@ -54,11 +54,14 @@ const MANDRIN_OPTIONS = [25, 38, 40, 50, 76] as const;
 const MANDRIN_STANDARDS_FLEXO = new Set([40, 76]);
 
 /**
- * 8 sens d'enroulement convention métier flexo :
+ * 10 sens d'enroulement convention métier flexo :
  *   SE1-4 : face EXTÉRIEUR (étiquettes vers l'extérieur de la bobine)
  *           orientations 0° / 180° / 270° / 90° du A
  *   SE5-8 : face INTÉRIEUR (étiquettes vers l'intérieur de la bobine)
  *           bobine inversée (sens de défilement opposé)
+ *   SE0 / SE9 : bobines livrées VIERGES (sans impression). SE0 = face
+ *           extérieur, SE9 = face intérieur. Pas de cliché → pas
+ *           d'orientation à représenter (rotationA = 0).
  * Le `rotationA` indique la rotation du A en degrés.
  * Le `face` "ext" / "int" change l'orientation de la bobine sur le picto.
  */
@@ -70,17 +73,19 @@ type SEOption = {
 };
 
 // Libellés flexo exacts (cf guide métier). `affichage` est le nom court
-// utilisé dans l'UI ("Sens 1" plutôt que "SE1"). `code` reste SE1-8 pour
+// utilisé dans l'UI ("Sens 1" plutôt que "SE1"). `code` reste SE0-9 pour
 // rester cohérent avec la BDD/API/persistence existante.
 const SE_OPTIONS: (SEOption & { affichage: string })[] = [
   { code: "SE1", rotationA: 0, face: "ext", affichage: "Sens 1", label: "0° Extérieur · droite avant" },
   { code: "SE2", rotationA: 180, face: "ext", affichage: "Sens 2", label: "180° Extérieur · gauche avant" },
   { code: "SE3", rotationA: 270, face: "ext", affichage: "Sens 3", label: "270° Extérieur · pied avant" },
   { code: "SE4", rotationA: 90, face: "ext", affichage: "Sens 4", label: "90° Extérieur · tête avant" },
+  { code: "SE0", rotationA: 0, face: "ext", affichage: "Sens 0", label: "0° Extérieur · sans impression" },
   { code: "SE5", rotationA: 0, face: "int", affichage: "Sens 5", label: "0° Intérieur · droite avant" },
   { code: "SE6", rotationA: 180, face: "int", affichage: "Sens 6", label: "180° Intérieur · gauche avant" },
   { code: "SE7", rotationA: 270, face: "int", affichage: "Sens 7", label: "270° Intérieur · pied avant" },
   { code: "SE8", rotationA: 90, face: "int", affichage: "Sens 8", label: "90° Intérieur · tête avant" },
+  { code: "SE9", rotationA: 0, face: "int", affichage: "Sens 9", label: "0° Intérieur · sans impression" },
 ];
 
 /**

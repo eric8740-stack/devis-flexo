@@ -32,7 +32,7 @@ class LotProductionCreate(BaseModel):
     machine_id: int
     nb_poses_dev: int = Field(ge=1)
     nb_poses_laize: int = Field(ge=1)
-    sens_enroulement: int = Field(ge=1, le=8)
+    sens_enroulement: int = Field(ge=0, le=9)
     quantite: int = Field(ge=1)
     matiere_id: int
 

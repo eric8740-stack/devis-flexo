@@ -51,7 +51,7 @@ from app.services.optimisation.types import (
     Format,
     OptimisationInput,
 )
-from app.services.rotation_se import (
+from app.services.sens_metadata import (
     get_libelle_officiel,
     get_rotation_vue_a,
     get_rotation_vue_c,
@@ -71,8 +71,9 @@ router = APIRouter(prefix="/api/optimisation", tags=["optimisation"])
 
 
 def _sens_int(sens_enroulement: str) -> int:
-    """Convertit le code API ('SE1'..'SE8') vers l'entier (1..8) utilisé
-    par le module rotation_se (single source of truth backend)."""
+    """Convertit le code API ('SE0'..'SE9') vers l'entier (0..9).
+    1-8 sont délégués à rotation_se ; 0 et 9 (bobines vierges sans
+    impression) sont gérés par la façade sens_metadata."""
     return int(sens_enroulement.replace("SE", ""))
 
 
@@ -100,14 +101,14 @@ def get_candidat_visuel(
         if not sens_code.startswith("SE"):
             raise ValueError("préfixe sens manquant")
         sens_int = int(sens_code[2:])
-        if not 1 <= sens_int <= 8:
-            raise ValueError("sens hors plage 1-8")
+        if not 0 <= sens_int <= 9:
+            raise ValueError("sens hors plage 0-9")
     except (ValueError, IndexError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"id_candidat invalide ({id_candidat}). Format attendu : "
-                "'<cyl>-<mach>-<dev>x<laize>-SE<n>' avec 1 ≤ n ≤ 8."
+                "'<cyl>-<mach>-<dev>x<laize>-SE<n>' avec 0 ≤ n ≤ 9."
             ),
         ) from exc
     return {

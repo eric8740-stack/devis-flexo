@@ -1117,7 +1117,11 @@ export interface OptimisationContrainteClient {
   intervalle_dev_min_mm: number;
 }
 
+// SE0 / SE9 = bobines livrées vierges (sans impression). Pas de cliché à
+// orienter, donc hors du domaine rotation_se ; les callers backend les
+// traitent via la façade sens_metadata.
 export type SensEnroulement =
+  | "SE0"
   | "SE1"
   | "SE2"
   | "SE3"
@@ -1125,7 +1129,8 @@ export type SensEnroulement =
   | "SE5"
   | "SE6"
   | "SE7"
-  | "SE8";
+  | "SE8"
+  | "SE9";
 
 export interface OptimisationCalculerRequest {
   format: OptimisationFormat;
