@@ -162,7 +162,10 @@ export function CoherenceBobineAlerte({
         </p>
       )}
 
-      {/* Signalement source épaisseur si fallback. */}
+      {/* Signalement source épaisseur si fallback (aucune ε fournie par la
+          saisie — backend retombe sur 150 µm). Affiché UNIQUEMENT dans ce
+          cas ; quand l'opérateur a saisi/sélectionné une matière, source
+          est "matiere" et on ne pollue pas l'UI. */}
       {result.epaisseur_source === "fallback" && (
         <p className="text-xs text-muted-foreground">
           Épaisseur matière fallback {result.epaisseur_appliquee_um} µm

@@ -115,7 +115,7 @@ describe("CoherenceBobineAlerte", () => {
       fit_severity: null,
       fit_message: null,
       epaisseur_appliquee_um: 150,
-      epaisseur_source: "catalogue",
+      epaisseur_source: "matiere",
     });
     setup({
       nbEtiq: 4000,
@@ -144,7 +144,7 @@ describe("CoherenceBobineAlerte", () => {
       fit_severity: null,
       fit_message: null,
       epaisseur_appliquee_um: 150,
-      epaisseur_source: "catalogue",
+      epaisseur_source: "matiere",
     });
     setup({
       nbEtiq: 4000,
@@ -169,7 +169,7 @@ describe("CoherenceBobineAlerte", () => {
       fit_severity: "warning",
       fit_message: "Ø 240 mm > Ø max machine de pose (200 mm) : la bobine ne rentre pas.",
       epaisseur_appliquee_um: 150,
-      epaisseur_source: "catalogue",
+      epaisseur_source: "matiere",
     });
     setup({
       nbEtiq: 4000,

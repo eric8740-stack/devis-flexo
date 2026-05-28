@@ -453,12 +453,22 @@ function OptimisationPoseSaisie() {
           Non bloquante, debouncée 400 ms. Affichée uniquement quand tous les
           inputs nécessaires sont renseignés. Ecart_dev approximé via
           `intervalleDevMin` saisi (proxy avant exécution du moteur). */}
+      {/* Fix cohérence ε — on passe l'épaisseur de la **matière saisie**
+          (champ éditable, auto-synchronisé depuis le catalogue dès qu'une
+          matière a `epaisseur_microns`), et NON le seul `epaisseur_microns`
+          brut du catalogue. Sans ce câblage : pour un papier (où
+          `epaisseur_microns` est NULL côté catalogue, le papier se
+          caractérisant au grammage), le check retombait sur 150 µm
+          fallback alors que l'opérateur avait pourtant saisi une valeur
+          réaliste dans le champ Épaisseur. */}
       <CoherenceBobineAlerte
         devEtiqMm={parseFloat(dev) || 0}
         ecartDevMm={parseFloat(intervalleDevMin) || 0}
         mandrinMm={mandrin}
         epaisseurCatalogueUm={
-          matiereSelectionnee?.epaisseur_microns ?? null
+          parseFloat(epaisseurMatiere) > 0
+            ? parseFloat(epaisseurMatiere)
+            : null
         }
       />
 
