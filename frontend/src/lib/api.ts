@@ -1266,6 +1266,99 @@ export const checkCoherenceBobine = (data: CoherenceBobineRequest) =>
     body: JSON.stringify(data),
   });
 
+// ---------------------------------------------------------------------------
+// Planificateur de bobines (3 scénarios + IMPOSE anti-fléau)
+// ---------------------------------------------------------------------------
+
+export interface TarifsMandrinsIn {
+  prix_pre_coupe_par_mandrin_eur: string | number;
+  cout_decoupe_interne_par_mandrin_eur: string | number;
+  cout_fixe_decoupe_interne_eur: string | number;
+}
+
+export interface PlanificateurBobinesRequest {
+  quantite_commandee: number;
+  n_laize: number;
+  pas_mm: number;
+  mandrin_mm: number;
+  diametre_max_bobine_mm: number;
+  epaisseur_matiere_um: number;
+  nb_etiq_impose?: number | null;
+  machine_rebobineuse_id?: number | null;
+  tarifs_mandrins?: TarifsMandrinsIn | null;
+}
+
+export type ScenarioBobinesKey = "A" | "B" | "C_inf" | "C_sup" | "IMPOSE";
+
+export interface RepartitionBobineOut {
+  nb_etiq_par_bobine: number;
+  nb_bobines_par_piste: number;
+  diametre_mm: number;
+}
+
+export interface ScenarioBobinesOut {
+  cle: ScenarioBobinesKey;
+  titre: string;
+  repartition: RepartitionBobineOut[];
+  nb_bobines_par_piste: number;
+  nb_bobines_total: number;
+  quantite_totale_etiq: number;
+  surprod_etiq: number;
+  q_ajustee: number | null;
+  cout_total_eur: string | null;
+  cout_machine_eur: string | null;
+  cout_mandrins_eur: string | null;
+  mode_mandrins_optimal: "pre_coupe" | "decoupe_interne" | null;
+}
+
+export interface AlerteImposeOut {
+  nb_impose: number;
+  nb_realisable_max: number;
+  diametre_requis_mm: number;
+  physiquement_impossible: boolean;
+}
+
+export interface PlanificateurBobinesResponse {
+  scenarios: ScenarioBobinesOut[];
+  recommande_cle: "A" | "B" | "C_inf" | "C_sup" | null;
+  nb_max_par_bobine: number;
+  pas_mm: number;
+  alerte_impose: AlerteImposeOut | null;
+}
+
+export const planifierBobines = (data: PlanificateurBobinesRequest) =>
+  apiFetch<PlanificateurBobinesResponse>("/api/devis/planificateur-bobines", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+// Persistance choix planificateur — écriture ciblée payload_input.plan_bobines.
+export type PolitiqueReliquat =
+  | "pleines_plus_reliquat"
+  | "equilibrees"
+  | "tomber_juste";
+
+export interface PlanBobinesSelectionIn {
+  scenario: ScenarioBobinesKey;
+  nb_bobine: number;
+  nb_bobines_total: number;
+  politique_reliquat: PolitiqueReliquat;
+  q_ajustee?: number | null;
+  force_diametre?: boolean | null;
+  motif_forcage?: string | null;
+}
+
+export type PlanBobinesSelectionOut = PlanBobinesSelectionIn;
+
+export const sauvegarderPlanBobines = (
+  devisId: number,
+  data: PlanBobinesSelectionIn,
+) =>
+  apiFetch<PlanBobinesSelectionOut>(`/api/devis/${devisId}/plan-bobines`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
 export const postOptimisationCalculer = (
   data: OptimisationCalculerRequest
 ) =>
