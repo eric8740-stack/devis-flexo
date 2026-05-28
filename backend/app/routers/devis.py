@@ -22,6 +22,8 @@ from app.schemas.devis_persist import (
     DevisDetail,
     DevisListResponse,
     DevisUpdate,
+    PlanBobinesSelectionIn,
+    PlanBobinesSelectionOut,
     PlanificateurBobinesRequest,
     PlanificateurBobinesResponse,
     PreviewCoutsIn,
@@ -285,6 +287,53 @@ def planificateur_bobines(
     # valide proprement sans avoir besoin de `from_attributes=True` à
     # tous les niveaux. Les Decimal restent Decimal (cf. tests).
     return PlanificateurBobinesResponse.model_validate(asdict(result))
+
+
+@router.put(
+    "/{devis_id}/plan-bobines",
+    response_model=PlanBobinesSelectionOut,
+    status_code=status.HTTP_200_OK,
+)
+def update_plan_bobines(
+    devis_id: int,
+    payload: PlanBobinesSelectionIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PlanBobinesSelectionOut:
+    """Persiste la sélection commerciale dans `payload_input.plan_bobines`.
+
+    Écriture **ciblée** (merge partiel) : on ne touche QUE la sous-clé
+    `plan_bobines`, le reste de `payload_input` (sens_enroulement,
+    nb_couleurs, options_codes_etape4, mandrin_mm, etc.) est strictement
+    préservé. C'est la raison pour laquelle on n'utilise pas le PUT
+    générique /devis/{id} (qui setattr le bloc entier).
+
+    Le forçage IMPOSE (`force_diametre=True`) exige un motif non vide
+    (validation côté schema, 422 si manquant). Sans forçage, on
+    persiste le scénario nominal.
+
+    Tenant scopé : 404 si le devis n'appartient pas à l'entreprise.
+    """
+    devis = get_or_404_scoped(db, Devis, devis_id, user)
+
+    # `payload_input` peut être None / pas un dict si devis legacy.
+    # On normalise en dict pour pouvoir merger sans crash.
+    payload_input = devis.payload_input
+    if not isinstance(payload_input, dict):
+        payload_input = {}
+
+    # Merge ciblé : on REMPLACE la sous-clé `plan_bobines` uniquement.
+    # Les autres clés (sens, couleurs, options, etc.) restent intactes.
+    selection_dict = payload.model_dump(exclude_none=False)
+    nouveau_payload_input = {**payload_input, "plan_bobines": selection_dict}
+
+    # Réassignation explicite : SQLAlchemy ne détecte pas la mutation
+    # d'un dict en place sur une colonne JSON. On change la référence.
+    devis.payload_input = nouveau_payload_input
+    db.commit()
+    db.refresh(devis)
+
+    return PlanBobinesSelectionOut(**selection_dict)
 
 
 @router.post(

@@ -1332,6 +1332,33 @@ export const planifierBobines = (data: PlanificateurBobinesRequest) =>
     body: JSON.stringify(data),
   });
 
+// Persistance choix planificateur — écriture ciblée payload_input.plan_bobines.
+export type PolitiqueReliquat =
+  | "pleines_plus_reliquat"
+  | "equilibrees"
+  | "tomber_juste";
+
+export interface PlanBobinesSelectionIn {
+  scenario: ScenarioBobinesKey;
+  nb_bobine: number;
+  nb_bobines_total: number;
+  politique_reliquat: PolitiqueReliquat;
+  q_ajustee?: number | null;
+  force_diametre?: boolean | null;
+  motif_forcage?: string | null;
+}
+
+export type PlanBobinesSelectionOut = PlanBobinesSelectionIn;
+
+export const sauvegarderPlanBobines = (
+  devisId: number,
+  data: PlanBobinesSelectionIn,
+) =>
+  apiFetch<PlanBobinesSelectionOut>(`/api/devis/${devisId}/plan-bobines`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
 export const postOptimisationCalculer = (
   data: OptimisationCalculerRequest
 ) =>

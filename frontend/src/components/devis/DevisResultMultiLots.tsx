@@ -265,6 +265,12 @@ export function DevisResultMultiLots({
             mandrinMm={mandrinMm}
             chiffrage={chiffrageParLot[idx] ?? null}
             diametreMaxBobineMm={devis.diametre_max_bobine_mm ?? null}
+            devisId={devis.id}
+            initialPlanBobines={
+              (payloadInput.plan_bobines as
+                | import("@/lib/api").PlanBobinesSelectionIn
+                | undefined) ?? null
+            }
           />
         ))}
         {lots.length === 0 && (
@@ -425,6 +431,8 @@ function LotCard({
   mandrinMm,
   chiffrage,
   diametreMaxBobineMm,
+  devisId,
+  initialPlanBobines,
 }: {
   lot: LotProductionRead;
   colorClass: string;
@@ -433,6 +441,8 @@ function LotCard({
   mandrinMm: number;
   chiffrage: LotChiffrage | null;
   diametreMaxBobineMm: number | null;
+  devisId: number;
+  initialPlanBobines: import("@/lib/api").PlanBobinesSelectionIn | null;
 }) {
   const posesTotal = lot.nb_poses_dev * lot.nb_poses_laize;
   // Brief #33 commit 5 — payload_visuel = snapshot OptimisationConfigOut
@@ -538,6 +548,7 @@ function LotCard({
                 un gate visible si Dmax client ou épaisseur matière manquent
                 — on n'invente jamais ces valeurs. */}
             <PlanificateurBobines
+              devisId={devisId}
               quantiteCommandee={lot.quantite}
               nLaize={lot.nb_poses_laize}
               pasMm={
@@ -551,6 +562,7 @@ function LotCard({
               epaisseurMatiereUm={
                 candidatVisuel?.epaisseur_appliquee_um ?? null
               }
+              initialSelection={initialPlanBobines}
             />
           </div>
         </div>

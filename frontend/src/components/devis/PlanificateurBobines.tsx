@@ -5,34 +5,40 @@
  * dans le rapport de fabrication sur `/devis/[id]`.
  *
  * Affiche 3 scénarios (+ optionnellement IMPOSE) de découpe en bobines,
- * avec coût rebobinage en LECTURE SEULE du moteur existant. Le commercial
- * en choisit un. Le scénario C ajuste la quantité du devis → utilisateur
- * redirigé vers le flux existant « Modifie ce devis ».
+ * avec coût rebobinage en LECTURE SEULE du moteur existant.
  *
- * UX :
- *  - cartes color-codées, mobile-first
- *  - badge « ⭐ recommandé » sur le coût rebobinage le plus bas
- *  - alerte rouge si scénario IMPOSE physiquement impossible
- *  - aucun tooltip survol
- *
- * Calculs : zéro duplication — tout passe par `POST /api/devis/
- * planificateur-bobines` qui appelle `bat_calculs` (SSOT) + cost_engine
- * rebobinage (lecture seule).
+ * Finition (cette PR) :
+ *  - Persistance : sélection sauvegardée dans `payload_input.plan_bobines`
+ *    via PUT ciblé (merge partiel server-side, autres clés préservées).
+ *  - Restauration : si `initialSelection` fourni (au reload du devis),
+ *    la carte sélectionnée est restaurée.
+ *  - Scénario C : bouton « Appliquer cette quantité » → navigation vers
+ *    `/optimisation?devis_id=X&q=Y` (le hydrater lit le param `q`).
+ *  - IMPOSE physiquement impossible : bouton « Forcer malgré tout » qui
+ *    réclame un motif non vide AVANT enregistrement. Souveraineté
+ *    préservée + traçabilité (force_diametre + motif_forcage stockés).
  */
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import {
   planifierBobines,
+  sauvegarderPlanBobines,
+  type PlanBobinesSelectionIn,
   type PlanificateurBobinesRequest,
   type PlanificateurBobinesResponse,
+  type PolitiqueReliquat,
   type ScenarioBobinesKey,
   type ScenarioBobinesOut,
 } from "@/lib/api";
 
 interface Props {
+  /** ID du devis pour la persistance ciblée. */
+  devisId: number;
   /** Quantité commandée du lot (étiquettes). */
   quantiteCommandee: number;
   /** Poses en laize (résultat optim). */
@@ -49,6 +55,11 @@ interface Props {
    * Épaisseur matière en µm. null → planner non rendu (gate inputs).
    */
   epaisseurMatiereUm: number | null;
+  /**
+   * Sélection antérieure restaurée depuis `payload_input.plan_bobines`
+   * (le devis a déjà été enregistré une fois). null = pas de choix encore.
+   */
+  initialSelection?: PlanBobinesSelectionIn | null;
 }
 
 const COULEURS_CLE: Record<ScenarioBobinesKey, string> = {
@@ -57,6 +68,14 @@ const COULEURS_CLE: Record<ScenarioBobinesKey, string> = {
   C_inf: "border-l-amber-500 bg-amber-50/40",
   C_sup: "border-l-amber-600 bg-amber-50/60",
   IMPOSE: "border-l-purple-600 bg-purple-50/40",
+};
+
+const POLITIQUE_PAR_SCENARIO: Record<ScenarioBobinesKey, PolitiqueReliquat> = {
+  A: "pleines_plus_reliquat",
+  B: "equilibrees",
+  C_inf: "tomber_juste",
+  C_sup: "tomber_juste",
+  IMPOSE: "pleines_plus_reliquat",
 };
 
 function fmtEur(s: string | null): string {
@@ -70,22 +89,39 @@ function fmtEur(s: string | null): string {
 }
 
 export function PlanificateurBobines({
+  devisId,
   quantiteCommandee,
   nLaize,
   pasMm,
   mandrinMm,
   diametreMaxBobineMm,
   epaisseurMatiereUm,
+  initialSelection = null,
 }: Props) {
-  // Anti-fléau : input commercial pour le nb_etiq_impose client.
-  const [nbImposeInput, setNbImposeInput] = useState<string>("");
+  const router = useRouter();
+  const { toast } = useToast();
+  const [nbImposeInput, setNbImposeInput] = useState<string>(
+    initialSelection?.scenario === "IMPOSE"
+      ? String(initialSelection.nb_bobine)
+      : "",
+  );
   const [result, setResult] = useState<PlanificateurBobinesResponse | null>(
     null,
   );
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState<boolean>(false);
   const [scenarioChoisi, setScenarioChoisi] =
-    useState<ScenarioBobinesKey | null>(null);
+    useState<ScenarioBobinesKey | null>(
+      initialSelection?.scenario ?? null,
+    );
+  // Workflow forçage IMPOSE : motif textarea + bouton « Forcer ».
+  const [motifForcage, setMotifForcage] = useState<string>(
+    initialSelection?.motif_forcage ?? "",
+  );
+  const [forcageActif, setForcageActif] = useState<boolean>(
+    initialSelection?.force_diametre === true,
+  );
+  const [persisting, setPersisting] = useState<boolean>(false);
 
   const inputsManquants = useMemo<string[]>(() => {
     const missing: string[] = [];
@@ -161,6 +197,58 @@ export function PlanificateurBobines({
     inputsManquants.length,
   ]);
 
+  // Helper persistance : appelle le PUT ciblé. Pour IMPOSE forçage, le motif
+  // doit être non vide (vérification frontale + back-end revérifie 422).
+  const persisterChoix = (
+    scenario: ScenarioBobinesOut,
+    forcer: boolean,
+  ): void => {
+    if (persisting) return;
+    const motif = motifForcage.trim();
+    if (forcer && !motif) {
+      toast({
+        title: "Motif obligatoire",
+        description:
+          "Pour forcer un scénario physiquement infaisable, renseigne un motif (audit/traçabilité).",
+        variant: "destructive",
+      });
+      return;
+    }
+    const body: PlanBobinesSelectionIn = {
+      scenario: scenario.cle,
+      nb_bobine: scenario.repartition[0]?.nb_etiq_par_bobine ?? 0,
+      nb_bobines_total: scenario.nb_bobines_total,
+      politique_reliquat: POLITIQUE_PAR_SCENARIO[scenario.cle],
+      q_ajustee: scenario.q_ajustee,
+      force_diametre: forcer ? true : null,
+      motif_forcage: forcer ? motif : null,
+    };
+    setPersisting(true);
+    sauvegarderPlanBobines(devisId, body)
+      .then(() => {
+        setScenarioChoisi(scenario.cle);
+        setForcageActif(forcer);
+        toast({
+          title: forcer ? "Forçage enregistré ⚠" : "Choix enregistré ✓",
+          description: forcer
+            ? `Scénario ${scenario.cle} retenu malgré l'impossibilité physique — motif tracé.`
+            : `Scénario ${scenario.cle} sauvegardé sur le devis.`,
+        });
+      })
+      .catch((err) => {
+        toast({
+          title: "Sauvegarde impossible",
+          description: err instanceof Error ? err.message : "Erreur inconnue",
+          variant: "destructive",
+        });
+      })
+      .finally(() => setPersisting(false));
+  };
+
+  const appliquerQAjustee = (qAjustee: number) => {
+    router.push(`/optimisation?devis_id=${devisId}&q=${qAjustee}`);
+  };
+
   // Gate Étape 0 du brief : « Si un input manque → le signaler, ne pas inventer ».
   if (inputsManquants.length > 0) {
     return (
@@ -173,6 +261,8 @@ export function PlanificateurBobines({
       </div>
     );
   }
+
+  const imposeImpossible = !!result?.alerte_impose?.physiquement_impossible;
 
   return (
     <div className="space-y-3" data-testid="plan-bobines">
@@ -220,8 +310,9 @@ export function PlanificateurBobines({
             <strong>{result.alerte_impose.diametre_requis_mm} mm</strong>.
           </p>
           <p className="mt-1 text-xs text-red-700">
-            Revenir au client avec ces 2 chiffres avant chiffrage. Forcer
-            nécessite motif obligatoire (traçabilité).
+            Revenir au client avec ces 2 chiffres avant chiffrage. Pour retenir
+            ce scénario malgré l'impossibilité, renseigne un motif et clique
+            « Forcer malgré tout » sur la carte IMPOSE.
           </p>
         </div>
       )}
@@ -241,26 +332,21 @@ export function PlanificateurBobines({
             quantiteCommandee={quantiteCommandee}
             estRecommande={result?.recommande_cle === sc.cle}
             estChoisi={scenarioChoisi === sc.cle}
-            estImpossible={
-              sc.cle === "IMPOSE"
-                ? !!result?.alerte_impose?.physiquement_impossible
-                : false
+            estImpossible={sc.cle === "IMPOSE" ? imposeImpossible : false}
+            forcageActif={forcageActif && scenarioChoisi === sc.cle}
+            motifForcage={motifForcage}
+            onChangeMotif={setMotifForcage}
+            persisting={persisting}
+            onChoisir={() => persisterChoix(sc, false)}
+            onForcer={() => persisterChoix(sc, true)}
+            onAppliquerQ={
+              sc.q_ajustee !== null
+                ? () => appliquerQAjustee(sc.q_ajustee!)
+                : undefined
             }
-            onChoisir={() => setScenarioChoisi(sc.cle)}
           />
         ))}
       </div>
-
-      {scenarioChoisi !== null && (
-        <p
-          data-testid="plan-bobines-choix"
-          className="text-xs text-muted-foreground"
-        >
-          Scénario {scenarioChoisi} choisi.{" "}
-          {scenarioChoisi.startsWith("C_") &&
-            "→ Modifie ce devis pour appliquer la nouvelle quantité."}
-        </p>
-      )}
     </div>
   );
 }
@@ -271,16 +357,30 @@ function ScenarioCard({
   estRecommande,
   estChoisi,
   estImpossible,
+  forcageActif,
+  motifForcage,
+  onChangeMotif,
+  persisting,
   onChoisir,
+  onForcer,
+  onAppliquerQ,
 }: {
   scenario: ScenarioBobinesOut;
   quantiteCommandee: number;
   estRecommande: boolean;
   estChoisi: boolean;
   estImpossible: boolean;
+  forcageActif: boolean;
+  motifForcage: string;
+  onChangeMotif: (v: string) => void;
+  persisting: boolean;
   onChoisir: () => void;
+  onForcer: () => void;
+  onAppliquerQ?: () => void;
 }) {
   const couleur = COULEURS_CLE[scenario.cle];
+  const estC = scenario.cle === "C_inf" || scenario.cle === "C_sup";
+  const estImposeCarte = scenario.cle === "IMPOSE";
   return (
     <div
       data-testid={`plan-bobines-card-${scenario.cle}`}
@@ -288,24 +388,34 @@ function ScenarioCard({
         "rounded-md border border-border border-l-4 px-3 py-2 text-sm " +
         couleur +
         (estChoisi ? " ring-2 ring-blue-500" : "") +
-        (estImpossible ? " opacity-70" : "")
+        (estImpossible && !forcageActif ? " opacity-70" : "")
       }
     >
       <div className="flex items-baseline justify-between gap-2">
         <p className="font-semibold">{scenario.titre}</p>
-        {estRecommande && (
-          <span
-            data-testid={`plan-bobines-badge-recommande-${scenario.cle}`}
-            className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900"
-          >
-            ⭐ recommandé
-          </span>
-        )}
-        {estImpossible && (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900">
-            impossible
-          </span>
-        )}
+        <div className="flex items-center gap-1">
+          {estRecommande && (
+            <span
+              data-testid={`plan-bobines-badge-recommande-${scenario.cle}`}
+              className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900"
+            >
+              ⭐ recommandé
+            </span>
+          )}
+          {estImpossible && !forcageActif && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900">
+              impossible
+            </span>
+          )}
+          {forcageActif && estChoisi && (
+            <span
+              data-testid={`plan-bobines-badge-force-${scenario.cle}`}
+              className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-900"
+            >
+              ⚠ forcé
+            </span>
+          )}
+        </div>
       </div>
 
       <ul className="mt-1 space-y-0.5 text-xs">
@@ -342,16 +452,65 @@ function ScenarioCard({
         )}
       </ul>
 
-      <div className="mt-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onChoisir}
-          data-testid={`plan-bobines-btn-${scenario.cle}`}
-          className="h-7 text-xs"
+      {/* Forçage IMPOSE : motif obligatoire (anti-fléau, traçabilité). */}
+      {estImposeCarte && estImpossible && (
+        <div
+          data-testid="plan-bobines-motif-block"
+          className="mt-2 space-y-1 rounded border border-red-300 bg-white/70 p-2"
         >
-          {scenario.cle.startsWith("C_") ? "Ajuste Q" : "Choisir"}
-        </Button>
+          <Label
+            htmlFor={`motif-${scenario.cle}`}
+            className="text-xs text-red-900"
+          >
+            Motif de forçage (obligatoire pour retenir ce scénario)
+          </Label>
+          <textarea
+            id={`motif-${scenario.cle}`}
+            data-testid="plan-bobines-motif-input"
+            className="w-full rounded border border-input bg-white px-2 py-1 text-xs"
+            rows={2}
+            placeholder="ex : client accepte les sous-bobines en sortie atelier."
+            value={motifForcage}
+            onChange={(e) => onChangeMotif(e.target.value)}
+          />
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        {estC && onAppliquerQ !== undefined && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onAppliquerQ}
+            data-testid={`plan-bobines-btn-q-${scenario.cle}`}
+            className="h-7 text-xs"
+          >
+            Appliquer cette quantité ({scenario.q_ajustee})
+          </Button>
+        )}
+        {estImposeCarte && estImpossible ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onForcer}
+            disabled={persisting || motifForcage.trim().length === 0}
+            data-testid={`plan-bobines-btn-forcer-${scenario.cle}`}
+            className="h-7 text-xs text-red-900 hover:bg-red-50"
+          >
+            Forcer malgré tout
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onChoisir}
+            disabled={persisting}
+            data-testid={`plan-bobines-btn-${scenario.cle}`}
+            className="h-7 text-xs"
+          >
+            {estChoisi ? "✓ Sélectionné" : "Choisir"}
+          </Button>
+        )}
       </div>
     </div>
   );
