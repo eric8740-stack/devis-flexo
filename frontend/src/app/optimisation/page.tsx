@@ -200,7 +200,8 @@ function OptimisationPageInner() {
 }
 
 function OptimisationPoseSaisie() {
-  const { goCandidats, setNbCouleursImpression } = useOptimisationPose();
+  const { goCandidats, setNbCouleursImpression, setOptimWarnings } =
+    useOptimisationPose();
   const { toast } = useToast();
 
   const [options, setOptions] = useState<OptionDisponible[] | null>(null);
@@ -377,6 +378,10 @@ function OptimisationPoseSaisie() {
         // jusqu'au chiffrage (payload_input.nb_couleurs). Le moteur backend
         // s'en sert pour le Poste 2 Encres.
         setNbCouleursImpression(parseInt(nbCouleurs, 10) || 0);
+        // Fix forçage laize — propage les warnings non bloquants (ex.
+        // valeur forcée hors recommandation moteur, motif manquant) pour
+        // affichage en bandeau orange à l'étape candidats.
+        setOptimWarnings(r.warnings ?? []);
         // Sprint 13 avenant : push les candidats dans le store et bascule
         // vers étape 2 (tableau multi-sélection).
         goCandidats(

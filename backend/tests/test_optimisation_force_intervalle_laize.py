@@ -75,22 +75,49 @@ def _payload_base():
 # ---------------------------------------------------------------------------
 
 
-def test_force_intervalle_laize_sans_motif_422(cleanup_and_onboard):
+def test_force_intervalle_laize_sans_motif_calcule_avec_warning(cleanup_and_onboard):
+    """Souveraineté : forçage laize sans motif n'est PLUS bloquant (200 OK).
+    Le motif manquant remonte dans `warnings[]` pour bandeau UI non bloquant."""
     _onboard_tenant_minimal()
     payload = _payload_base() | {"intervalle_laize_force_mm": 7.0}
     r = client.post("/api/optimisation/calculer", json=payload)
-    assert r.status_code == 422
-    assert "motif" in r.text.lower()
+    assert r.status_code == 200, r.text
+    body = r.json()
+    warnings = body.get("warnings") or []
+    assert any("forcé à 7" in w.lower() for w in warnings), warnings
+    assert any("motif" in w.lower() for w in warnings), warnings
 
 
-def test_force_intervalle_laize_motif_trop_court_422(cleanup_and_onboard):
+def test_force_intervalle_laize_motif_trop_court_warning_non_bloquant(cleanup_and_onboard):
+    """Motif < 10 caractères : calcul exécuté, warning explicite remonté."""
     _onboard_tenant_minimal()
     payload = _payload_base() | {
         "intervalle_laize_force_mm": 7.0,
         "motif_forcage_intervalle_laize": "Trop",
     }
     r = client.post("/api/optimisation/calculer", json=payload)
-    assert r.status_code == 422
+    assert r.status_code == 200, r.text
+    warnings = r.json().get("warnings") or []
+    assert any("motif" in w.lower() and "court" in w.lower() for w in warnings), warnings
+
+
+def test_force_intervalle_laize_negatif_ou_zero_reste_422(cleanup_and_onboard):
+    """Garde-fou : valeur techniquement impossible (≤ 0) reste rejetée 422
+    par Pydantic (Field gt=0). On garde le blocage pour ces cas absurdes."""
+    _onboard_tenant_minimal()
+    payload_zero = _payload_base() | {
+        "intervalle_laize_force_mm": 0.0,
+        "motif_forcage_intervalle_laize": "Motif suffisamment long ici",
+    }
+    r0 = client.post("/api/optimisation/calculer", json=payload_zero)
+    assert r0.status_code == 422
+
+    payload_neg = _payload_base() | {
+        "intervalle_laize_force_mm": -1.0,
+        "motif_forcage_intervalle_laize": "Motif suffisamment long ici",
+    }
+    rn = client.post("/api/optimisation/calculer", json=payload_neg)
+    assert rn.status_code == 422
 
 
 def test_force_intervalle_laize_applique_correctement(cleanup_and_onboard):
