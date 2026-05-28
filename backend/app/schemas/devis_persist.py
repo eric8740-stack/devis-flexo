@@ -459,3 +459,59 @@ class PlanificateurBobinesResponse(BaseModel):
     nb_max_par_bobine: int
     pas_mm: float
     alerte_impose: AlerteImposeOut | None
+
+
+# ---------------------------------------------------------------------------
+# Persistance du choix planificateur — payload_input.plan_bobines (JSONB)
+# ---------------------------------------------------------------------------
+
+class PlanBobinesSelectionIn(BaseModel):
+    """Selection du commercial à persister dans payload_input.plan_bobines.
+
+    Écriture **ciblée** côté backend (merge partiel) : seul ce sous-objet
+    est mis à jour, le reste de `payload_input` (sens_enroulement,
+    nb_couleurs, options_codes_etape4, etc.) est strictement préservé.
+
+    `force_diametre` + `motif_forcage` sont obligatoires ENSEMBLE quand
+    le scénario IMPOSE dépasse la limite physique (`physiquement_impossible`
+    déjà signalé par l'endpoint planificateur). Ils sont None sinon.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: Literal["A", "B", "C_inf", "C_sup", "IMPOSE"]
+    nb_bobine: int = Field(ge=1)  # nb d'étiq par bobine pleine (config retenue)
+    nb_bobines_total: int = Field(ge=1)
+    politique_reliquat: Literal["pleines_plus_reliquat", "equilibrees", "tomber_juste"]
+    q_ajustee: int | None = Field(default=None, ge=1)
+    force_diametre: bool | None = None
+    motif_forcage: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _valider_forcage(self) -> "PlanBobinesSelectionIn":
+        # Forçage et motif sont indissociables : si force_diametre=True,
+        # motif obligatoire (≥ 1 caractère trimmé). Sans motif → on refuse
+        # l'écriture (le commercial peut choisir, mais consciemment).
+        if self.force_diametre:
+            motif = (self.motif_forcage or "").strip()
+            if not motif:
+                raise ValueError(
+                    "Forçage IMPOSE : motif obligatoire (traçabilité). "
+                    "Décris pourquoi tu retiens un scénario physiquement "
+                    "infaisable au Ø client."
+                )
+        return self
+
+
+class PlanBobinesSelectionOut(BaseModel):
+    """Retour après écriture : la sélection persistée telle quelle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: Literal["A", "B", "C_inf", "C_sup", "IMPOSE"]
+    nb_bobine: int
+    nb_bobines_total: int
+    politique_reliquat: str
+    q_ajustee: int | None = None
+    force_diametre: bool | None = None
+    motif_forcage: str | None = None

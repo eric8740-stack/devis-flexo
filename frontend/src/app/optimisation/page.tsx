@@ -222,7 +222,19 @@ function OptimisationPoseSaisie() {
   const [formeCourbe, setFormeCourbe] = useState(false);
   const [intervalleDevMin, setIntervalleDevMin] = useState<string>("2");
   const [nbCouleurs, setNbCouleurs] = useState<string>("4");
-  const [quantite, setQuantite] = useState<string>("10000");
+  // Pré-remplissage Q ajustée : si l'URL contient ?q=N (venu du
+  // bouton « Appliquer cette quantité » d'un scénario C du planificateur
+  // de bobines), on initialise la saisie avec cette valeur. Sinon, défaut
+  // historique 10000. L'init est paresseuse (n'évalue qu'au 1er mount).
+  const searchParamsSaisie = useSearchParams();
+  const [quantite, setQuantite] = useState<string>(() => {
+    const qParam = searchParamsSaisie.get("q");
+    if (qParam) {
+      const n = parseInt(qParam, 10);
+      if (Number.isFinite(n) && n > 0) return String(n);
+    }
+    return "10000";
+  });
   // Sprint 13 avenant : default 2 mm (typique machine de pose client). 0 si
   // pas de contrainte client spécifique.
   const [contrainteClientMm, setContrainteClientMm] = useState<string>("2");

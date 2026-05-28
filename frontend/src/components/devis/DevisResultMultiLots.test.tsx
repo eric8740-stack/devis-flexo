@@ -1,9 +1,16 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { DevisDetail, LotProductionRead } from "@/lib/api";
 
 import { DevisResultMultiLots } from "./DevisResultMultiLots";
+
+// PlanificateurBobines (rendu via LotCard sur les lots multi-lots) consomme
+// `useRouter()` de next/navigation. Mock minimal pour que le rendu n'éclate
+// pas en environnement test (« invariant expected app router to be mounted »).
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 // Fix bandeau erreur chiffrage — on vérifie que :
 //   - chiffrage OK (ht_total_eur renseigné)        → prix affiché, pas de bandeau
