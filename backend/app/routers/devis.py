@@ -4,6 +4,8 @@
 `user.entreprise_id` via `Depends(get_current_user)`.
 """
 import math
+from dataclasses import asdict
+from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -12,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.crud import devis as crud
 from app.db import get_db
 from app.dependencies import get_current_user
-from app.models import Devis, User
+from app.models import Devis, MachineRebobineuse, ParametreMandrin, User
 from app.schemas.devis_persist import (
     CoherenceBobineRequest,
     CoherenceBobineResponse,
@@ -20,10 +22,18 @@ from app.schemas.devis_persist import (
     DevisDetail,
     DevisListResponse,
     DevisUpdate,
+    PlanificateurBobinesRequest,
+    PlanificateurBobinesResponse,
     PreviewCoutsIn,
     PreviewCoutsOut,
 )
 from app.services.coherence_bobine import evaluer_coherence_bobine
+from app.services.planificateur_bobines import calculer_plan_bobines
+from app.services.rebobinage.types import (
+    MachineRebobinageParams,
+    ParametresMandrinRuntime,
+    TarifsMandrins,
+)
 from app.services.pdf_service import generate_devis_pdf
 from app.services.scope_service import get_or_404_scoped
 
@@ -184,6 +194,97 @@ def download_devis_pdf(
             "Content-Disposition": f'attachment; filename="{devis.numero}.pdf"'
         },
     )
+
+
+@router.post(
+    "/planificateur-bobines",
+    response_model=PlanificateurBobinesResponse,
+    status_code=status.HTTP_200_OK,
+)
+def planificateur_bobines(
+    payload: PlanificateurBobinesRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PlanificateurBobinesResponse:
+    """3 (ou 4) scénarios de découpe en bobines pour le rapport de fab.
+
+    Endpoint stateless (zéro écriture DB) consommé par le composant
+    « Plan de bobines » sur `/devis/[id]`. Calculs géométriques via
+    `bat_calculs` (SSOT CC2, helpers déjà mergés) — zéro duplication.
+
+    Coût rebobinage en LECTURE SEULE des helpers existants
+    (`arbitrage_mandrins` + `calcul_temps`) : on passe `nb_bobines` au
+    moteur, on lit le coût. Aucune modification de logique métier.
+
+    Si `machine_rebobineuse_id` ou `tarifs_mandrins` manquent → scénarios
+    renvoyés sans coût et `recommande_cle = None` (UI affiche géométrie
+    seule, sans badge recommandé).
+    """
+    machine_params: MachineRebobinageParams | None = None
+    parametres: ParametresMandrinRuntime | None = None
+    tarifs_obj: TarifsMandrins | None = None
+
+    if payload.machine_rebobineuse_id is not None:
+        # Scope tenant : on refuse silencieusement (coût None) si la
+        # rebobineuse n'appartient pas à ce tenant — UX moins brutale
+        # qu'un 404 sur un endpoint « préview ».
+        machine = (
+            db.query(MachineRebobineuse)
+            .filter(
+                MachineRebobineuse.id == payload.machine_rebobineuse_id,
+                MachineRebobineuse.entreprise_id == user.entreprise_id,
+            )
+            .one_or_none()
+        )
+        if machine is not None:
+            machine_params = MachineRebobinageParams(
+                vitesse_pratique_m_min=machine.vitesse_pratique_m_min,
+                cout_horaire_eur=Decimal(machine.cout_horaire_eur),
+                temps_changement_bobine_min=Decimal(
+                    machine.temps_changement_bobine_min
+                ),
+            )
+            # Snapshot runtime parametre_mandrin (scie_disponible).
+            row = (
+                db.query(ParametreMandrin)
+                .filter(ParametreMandrin.entreprise_id == user.entreprise_id)
+                .one_or_none()
+            )
+            parametres = ParametresMandrinRuntime(
+                scie_disponible=bool(row.scie_disponible) if row else False,
+            )
+
+    if payload.tarifs_mandrins is not None:
+        tarifs_obj = TarifsMandrins(
+            prix_pre_coupe_par_mandrin_eur=payload.tarifs_mandrins.prix_pre_coupe_par_mandrin_eur,
+            cout_decoupe_interne_par_mandrin_eur=payload.tarifs_mandrins.cout_decoupe_interne_par_mandrin_eur,
+            cout_fixe_decoupe_interne_eur=payload.tarifs_mandrins.cout_fixe_decoupe_interne_eur,
+        )
+
+    try:
+        result = calculer_plan_bobines(
+            quantite_commandee=payload.quantite_commandee,
+            n_laize=payload.n_laize,
+            pas_mm=payload.pas_mm,
+            mandrin_mm=payload.mandrin_mm,
+            diametre_max_bobine_mm=payload.diametre_max_bobine_mm,
+            epaisseur_matiere_um=payload.epaisseur_matiere_um,
+            nb_etiq_impose=payload.nb_etiq_impose,
+            machine=machine_params,
+            tarifs=tarifs_obj,
+            parametres=parametres,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Input planificateur invalide : {exc}",
+        ) from exc
+
+    # asdict convertit récursivement le dataclass frozen + ses nested
+    # (list[RepartitionBobine], AlerteImpose) en dict pur — Pydantic v2
+    # valide proprement sans avoir besoin de `from_attributes=True` à
+    # tous les niveaux. Les Decimal restent Decimal (cf. tests).
+    return PlanificateurBobinesResponse.model_validate(asdict(result))
 
 
 @router.post(
