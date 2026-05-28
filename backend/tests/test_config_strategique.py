@@ -21,7 +21,10 @@ def test_get_couts_returns_seeded_template_defaults():
     d = r.json()
     assert d["cout_operateur_eur_h"] == 25.0
     assert d["cout_exploitation_machine_eur_h"] == 50.0
-    assert d["marge_standard_pct"] == 35.0
+    # Phase 2 Lot 2 — le seed démo passe de 35 % (template) à 18 %, valeur
+    # historique ICE alignée sur l'ancien `Entreprise.pct_marge_defaut`.
+    # Le défaut 35 % du modèle reste actif pour les nouveaux tenants.
+    assert d["marge_standard_pct"] == 18.0
 
 
 def test_put_couts_partial_update_preserve_autres_champs():

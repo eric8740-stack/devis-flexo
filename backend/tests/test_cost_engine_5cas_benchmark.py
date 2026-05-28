@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import Base
 from app.models import (
     Complexe,
+    ConfigCouts,
     Entreprise,
     Machine,
     TarifEncre,
@@ -127,11 +128,33 @@ _FIXTURE_COMPLEXE: dict = {
 }
 
 # Tenant démo + marge appliquée (cf. seeds/entreprise.csv).
+# Note : `pct_marge_defaut` est l'ancien champ Entreprise (legacy). Depuis le
+# Lot 2 Phase 2, la marge est lue depuis `ConfigCouts.marge_standard_pct`
+# (cf. _FIXTURE_CONFIG_COUTS ci-dessous). On conserve l'ancien champ pour
+# rester compatible avec d'éventuels chemins legacy mais le moteur ne s'en
+# sert plus.
 _FIXTURE_ENTREPRISE: dict = {
     "id": DEMO_ENTREPRISE_ID,
     "raison_sociale": "Paysant & Fils Étiquettes (fixture)",
     "siret": "12345678901234",
     "pct_marge_defaut": 0.18,
+}
+
+# Phase 2 Lot 2 — marge config-driven : 18.00 % (= 0.18 fraction) pour le
+# tenant démo, alignée sur l'ancien `Entreprise.pct_marge_defaut`. V1a reste
+# 1 449,09 € par construction. Les autres champs de ConfigCouts sont
+# présents (modèle NOT NULL) avec des valeurs neutres template — non lues
+# par le moteur dans ce lot (à brancher dans les lots Phase 2 suivants).
+_FIXTURE_CONFIG_COUTS: dict = {
+    "id": 1,
+    "marge_standard_pct": Decimal("18.00"),
+    "cout_exploitation_machine_eur_h": Decimal("50.00"),
+    "cout_operateur_eur_h": Decimal("25.00"),
+    "cout_energies_eur_h": Decimal("3.50"),
+    "cout_fixe_atelier_eur_mois": Decimal("2500.00"),
+    "cout_fixe_maintenance_eur_mois": Decimal("800.00"),
+    "buffer_rebut_pct": Decimal("2.50"),
+    "buffer_setup_pct": Decimal("1.00"),
 }
 
 
@@ -141,6 +164,7 @@ def _seed_fixture(db: Session) -> None:
     db.flush()
     db.add(Machine(entreprise_id=DEMO_ENTREPRISE_ID, **_FIXTURE_MACHINE))
     db.add(Complexe(entreprise_id=DEMO_ENTREPRISE_ID, **_FIXTURE_COMPLEXE))
+    db.add(ConfigCouts(entreprise_id=DEMO_ENTREPRISE_ID, **_FIXTURE_CONFIG_COUTS))
     for row in _FIXTURE_TARIF_POSTE:
         db.add(TarifPoste(entreprise_id=DEMO_ENTREPRISE_ID, **row))
     for row in _FIXTURE_TARIF_ENCRE:
