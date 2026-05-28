@@ -85,7 +85,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
     expect(screen.queryByText(/Coût total HT/i)).not.toBeInTheDocument();
   });
 
-  it("affiche le détail 7 postes par lot quand payload_output.details_par_lot est présent", () => {
+  it("affiche le rapport de fabrication (récap + 7 postes) quand details_par_lot est présent", () => {
     // LotProductionRead avec payload_visuel=null pour éviter de charger
     // SchemaImplantation (composant SACRED) dans ce test ciblé.
     const lot: LotProductionRead = {
@@ -130,12 +130,26 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
                 prix_vente_ht_eur: "541.12",
                 cout_revient_eur: "400.00",
                 details: {
+                  prix_vente_ht_eur: "541.12",
+                  cout_revient_eur: "400.00",
+                  pct_marge_appliquee: "0.35",
+                  prix_au_mille_eur: "54.11",
                   postes: [
-                    { poste_numero: 1, libelle: "Matière", montant_eur: "120.00", details: {} },
+                    {
+                      poste_numero: 1,
+                      libelle: "Matière",
+                      montant_eur: "120.00",
+                      details: { surface_support_m2: 200 },
+                    },
                     { poste_numero: 2, libelle: "Encres", montant_eur: "80.00", details: {} },
                     { poste_numero: 3, libelle: "Clichés & outillage", montant_eur: "60.00", details: {} },
                     { poste_numero: 4, libelle: "Calage", montant_eur: "40.00", details: {} },
-                    { poste_numero: 5, libelle: "Roulage", montant_eur: "50.00", details: {} },
+                    {
+                      poste_numero: 5,
+                      libelle: "Roulage",
+                      montant_eur: "50.00",
+                      details: { ml_total: 3000 },
+                    },
                     { poste_numero: 6, libelle: "Finitions", montant_eur: "30.00", details: {} },
                     { poste_numero: 7, libelle: "Main-d'œuvre", montant_eur: "20.00", details: {} },
                   ],
@@ -150,21 +164,31 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
       />,
     );
 
-    // Le bloc breakdown du lot 1 est rendu, avec la table 7 postes.
+    // Le bloc rapport de fabrication du lot 1 est rendu.
     expect(
-      screen.getByTestId("postes-breakdown-lot-1"),
+      screen.getByTestId("rapport-fabrication-lot-1"),
     ).toBeInTheDocument();
+    // Section Récapitulatif mise en avant.
+    const recap = screen.getByTestId("recapitulatif-lot");
+    expect(recap).toHaveTextContent("Prix de vente HT");
+    expect(recap).toHaveTextContent("Coût de revient");
+    expect(recap).toHaveTextContent("Marge appliquée");
+    expect(recap).toHaveTextContent(/35,0 %/);
+    // Ratios pied : prix au mille / €/ml / €/m².
+    expect(recap).toHaveTextContent(/Prix au mille/i);
+    expect(recap).toHaveTextContent(/par mètre linéaire/i);
+    expect(recap).toHaveTextContent(/par m² imprimé/i);
+    // Section 7 postes + libellés métier visibles.
     expect(screen.getByText("Détail des 7 postes")).toBeInTheDocument();
-    // Quelques libellés métier visibles.
     expect(screen.getByText("Matière")).toBeInTheDocument();
     expect(screen.getByText("Clichés & outillage")).toBeInTheDocument();
-    // Le total HT inchangé.
+    // Le total HT inchangé (apparaît dans le récap ET dans le hero).
     expect(
-      screen.getByText((content) => content.includes("541,12")),
-    ).toBeInTheDocument();
+      screen.getAllByText((content) => content.includes("541,12")).length,
+    ).toBeGreaterThan(0);
   });
 
-  it("pas de bloc breakdown quand details_par_lot est absent", () => {
+  it("pas de bloc rapport quand details_par_lot est absent", () => {
     const lot: LotProductionRead = {
       id: 11,
       ordre: 1,
@@ -205,9 +229,12 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
     );
 
     expect(
-      screen.queryByTestId("postes-breakdown-lot-1"),
+      screen.queryByTestId("rapport-fabrication-lot-1"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Détail des 7 postes")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recapitulatif-lot"),
+    ).not.toBeInTheDocument();
   });
 
   it("ht_total_eur NULL sans top-level : repli sur payload_output.chiffrage_auto_erreur", () => {

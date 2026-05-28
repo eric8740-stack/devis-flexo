@@ -68,15 +68,45 @@ const fmtEuros = (montant: string | number | null | undefined): string => {
   });
 };
 
-// Brief détail coûts — décomposition 7 postes par lot extraite du dump
-// cost_engine. Le backend stocke `payload_output.details_par_lot[i]` =
-// { ordre, cout_revient_eur, details: { postes: [PosteResult] } } (cf.
-// _chiffrer_devis_multilots). On reconstruit ici un Map<ordre, {postes,
-// coutRevient}> consommé par chaque LotCard pour rendre la PostesCard.
-function extractPostesParLot(
+// Brief rapport de fabrication — décomposition 7 postes + chiffrage par lot
+// extraits du dump cost_engine. Le backend stocke `payload_output.details_par_lot[i]`
+// = { ordre, prix_vente_ht_eur, cout_revient_eur, details: {DevisOutput} }
+// (cf. _chiffrer_devis_multilots). DevisOutput.details_par_lot[i].details
+// contient au top : prix_vente_ht_eur, cout_revient_eur, pct_marge_appliquee,
+// prix_au_mille_eur, postes[7]. Les ratios €/ml et €/m² sont calculés côté UI
+// depuis postes[P5].details.ml_total et postes[P1].details.surface_support_m2.
+export interface LotChiffrage {
+  postes: PosteResult[];
+  coutRevient: number;
+  prixVenteHt: number;
+  pctMarge: number; // 0..1 (0.18 = 18 %)
+  prixAuMille: number;
+  mlTotal: number | null;
+  surfaceM2: number | null;
+}
+
+function toNum(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function toNumOrNull(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+export function extractLotChiffrageParLot(
   payloadOutput: Record<string, unknown>,
-): Map<number, { postes: PosteResult[]; coutRevient: number }> {
-  const out = new Map<number, { postes: PosteResult[]; coutRevient: number }>();
+): Map<number, LotChiffrage> {
+  const out = new Map<number, LotChiffrage>();
   const raw = payloadOutput.details_par_lot;
   if (!Array.isArray(raw)) return out;
   for (const entry of raw) {
@@ -84,18 +114,24 @@ function extractPostesParLot(
     const e = entry as {
       ordre?: unknown;
       cout_revient_eur?: unknown;
-      details?: { postes?: unknown };
+      prix_vente_ht_eur?: unknown;
+      details?: Record<string, unknown>;
     };
     if (typeof e.ordre !== "number") continue;
     const postes = e.details?.postes;
     if (!Array.isArray(postes) || postes.length === 0) continue;
-    const coutRevient =
-      typeof e.cout_revient_eur === "string"
-        ? parseFloat(e.cout_revient_eur) || 0
-        : typeof e.cout_revient_eur === "number"
-          ? e.cout_revient_eur
-          : 0;
-    out.set(e.ordre, { postes: postes as PosteResult[], coutRevient });
+    const postesTyped = postes as PosteResult[];
+    const p1 = postesTyped.find((p) => p.poste_numero === 1);
+    const p5 = postesTyped.find((p) => p.poste_numero === 5);
+    out.set(e.ordre, {
+      postes: postesTyped,
+      coutRevient: toNum(e.cout_revient_eur ?? e.details?.cout_revient_eur),
+      prixVenteHt: toNum(e.prix_vente_ht_eur ?? e.details?.prix_vente_ht_eur),
+      pctMarge: toNum(e.details?.pct_marge_appliquee),
+      prixAuMille: toNum(e.details?.prix_au_mille_eur),
+      mlTotal: toNumOrNull(p5?.details?.ml_total),
+      surfaceM2: toNumOrNull(p1?.details?.surface_support_m2),
+    });
   }
   return out;
 }
@@ -144,7 +180,7 @@ export function DevisResultMultiLots({
       : parseFloat(devis.format_h_mm) || 0;
   const mandrinMm =
     typeof payloadInput.mandrin_mm === "number" ? payloadInput.mandrin_mm : 76;
-  const postesParLot = extractPostesParLot(payloadOutput);
+  const chiffrageParLot = extractLotChiffrageParLot(payloadOutput);
 
   return (
     <div className="space-y-6">
@@ -215,7 +251,7 @@ export function DevisResultMultiLots({
             laizeEtiqMm={laizeEtiqMm}
             devEtiqMm={devEtiqMm}
             mandrinMm={mandrinMm}
-            postesBreakdown={postesParLot.get(lot.ordre) ?? null}
+            chiffrage={chiffrageParLot.get(lot.ordre) ?? null}
           />
         ))}
         {lots.length === 0 && (
@@ -289,20 +325,99 @@ export function DevisResultMultiLots({
   );
 }
 
+// Formatage FR aligné droite : 1234.5 → "1 234,50 €".
+const fmtEurAlign = (n: number, opts?: { decimals?: number }): string => {
+  const decimals = opts?.decimals ?? 2;
+  return `${n.toLocaleString("fr-FR", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })} €`;
+};
+
+function RecapitulatifLot({ chiffrage, quantite }: { chiffrage: LotChiffrage; quantite: number }) {
+  const { prixVenteHt, coutRevient, pctMarge, prixAuMille, mlTotal, surfaceM2 } = chiffrage;
+  const margeEur = prixVenteHt - coutRevient;
+  // Ratios dérivés : prix par mille étiquette, par mètre linéaire, par m² imprimé.
+  // prixAuMille fourni directement par cost_engine (cf. DevisOutput.prix_au_mille_eur).
+  const prixParMl = mlTotal && mlTotal > 0 ? prixVenteHt / mlTotal : null;
+  const prixParM2 = surfaceM2 && surfaceM2 > 0 ? prixVenteHt / surfaceM2 : null;
+  return (
+    <section
+      data-testid="recapitulatif-lot"
+      className="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50/40 via-amber-50/20 to-white p-5 print:border-blue-300 print:bg-white"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        {/* Mis en avant : Prix vente HT */}
+        <div className="space-y-1">
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            Prix de vente HT
+          </p>
+          <p
+            className="bg-gradient-to-r from-blue-700 to-amber-600 bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
+            style={{ fontFamily: "Fraunces, serif" }}
+          >
+            {fmtEurAlign(prixVenteHt)}
+          </p>
+        </div>
+        {/* Secondaire : coût de revient + marge */}
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+          <dt className="text-muted-foreground">Coût de revient</dt>
+          <dd className="text-right font-mono tabular-nums">{fmtEurAlign(coutRevient)}</dd>
+          <dt className="text-muted-foreground">Marge appliquée</dt>
+          <dd className="text-right font-mono tabular-nums">
+            {(pctMarge * 100).toFixed(1).replace(".", ",")} %{" "}
+            <span className="text-muted-foreground">({fmtEurAlign(margeEur)})</span>
+          </dd>
+        </dl>
+      </div>
+      {/* Pied discret : ratios */}
+      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 border-t border-dashed border-blue-100 pt-3 text-xs text-muted-foreground sm:grid-cols-3">
+        <div className="flex items-baseline justify-between sm:block">
+          <dt>Prix au mille étiq.</dt>
+          <dd className="font-mono tabular-nums text-foreground sm:mt-0.5">
+            {fmtEurAlign(prixAuMille)} / 1 000
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between sm:block">
+          <dt>€ par mètre linéaire</dt>
+          <dd className="font-mono tabular-nums text-foreground sm:mt-0.5">
+            {prixParMl !== null
+              ? `${fmtEurAlign(prixParMl, { decimals: 4 })} / m`
+              : "—"}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between sm:block">
+          <dt>€ par m² imprimé</dt>
+          <dd className="font-mono tabular-nums text-foreground sm:mt-0.5">
+            {prixParM2 !== null
+              ? `${fmtEurAlign(prixParM2, { decimals: 4 })} / m²`
+              : "—"}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+        Sur {quantite.toLocaleString("fr-FR")} étiquettes
+        {mlTotal ? ` · ${mlTotal.toLocaleString("fr-FR")} ml` : ""}
+        {surfaceM2 ? ` · ${surfaceM2.toLocaleString("fr-FR")} m²` : ""}
+      </p>
+    </section>
+  );
+}
+
 function LotCard({
   lot,
   colorClass,
   laizeEtiqMm,
   devEtiqMm,
   mandrinMm,
-  postesBreakdown,
+  chiffrage,
 }: {
   lot: LotProductionRead;
   colorClass: string;
   laizeEtiqMm: number;
   devEtiqMm: number;
   mandrinMm: number;
-  postesBreakdown: { postes: PosteResult[]; coutRevient: number } | null;
+  chiffrage: LotChiffrage | null;
 }) {
   const posesTotal = lot.nb_poses_dev * lot.nb_poses_laize;
   // Brief #33 commit 5 — payload_visuel = snapshot OptimisationConfigOut
@@ -388,15 +503,23 @@ function LotCard({
         </div>
       )}
 
-      {postesBreakdown && (
+      {chiffrage && (
         <div
-          data-testid={`postes-breakdown-lot-${lot.ordre}`}
+          data-testid={`rapport-fabrication-lot-${lot.ordre}`}
           className="border-t border-border px-4 pb-4 pt-4 sm:px-6"
         >
-          <PostesCard
-            postes={postesBreakdown.postes}
-            coutRevient={postesBreakdown.coutRevient}
-          />
+          <header className="mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Rapport de fabrication
+            </h3>
+          </header>
+          <div className="space-y-4">
+            <RecapitulatifLot chiffrage={chiffrage} quantite={lot.quantite} />
+            <PostesCard
+              postes={chiffrage.postes}
+              coutRevient={chiffrage.coutRevient}
+            />
+          </div>
         </div>
       )}
     </Card>

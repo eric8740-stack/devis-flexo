@@ -50,6 +50,18 @@ const fmtMm = (s: string, decimals = 2) =>
 // Sous-composants partagés (mode manuel + matching)
 // ---------------------------------------------------------------------------
 
+// Palette stable par numéro de poste (color-codage dyslexie-friendly).
+// Tailwind static lookup pour ne pas casser le purge.
+const POSTE_PALETTE: Record<number, { dot: string; bar: string }> = {
+  1: { dot: "bg-amber-500", bar: "bg-amber-400" }, // Matière
+  2: { dot: "bg-rose-500", bar: "bg-rose-400" }, // Encres
+  3: { dot: "bg-violet-500", bar: "bg-violet-400" }, // Outillage/Clichés
+  4: { dot: "bg-sky-500", bar: "bg-sky-400" }, // Calage
+  5: { dot: "bg-emerald-500", bar: "bg-emerald-400" }, // Roulage
+  6: { dot: "bg-teal-500", bar: "bg-teal-400" }, // Finitions
+  7: { dot: "bg-slate-500", bar: "bg-slate-400" }, // Main-d'œuvre
+};
+
 export function PostesCard({
   postes,
   coutRevient,
@@ -58,7 +70,7 @@ export function PostesCard({
   coutRevient: number;
 }) {
   return (
-    <Card>
+    <Card className="print:border-slate-300 print:shadow-none">
       <CardHeader>
         <CardTitle>Détail des 7 postes</CardTitle>
       </CardHeader>
@@ -66,27 +78,48 @@ export function PostesCard({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">#</TableHead>
+              <TableHead className="w-14">#</TableHead>
               <TableHead>Libellé</TableHead>
               <TableHead className="text-right">Montant</TableHead>
-              <TableHead className="text-right w-20">% revient</TableHead>
+              <TableHead className="text-right w-40">% revient</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {postes.map((p) => {
               const montant = parseFloat(p.montant_eur);
               const pct = coutRevient > 0 ? (montant / coutRevient) * 100 : 0;
+              const palette = POSTE_PALETTE[p.poste_numero];
+              const pctBarre = Math.min(100, Math.max(0, pct));
               return (
                 <TableRow key={p.poste_numero}>
                   <TableCell className="font-medium">
-                    P{p.poste_numero}
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-block h-2.5 w-2.5 rounded-full ${palette?.dot ?? "bg-slate-400"}`}
+                        aria-hidden
+                      />
+                      P{p.poste_numero}
+                    </span>
                   </TableCell>
                   <TableCell>{p.libelle}</TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right font-mono tabular-nums">
                     {fmtEur(p.montant_eur)}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {pct.toFixed(1)} %
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <div
+                        className="h-1.5 w-16 overflow-hidden rounded bg-muted print:bg-slate-100"
+                        aria-hidden
+                      >
+                        <div
+                          className={`h-full ${palette?.bar ?? "bg-slate-400"}`}
+                          style={{ width: `${pctBarre}%` }}
+                        />
+                      </div>
+                      <span className="font-mono tabular-nums text-muted-foreground">
+                        {pct.toFixed(1).replace(".", ",")} %
+                      </span>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
