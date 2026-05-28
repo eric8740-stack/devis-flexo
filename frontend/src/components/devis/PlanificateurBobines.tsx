@@ -311,7 +311,7 @@ export function PlanificateurBobines({
           </p>
           <p className="mt-1 text-xs text-red-700">
             Revenir au client avec ces 2 chiffres avant chiffrage. Pour retenir
-            ce scénario malgré l'impossibilité, renseigne un motif et clique
+            ce scénario malgré l&apos;impossibilité, renseigne un motif et clique
             « Forcer malgré tout » sur la carte IMPOSE.
           </p>
         </div>
