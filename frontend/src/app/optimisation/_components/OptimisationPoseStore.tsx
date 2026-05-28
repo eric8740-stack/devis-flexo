@@ -126,6 +126,13 @@ interface OptimisationPoseContextValue {
   nbCouleursImpression: number;
   setNbCouleursImpression: (n: number) => void;
 
+  // Avertissements non bloquants remontés par /api/optimisation/calculer
+  // (ex. forçage intervalle laize hors recommandation moteur, motif manquant).
+  // Affichés en bandeau orange à l'étape candidats. Réinitialisé à chaque
+  // nouvelle soumission saisie (goSaisie / nouveau goCandidats).
+  optimWarnings: string[];
+  setOptimWarnings: (warnings: string[]) => void;
+
   candidats: OptimisationConfigOut[];
   selection: SelectionLot[];
   toggleSelection: (candidat: OptimisationConfigOut) => void;
@@ -296,6 +303,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
   // n'est pas passé par la saisie (ex. édition hydratée), on n'invente pas de
   // couleurs ; le backend retombe sur 0 encre, cohérent avec l'ancien comportement.
   const [nbCouleursImpression, setNbCouleursImpression] = useState<number>(0);
+  const [optimWarnings, setOptimWarnings] = useState<string[]>([]);
 
   // Brief #33 — étape 4 state.
   const [optionsCodes, setOptionsCodes] = useState<string[]>([]);
@@ -369,6 +377,9 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
   const goSaisie = useCallback(() => {
     setEtape("saisie");
     setSelection([]);
+    // Re-saisie : on repart d'une page candidats sans warnings pendants
+    // (la prochaine soumission posera la nouvelle liste, ou vide).
+    setOptimWarnings([]);
   }, []);
   const goCandidats = useCallback(
     (
@@ -567,6 +578,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       mandrinMm,
       nbCouleursImpression,
       setNbCouleursImpression,
+      optimWarnings,
+      setOptimWarnings,
       candidats,
       selection,
       toggleSelection,
@@ -609,6 +622,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       mandrinMm,
       nbCouleursImpression,
       setNbCouleursImpression,
+      optimWarnings,
+      setOptimWarnings,
       candidats,
       selection,
       toggleSelection,

@@ -1229,6 +1229,10 @@ export interface OptimisationCalculerResponse {
   message_filtrage: string | null;
   intervalle_dev_min_applique_mm: number;
   message_contrainte_client: string | null;
+  // Avertissements non bloquants (souveraineté commerciale) : ex. forçage
+  // intervalle laize hors recommandation moteur, motif manquant. Affichés
+  // en bandeau orange UI. Défaut [] côté backend si rien à signaler.
+  warnings?: string[];
 }
 
 export const postOptimisationCalculer = (

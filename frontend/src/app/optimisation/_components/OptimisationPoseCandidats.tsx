@@ -31,6 +31,7 @@ export function OptimisationPoseCandidats() {
     quantiteTotale,
     goSaisie,
     goDetail,
+    optimWarnings,
   } = useOptimisationPose();
 
   const [scoreFiltre, setScoreFiltre] = useState(true);
@@ -84,6 +85,27 @@ export function OptimisationPoseCandidats() {
           ← Modifier la saisie
         </Button>
       </header>
+
+      {/* Bandeau warnings non bloquants (souveraineté commerciale) —
+          ex. forçage intervalle laize hors recommandation moteur ou
+          motif manquant. Orange = avertissement visible mais le calcul
+          a bien tourné, l'opérateur peut continuer. */}
+      {optimWarnings.length > 0 && (
+        <div
+          role="alert"
+          data-testid="optim-warnings-bandeau"
+          className="rounded-md border-l-4 border-l-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <p className="mb-1 font-semibold">
+            ⚠ Avertissement{optimWarnings.length > 1 ? "s" : ""} forçage
+          </p>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {optimWarnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Filtres */}
       <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">

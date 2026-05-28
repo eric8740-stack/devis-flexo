@@ -359,12 +359,42 @@ def post_calculer(
             )
         )
 
+    # === Warnings non bloquants (souveraineté commerciale) =================
+    # Le forçage intervalle laize ne lève plus 422 même hors recommandation
+    # moteur / sans motif : on calcule quand même et on remonte un message
+    # explicite à afficher en bandeau orange UI. Les vrais blocages (valeur
+    # 0 / négative / > 50) restent rejetés en 422 par Pydantic (gt=0, le=50).
+    warnings: list[str] = []
+    if payload.intervalle_laize_force_mm is not None:
+        force_val = float(payload.intervalle_laize_force_mm)
+        # Recommandation moteur top-1 si dispo : indicatif, varie par config.
+        if configurations_out:
+            reco_top1 = configurations_out[0].intervalle_laize_recommande_mm
+            warnings.append(
+                f"Intervalle laize forcé à {force_val:g} mm — le moteur "
+                f"aurait recommandé {reco_top1:g} mm pour la configuration "
+                f"top 1."
+            )
+        else:
+            warnings.append(
+                f"Intervalle laize forcé à {force_val:g} mm — valeur hors "
+                f"recommandation moteur."
+            )
+        motif_norm = (payload.motif_forcage_intervalle_laize or "").strip()
+        if len(motif_norm) < 10:
+            warnings.append(
+                "Motif de forçage intervalle laize manquant ou trop court "
+                "(< 10 caractères) — pense à le renseigner pour la "
+                "traçabilité commerciale."
+            )
+
     return OptimisationCalculerResponse(
         configurations=configurations_out,
         nb_candidats=out.nb_candidats,
         message_filtrage=out.message_filtrage,
         intervalle_dev_min_applique_mm=out.intervalle_dev_min_applique_mm,
         message_contrainte_client=out.message_contrainte_client,
+        warnings=warnings,
     )
 
 

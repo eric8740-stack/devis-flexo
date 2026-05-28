@@ -138,11 +138,20 @@ class OptimisationCalculerRequest(BaseModel):
 
     # Intervalle laize forçable (souveraineté). NULL = moteur libre de
     # choisir selon ses règles (palier suggérable / max 5 mm).
+    # Eric (souveraineté commerciale) doit pouvoir forcer une valeur en
+    # dehors de la plage moteur sans être bloqué par un 422 : le motif
+    # n'est plus exigé au niveau schéma ; un motif manquant/court
+    # remonte désormais dans `warnings[]` (bandeau orange UI), pas en
+    # erreur. La borne stricte `gt=0` reste un vrai garde-fou (valeur
+    # techniquement impossible : 0 ou négatif → 422 Pydantic).
     intervalle_laize_force_mm: float | None = Field(
         None,
-        ge=0,
+        gt=0,
         le=50,
-        description="Force la valeur d'intervalle laize. Motif obligatoire.",
+        description=(
+            "Force la valeur d'intervalle laize. Si motif absent/court "
+            "(< 10 car.), un warning non bloquant est renvoyé."
+        ),
     )
     motif_forcage_intervalle_laize: str | None = Field(None, max_length=500)
 
@@ -164,13 +173,9 @@ class OptimisationCalculerRequest(BaseModel):
 
     @model_validator(mode="after")
     def _valider_forcages_et_lacets(self) -> "OptimisationCalculerRequest":
-        # Forçage intervalle laize → motif obligatoire ≥ 10 chars
-        if self.intervalle_laize_force_mm is not None:
-            motif = (self.motif_forcage_intervalle_laize or "").strip()
-            if len(motif) < 10:
-                raise ValueError(
-                    "Forçage intervalle laize : motif obligatoire (10 caractères min)."
-                )
+        # Forçage intervalle laize : le motif obligatoire (≥10 car.) a été
+        # rétrogradé en warning non bloquant — voir router (warnings[]).
+        # Garde-fou Pydantic conservé : gt=0 / le=50 sur la valeur elle-même.
 
         # Forçage intervalle dev → motif obligatoire ≥ 10 chars
         if self.intervalle_dev_force_mm is not None:
@@ -304,6 +309,10 @@ class OptimisationCalculerResponse(BaseModel):
     message_filtrage: str | None = None
     intervalle_dev_min_applique_mm: float
     message_contrainte_client: str | None = None
+    # Avertissements non bloquants (souveraineté commerciale) : ex.
+    # forçage intervalle laize hors recommandation moteur, motif manquant.
+    # Affichés en bandeau orange UI, n'empêchent pas le calcul.
+    warnings: list[str] = Field(default_factory=list)
     debug: dict[str, Any] | None = None
 
 
