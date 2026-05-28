@@ -35,6 +35,7 @@ import {
   useOptimisationPose,
 } from "./_components/OptimisationPoseStore";
 import { OptimisationRebobinage } from "./_components/OptimisationRebobinage";
+import { sensAutoForTypeEntree } from "./_components/sens-auto-vierge";
 
 /**
  * Simulateur d'optimisation FlexoCompare — PR #9.1 BAT MVP.
@@ -200,8 +201,12 @@ function OptimisationPageInner() {
 }
 
 function OptimisationPoseSaisie() {
-  const { goCandidats, setNbCouleursImpression, setOptimWarnings } =
-    useOptimisationPose();
+  const {
+    goCandidats,
+    setNbCouleursImpression,
+    setOptimWarnings,
+    briefClient,
+  } = useOptimisationPose();
   const { toast } = useToast();
 
   const [options, setOptions] = useState<OptionDisponible[] | null>(null);
@@ -234,6 +239,16 @@ function OptimisationPoseSaisie() {
   const [mandrin, setMandrin] = useState<number>(76);
   const [sensEnroulement, setSensEnroulement] = useState<SensEnroulement>("SE1");
   const [epaisseurMatiere, setEpaisseurMatiere] = useState<string>("150");
+
+  // Auto-sélection SE0/SE9 quand le client envoie un rouleau vierge. La face
+  // (Ext/Int) est dérivée du sens courant : SE1-4 → SE0, SE5-8 → SE9. Au
+  // retour vers un type imprimable, SE0→SE1 et SE9→SE5. Pas de verrouillage :
+  // l'utilisateur peut toujours cliquer manuellement un autre sens après.
+  useEffect(() => {
+    setSensEnroulement((prev) =>
+      sensAutoForTypeEntree(prev, briefClient.type_entree_fichier),
+    );
+  }, [briefClient.type_entree_fichier]);
 
   // Souveraineté commerciale + matière
   const [matieres, setMatieres] = useState<MatiereOut[] | null>(null);
