@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ChangementsSection } from "./_components/ChangementsSection";
+import { ChargesSection } from "./_components/ChargesSection";
 import { CoutsSection } from "./_components/CoutsSection";
 import {
   ComplexesSection,
@@ -21,9 +22,11 @@ import {
 } from "./_components/ReadonlySections";
 import { RoulageSection } from "./_components/RoulageSection";
 
-// Onglet Stratégique (Brief stratégique v2) — config par entreprise, 6 sections.
+// Onglet Stratégique (Brief stratégique v2) — config par entreprise, 7 sections.
 // Sections 1-4 : tables existantes, lecture seule + lien de gestion (anti-doublon).
 // Sections 5-6 : config Phase 1 (Roulage, Coûts/Marges, Changements) → CRUD.
+// Section 7 (Charges) : CRUD inline des frais fixes mensuels (la page
+//   /charges-mensuelles standalone reste disponible).
 const SECTIONS: {
   id: string;
   label: string;
@@ -81,6 +84,14 @@ const SECTIONS: {
         </div>
       </div>
     ),
+  },
+  {
+    id: "charges",
+    label: "Charges",
+    title: "Charges",
+    description:
+      "Frais fixes mensuels (loyer, salaires, énergie, …). La page /charges-mensuelles standalone reste accessible.",
+    node: <ChargesSection />,
   },
 ];
 
