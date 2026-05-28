@@ -25,6 +25,7 @@ import { PostesCard } from "@/components/DevisResult";
 import { SchemaImplantation } from "@/components/SchemaImplantation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlanificateurBobines } from "./PlanificateurBobines";
 
 import type {
   DevisDetail,
@@ -263,6 +264,13 @@ export function DevisResultMultiLots({
             devEtiqMm={devEtiqMm}
             mandrinMm={mandrinMm}
             chiffrage={chiffrageParLot[idx] ?? null}
+            diametreMaxBobineMm={devis.diametre_max_bobine_mm ?? null}
+            devisId={devis.id}
+            initialPlanBobines={
+              (payloadInput.plan_bobines as
+                | import("@/lib/api").PlanBobinesSelectionIn
+                | undefined) ?? null
+            }
           />
         ))}
         {lots.length === 0 && (
@@ -422,6 +430,9 @@ function LotCard({
   devEtiqMm,
   mandrinMm,
   chiffrage,
+  diametreMaxBobineMm,
+  devisId,
+  initialPlanBobines,
 }: {
   lot: LotProductionRead;
   colorClass: string;
@@ -429,6 +440,9 @@ function LotCard({
   devEtiqMm: number;
   mandrinMm: number;
   chiffrage: LotChiffrage | null;
+  diametreMaxBobineMm: number | null;
+  devisId: number;
+  initialPlanBobines: import("@/lib/api").PlanBobinesSelectionIn | null;
 }) {
   const posesTotal = lot.nb_poses_dev * lot.nb_poses_laize;
   // Brief #33 commit 5 — payload_visuel = snapshot OptimisationConfigOut
@@ -529,6 +543,26 @@ function LotCard({
             <PostesCard
               postes={chiffrage.postes}
               coutRevient={chiffrage.coutRevient}
+            />
+            {/* Plan de bobines (zone rebobinage, interne uniquement). Affiche
+                un gate visible si Dmax client ou épaisseur matière manquent
+                — on n'invente jamais ces valeurs. */}
+            <PlanificateurBobines
+              devisId={devisId}
+              quantiteCommandee={lot.quantite}
+              nLaize={lot.nb_poses_laize}
+              pasMm={
+                devEtiqMm +
+                (lot.intervalle_dev_reel_mm
+                  ? parseFloat(lot.intervalle_dev_reel_mm)
+                  : 0)
+              }
+              mandrinMm={mandrinMm}
+              diametreMaxBobineMm={diametreMaxBobineMm}
+              epaisseurMatiereUm={
+                candidatVisuel?.epaisseur_appliquee_um ?? null
+              }
+              initialSelection={initialPlanBobines}
             />
           </div>
         </div>
