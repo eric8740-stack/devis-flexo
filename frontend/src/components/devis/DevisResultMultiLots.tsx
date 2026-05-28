@@ -103,27 +103,36 @@ function toNumOrNull(v: unknown): number | null {
   return null;
 }
 
+/**
+ * Retourne le chiffrage par lot dans l'ORDRE de `payload_output.details_par_lot`,
+ * sous forme de tableau positional. Les entrées sans `postes` valides sont
+ * remplacées par `null` (rapport masqué pour ce lot uniquement).
+ *
+ * Pourquoi pas un Map<ordre, …> ? Conventions d'indexation divergentes —
+ * `LotProduction.ordre` est 1-indexé côté DB (create_devis `enumerate(start=1)`)
+ * mais `CoutLot.ordre` est 0-indexé côté agrégateur cost_engine. Un lookup
+ * `Map.get(lot.ordre)` ratait systématiquement. Les deux côtés étant construits
+ * dans le même ordre depuis `data.lots`, l'alignement positional est robuste
+ * (et neutre vis-à-vis d'une future renumérotation des ordres).
+ */
 export function extractLotChiffrageParLot(
   payloadOutput: Record<string, unknown>,
-): Map<number, LotChiffrage> {
-  const out = new Map<number, LotChiffrage>();
+): (LotChiffrage | null)[] {
   const raw = payloadOutput.details_par_lot;
-  if (!Array.isArray(raw)) return out;
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    if (!entry || typeof entry !== "object") return null;
     const e = entry as {
-      ordre?: unknown;
       cout_revient_eur?: unknown;
       prix_vente_ht_eur?: unknown;
       details?: Record<string, unknown>;
     };
-    if (typeof e.ordre !== "number") continue;
     const postes = e.details?.postes;
-    if (!Array.isArray(postes) || postes.length === 0) continue;
+    if (!Array.isArray(postes) || postes.length === 0) return null;
     const postesTyped = postes as PosteResult[];
     const p1 = postesTyped.find((p) => p.poste_numero === 1);
     const p5 = postesTyped.find((p) => p.poste_numero === 5);
-    out.set(e.ordre, {
+    return {
       postes: postesTyped,
       coutRevient: toNum(e.cout_revient_eur ?? e.details?.cout_revient_eur),
       prixVenteHt: toNum(e.prix_vente_ht_eur ?? e.details?.prix_vente_ht_eur),
@@ -131,9 +140,8 @@ export function extractLotChiffrageParLot(
       prixAuMille: toNum(e.details?.prix_au_mille_eur),
       mlTotal: toNumOrNull(p5?.details?.ml_total),
       surfaceM2: toNumOrNull(p1?.details?.surface_support_m2),
-    });
-  }
-  return out;
+    } satisfies LotChiffrage;
+  });
 }
 
 export function DevisResultMultiLots({
@@ -181,6 +189,9 @@ export function DevisResultMultiLots({
   const mandrinMm =
     typeof payloadInput.mandrin_mm === "number" ? payloadInput.mandrin_mm : 76;
   const chiffrageParLot = extractLotChiffrageParLot(payloadOutput);
+  // Backend et frontend itèrent `data.lots` dans le même ordre — l'alignement
+  // positional (idx) est robuste, contrairement à un lookup par `ordre`
+  // (off-by-one entre LotProduction 1-indexé et CoutLot 0-indexé).
 
   return (
     <div className="space-y-6">
@@ -251,7 +262,7 @@ export function DevisResultMultiLots({
             laizeEtiqMm={laizeEtiqMm}
             devEtiqMm={devEtiqMm}
             mandrinMm={mandrinMm}
-            chiffrage={chiffrageParLot.get(lot.ordre) ?? null}
+            chiffrage={chiffrageParLot[idx] ?? null}
           />
         ))}
         {lots.length === 0 && (
