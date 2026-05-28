@@ -152,7 +152,7 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
     """
     # Imports locaux pour éviter import circulaire au chargement du module.
     from app.models import Matiere
-    from app.services.rotation_se import (
+    from app.services.sens_metadata import (
         get_libelle_officiel,
         get_rotation_vue_a,
         get_rotation_vue_c,
@@ -178,8 +178,9 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
         setattr(lot, "cylindre_nb_dents", None)
     mat = db.get(Matiere, lot.matiere_id)
     setattr(lot, "matiere_libelle", mat.libelle if mat else None)
-    # Rotation_se : single source of truth, mappings verrouillés.
-    sens = lot.sens_enroulement if 1 <= lot.sens_enroulement <= 8 else 1
+    # Métadonnées sens : façade sens_metadata (1-8 délégués à rotation_se
+    # verrouillé, 0/9 = bobines vierges sans impression gérées localement).
+    sens = lot.sens_enroulement if 0 <= lot.sens_enroulement <= 9 else 1
     setattr(lot, "sens_enroulement_libelle", get_libelle_officiel(sens))
     setattr(lot, "rotation_vue_a_deg", get_rotation_vue_a(sens))
     setattr(lot, "rotation_vue_c_deg", get_rotation_vue_c(sens))

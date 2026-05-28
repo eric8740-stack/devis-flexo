@@ -23,7 +23,7 @@ class ClientBase(BaseModel):
     # prennent False (cohérent avec `default=False` côté ORM + server_default).
     diametre_mandrin_mm: int | None = None
     diametre_max_bobine_mm: int | None = None
-    sens_enroulement: int | None = Field(default=None, ge=1, le=8)
+    sens_enroulement: int | None = Field(default=None, ge=0, le=9)
     nb_etiq_par_bobine_fixe: int | None = Field(default=None, ge=1)
     marquage_bobine_requis: bool = False
     marquage_bobine_format: str | None = None
@@ -66,7 +66,7 @@ class ClientUpdate(BaseModel):
     # `exclude_unset=True` côté CRUD).
     diametre_mandrin_mm: int | None = None
     diametre_max_bobine_mm: int | None = None
-    sens_enroulement: int | None = Field(default=None, ge=1, le=8)
+    sens_enroulement: int | None = Field(default=None, ge=0, le=9)
     nb_etiq_par_bobine_fixe: int | None = Field(default=None, ge=1)
     marquage_bobine_requis: bool | None = None
     marquage_bobine_format: str | None = None

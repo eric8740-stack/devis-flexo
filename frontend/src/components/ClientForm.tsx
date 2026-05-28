@@ -310,13 +310,13 @@ export function ClientForm({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="sens_enroulement">
-                Sens d&apos;enroulement (1..8)
+                Sens d&apos;enroulement (0..9)
               </Label>
               <Input
                 id="sens_enroulement"
                 type="number"
-                min={1}
-                max={8}
+                min={0}
+                max={9}
                 step={1}
                 value={data.sens_enroulement ?? ""}
                 onChange={(e) =>
@@ -324,8 +324,9 @@ export function ClientForm({
                 }
               />
               <p className="text-xs text-muted-foreground">
-                Convention SE1-SE8 (stockage brut). La validation 1..8 est
-                appliquée côté serveur.
+                Convention SE0-SE9 (stockage brut). SE1-SE8 = sens imprimés ;
+                SE0/SE9 = bobines livrées vierges, sans impression. La
+                validation 0..9 est appliquée côté serveur.
               </p>
             </div>
           </div>

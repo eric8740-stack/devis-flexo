@@ -80,12 +80,16 @@ class OptimisationCalculerRequest(BaseModel):
         ge=10,
         le=500,
     )
-    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8"] = Field(
+    sens_enroulement: Literal[
+        "SE0", "SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8", "SE9"
+    ] = Field(
         "SE1",
         description=(
-            "Sens enroulement bobine fille (convention métier flexo 8 sens) : "
+            "Sens enroulement bobine fille (convention métier flexo 10 sens) : "
             "SE1-4 face extérieur (0°/180°/270°/90°), "
-            "SE5-8 face intérieur (0°/180°/270°/90°)."
+            "SE5-8 face intérieur (0°/180°/270°/90°), "
+            "SE0/SE9 = bobines livrées vierges (sans impression, "
+            "respectivement face extérieur / face intérieur)."
         ),
     )
     epaisseur_matiere_um: float = Field(
@@ -243,9 +247,12 @@ class OptimisationConfigOut(BaseModel):
     rendement_pct: float
     diametre_bobine_mm: int
     laize_liner_mm: float
-    sens_enroulement: Literal["SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8"]
+    sens_enroulement: Literal[
+        "SE0", "SE1", "SE2", "SE3", "SE4", "SE5", "SE6", "SE7", "SE8", "SE9"
+    ]
     # Libellé officiel ICE à afficher dans le BAT et le formulaire.
-    # Ex: "0° Extérieur droite avant". Calculé backend (rotation_se.py).
+    # Ex: "0° Extérieur droite avant" (1-8) ou "0° Extérieur · sans impression"
+    # (0/9). Calculé backend (façade sens_metadata → rotation_se pour 1-8).
     sens_enroulement_libelle: str
     # Rotations à appliquer au A en VUE A (planche presse, sens machine) et
     # VUE C (bobine fille chez le client). Mapping officiel verrouillé
