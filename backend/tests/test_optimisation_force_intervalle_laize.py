@@ -121,8 +121,9 @@ def test_force_intervalle_laize_negatif_ou_zero_reste_422(cleanup_and_onboard):
 
 
 def test_force_intervalle_laize_applique_correctement(cleanup_and_onboard):
-    """Forçage à 7 mm avec motif valide → expose recommande + applique
-    dans la réponse + propage le flag de traçabilité."""
+    """Forçage à 7 mm avec motif valide : le moteur consomme désormais la
+    valeur (bypass du plafond 5 mm) — `intervalle_laize_reel_mm` (Δ laize
+    affiché côté UI) reflète la valeur forcée, pas le ratio géométrique."""
     _onboard_tenant_minimal()
     payload = _payload_base() | {
         "intervalle_laize_force_mm": 7.0,
@@ -133,8 +134,14 @@ def test_force_intervalle_laize_applique_correctement(cleanup_and_onboard):
     top1 = r.json()["configurations"][0]
     assert top1["forcage_intervalle_laize"] is True
     assert top1["intervalle_laize_applique_mm"] == 7.0
-    # recommandé != applique (le moteur aurait choisi autre chose)
-    assert top1["intervalle_laize_recommande_mm"] != 7.0
+    # Δ laize côté UI = intervalle_laize_reel_mm (sortie moteur).
+    # Doit refléter la valeur forcée (sinon, le bug Eric : « calcule 5 mm
+    # alors que j'ai demandé 7 mm » réapparaît).
+    assert top1["intervalle_laize_reel_mm"] == 7.0
+    # Le moteur ayant consommé la valeur, recommande == applique : on ne
+    # peut plus distinguer « ce que le moteur aurait fait sans forçage »
+    # sans double-pass — c'est un compromis assumé du fix.
+    assert top1["intervalle_laize_recommande_mm"] == 7.0
     assert "rebobinage" in top1["motif_forcage_intervalle_laize"]
 
 
