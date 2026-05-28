@@ -14,6 +14,8 @@ from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Devis, User
 from app.schemas.devis_persist import (
+    CoherenceBobineRequest,
+    CoherenceBobineResponse,
     DevisCreate,
     DevisDetail,
     DevisListResponse,
@@ -21,6 +23,7 @@ from app.schemas.devis_persist import (
     PreviewCoutsIn,
     PreviewCoutsOut,
 )
+from app.services.coherence_bobine import evaluer_coherence_bobine
 from app.services.pdf_service import generate_devis_pdf
 from app.services.scope_service import get_or_404_scoped
 
@@ -180,4 +183,41 @@ def download_devis_pdf(
         headers={
             "Content-Disposition": f'attachment; filename="{devis.numero}.pdf"'
         },
+    )
+
+
+@router.post(
+    "/coherence-bobine",
+    response_model=CoherenceBobineResponse,
+    status_code=status.HTTP_200_OK,
+)
+def check_coherence_bobine(
+    payload: CoherenceBobineRequest,
+    _: User = Depends(get_current_user),
+) -> CoherenceBobineResponse:
+    """Vérifie la cohérence Ø ext / nb étiquettes (saisie brief client).
+
+    Endpoint stateless (zéro écriture DB) consommé en live par le
+    formulaire — UX : alerte non bloquante sous les champs. Toutes les
+    formules délèguent à `bat_calculs` (SSOT mm cohérente avec la VUE B
+    et le 242 mm) ; aucune duplication frontend.
+    """
+    result = evaluer_coherence_bobine(
+        diametre_ext_saisi_mm=payload.diametre_ext_saisi_mm,
+        nb_etiq_saisi=payload.nb_etiq_saisi,
+        mandrin_mm=payload.mandrin_mm,
+        pas_mm=payload.pas_mm,
+        epaisseur_catalogue_um=payload.epaisseur_catalogue_um,
+        diametre_max_client_mm=payload.diametre_max_client_mm,
+        tolerance_pct=payload.tolerance_pct,
+    )
+    return CoherenceBobineResponse(
+        severity=result.severity,
+        message=result.message,
+        nb_max=result.nb_max,
+        diametre_requis_mm=result.diametre_requis_mm,
+        fit_severity=result.fit_severity,
+        fit_message=result.fit_message,
+        epaisseur_appliquee_um=result.epaisseur_appliquee_um,
+        epaisseur_source=result.epaisseur_source,
     )

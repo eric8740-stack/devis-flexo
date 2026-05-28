@@ -140,6 +140,68 @@ def calcul_diametre_bobine(
     return round(r_bobine_mm * 2)
 
 
+def calcul_nb_max_etiq_pour_diametre(
+    diametre_ext_mm: float,
+    mandrin_mm: int,
+    epaisseur_matiere_um: float,
+    pas_mm: float,
+) -> int:
+    """Inverse de `calcul_diametre_bobine` côté nb étiquettes.
+
+    Combien d'étiquettes (espacées de `pas_mm = dev_etiq + ecart_dev`)
+    tiennent dans un rouleau de diamètre extérieur donné, sur mandrin
+    donné, avec matière d'épaisseur donnée ? Démonstration :
+
+        R²      = R_m² + (épaisseur_mm × ml_m × 1000) / π     (forward)
+        ml_m    = nb_etiq × pas_mm / 1000
+        R²      = R_m² + (épaisseur_mm × nb_etiq × pas_mm) / π
+        D²      = D_m² + 4 × épaisseur_mm × nb_etiq × pas_mm / π
+        nb_max  = π × (D² − D_m²) / (4 × épaisseur_mm × pas_mm)
+
+    Mêmes hypothèses que le forward (couches jointives, air négligé).
+    Garde-fous : retours à 0 si entrée incohérente (D_ext ≤ D_mandrin,
+    épaisseur ou pas ≤ 0). Cohérent avec le 242 mm de la VUE B.
+    """
+    if mandrin_mm <= 0 or epaisseur_matiere_um <= 0 or pas_mm <= 0:
+        return 0
+    if diametre_ext_mm <= mandrin_mm:
+        return 0
+    epaisseur_mm = epaisseur_matiere_um / 1000
+    # D² − D_m² peut être très grand : on garde tout en float, conversion
+    # entière (floor) à la fin pour rester conservateur (« nb max physique »).
+    nb_max = (
+        math.pi
+        * (diametre_ext_mm**2 - mandrin_mm**2)
+        / (4 * epaisseur_mm * pas_mm)
+    )
+    return int(nb_max)
+
+
+def calcul_diametre_requis_pour_nb_etiq(
+    nb_etiq: int,
+    mandrin_mm: int,
+    epaisseur_matiere_um: float,
+    pas_mm: float,
+) -> int:
+    """Inverse de `calcul_diametre_bobine` côté diamètre.
+
+    Diamètre extérieur (mm) requis pour enrouler `nb_etiq` étiquettes
+    de pas `pas_mm` sur mandrin donné, en matière d'épaisseur donnée.
+
+        D_req = sqrt(D_m² + 4 × épaisseur_mm × nb_etiq × pas_mm / π)
+
+    Mêmes hypothèses + mêmes garde-fous que `calcul_nb_max_etiq_*` ;
+    arrondi à l'entier comme `calcul_diametre_bobine`.
+    """
+    if mandrin_mm <= 0 or epaisseur_matiere_um <= 0 or pas_mm <= 0:
+        return 0
+    if nb_etiq <= 0:
+        return mandrin_mm
+    epaisseur_mm = epaisseur_matiere_um / 1000
+    d_carre = mandrin_mm**2 + 4 * epaisseur_mm * nb_etiq * pas_mm / math.pi
+    return round(math.sqrt(d_carre))
+
+
 def calcul_laize_liner(laize_etiq_mm: float, marge_liner_mm: float) -> float:
     """Laize du liner siliconé (chez le client, vue bobine fille).
 

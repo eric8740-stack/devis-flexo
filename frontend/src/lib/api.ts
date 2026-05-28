@@ -1235,6 +1235,37 @@ export interface OptimisationCalculerResponse {
   warnings?: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Cohérence Ø ext ↔ nb étiquettes/bobine (saisie devis, alerte non bloquante)
+// ---------------------------------------------------------------------------
+
+export interface CoherenceBobineRequest {
+  diametre_ext_saisi_mm: number;
+  nb_etiq_saisi: number;
+  mandrin_mm: number;
+  pas_mm: number;
+  epaisseur_catalogue_um?: number | null;
+  diametre_max_client_mm?: number | null;
+  tolerance_pct?: number;
+}
+
+export interface CoherenceBobineResponse {
+  severity: "ok" | "info" | "warning";
+  message: string;
+  nb_max: number;
+  diametre_requis_mm: number;
+  fit_severity: "ok" | "warning" | null;
+  fit_message: string | null;
+  epaisseur_appliquee_um: number;
+  epaisseur_source: "catalogue" | "fallback";
+}
+
+export const checkCoherenceBobine = (data: CoherenceBobineRequest) =>
+  apiFetch<CoherenceBobineResponse>("/api/devis/coherence-bobine", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 export const postOptimisationCalculer = (
   data: OptimisationCalculerRequest
 ) =>
