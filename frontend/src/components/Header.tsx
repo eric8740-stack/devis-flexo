@@ -27,7 +27,8 @@ const NAV_ITEMS = [
   { href: "/machines", label: "Machines" },
   { href: "/operations-finition", label: "Op. finition" },
   { href: "/partenaires-st", label: "Partenaires ST" },
-  { href: "/charges-mensuelles", label: "Charges" },
+  // "Charges" retiré de la nav — désormais géré dans Stratégique (7e onglet,
+  // CRUD inline). La route /charges-mensuelles reste accessible par URL directe.
   { href: "/complexes", label: "Complexes" },
   // Sprint 12 mini-fix UX-1 : "Catalogue" trop générique, créait confusion
   // avec "Outils de découpe" (sidebar Paramètres). On précise le concept
