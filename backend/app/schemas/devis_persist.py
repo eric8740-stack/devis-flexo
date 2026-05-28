@@ -372,3 +372,90 @@ class CoherenceBobineResponse(BaseModel):
     fit_message: str | None
     epaisseur_appliquee_um: float
     epaisseur_source: Literal["catalogue", "fallback"]
+
+
+# ---------------------------------------------------------------------------
+# Planificateur de bobines — 3 (ou 4) scénarios de découpe, rapport de fab
+# ---------------------------------------------------------------------------
+
+class TarifsMandrinsIn(BaseModel):
+    """Tarifs mandrins (pré-coupé vs découpe interne) — input request."""
+
+    model_config = ConfigDict(extra="forbid")
+    prix_pre_coupe_par_mandrin_eur: Decimal = Field(ge=0)
+    cout_decoupe_interne_par_mandrin_eur: Decimal = Field(ge=0)
+    cout_fixe_decoupe_interne_eur: Decimal = Field(ge=0)
+
+
+class PlanificateurBobinesRequest(BaseModel):
+    """Inputs du planificateur de bobines.
+
+    Stateless : aucune persistance. Cost rebobinage calculé en lecture
+    seule via les helpers existants si machine + tarifs fournis ; sinon
+    on retourne les scénarios sans coût (l'UI affiche juste géométrie +
+    surprod).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Inputs géométriques — Q post-optim et n_laize lu du lot.
+    quantite_commandee: int = Field(ge=1)
+    n_laize: int = Field(ge=1)
+    pas_mm: float = Field(gt=0, le=1000)
+    mandrin_mm: int = Field(gt=0, le=500)
+    diametre_max_bobine_mm: float = Field(gt=0, le=2000)
+    epaisseur_matiere_um: float = Field(gt=0, le=10000)
+    # Scénario imposé — anti-fléau. Si None, pas de carte IMPOSE/alerte.
+    nb_etiq_impose: int | None = Field(default=None, ge=1)
+    # Cost rebobinage (LECTURE SEULE moteur). Optionnels — sans, pas de coût.
+    machine_rebobineuse_id: int | None = None
+    tarifs_mandrins: TarifsMandrinsIn | None = None
+
+
+class RepartitionBobineOut(BaseModel):
+    """Un groupe de bobines identiques dans un scénario."""
+
+    model_config = ConfigDict(extra="forbid")
+    nb_etiq_par_bobine: int
+    nb_bobines_par_piste: int
+    diametre_mm: int
+
+
+class ScenarioBobinesOut(BaseModel):
+    """Un scénario complet, prêt pour l'UI."""
+
+    model_config = ConfigDict(extra="forbid")
+    cle: Literal["A", "B", "C_inf", "C_sup", "IMPOSE"]
+    titre: str
+    repartition: list[RepartitionBobineOut]
+    nb_bobines_par_piste: int
+    nb_bobines_total: int
+    quantite_totale_etiq: int
+    surprod_etiq: int
+    q_ajustee: int | None
+    # Coût rebobinage (None si machine/tarifs absents — lecture seule).
+    cout_total_eur: Decimal | None
+    cout_machine_eur: Decimal | None
+    cout_mandrins_eur: Decimal | None
+    mode_mandrins_optimal: Literal["pre_coupe", "decoupe_interne"] | None
+
+
+class AlerteImposeOut(BaseModel):
+    """Anti-fléau : diagnostics chiffrés quand client impose un nb/bobine."""
+
+    model_config = ConfigDict(extra="forbid")
+    nb_impose: int
+    nb_realisable_max: int
+    diametre_requis_mm: int
+    physiquement_impossible: bool
+
+
+class PlanificateurBobinesResponse(BaseModel):
+    """Sortie complète planificateur : scénarios + reco + diagnostics."""
+
+    model_config = ConfigDict(extra="forbid")
+    scenarios: list[ScenarioBobinesOut]
+    recommande_cle: Literal["A", "B", "C_inf", "C_sup"] | None
+    nb_max_par_bobine: int
+    pas_mm: float
+    alerte_impose: AlerteImposeOut | None
