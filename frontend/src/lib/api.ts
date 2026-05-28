@@ -1257,7 +1257,7 @@ export interface CoherenceBobineResponse {
   fit_severity: "ok" | "warning" | null;
   fit_message: string | null;
   epaisseur_appliquee_um: number;
-  epaisseur_source: "catalogue" | "fallback";
+  epaisseur_source: "matiere" | "fallback";
 }
 
 export const checkCoherenceBobine = (data: CoherenceBobineRequest) =>

@@ -186,7 +186,7 @@ def test_endpoint_coherent_renvoie_200_severity_ok():
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["severity"] == "ok"
-    assert data["epaisseur_source"] == "catalogue"
+    assert data["epaisseur_source"] == "matiere"
 
 
 def test_endpoint_warning_diametre_trop_petit():

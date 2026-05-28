@@ -371,7 +371,7 @@ class CoherenceBobineResponse(BaseModel):
     fit_severity: Literal["ok", "warning"] | None
     fit_message: str | None
     epaisseur_appliquee_um: float
-    epaisseur_source: Literal["catalogue", "fallback"]
+    epaisseur_source: Literal["matiere", "fallback"]
 
 
 # ---------------------------------------------------------------------------

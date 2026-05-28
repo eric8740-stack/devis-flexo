@@ -39,7 +39,7 @@ EPAISSEUR_FALLBACK_UM: float = 150.0
 
 
 Severity = Literal["ok", "info", "warning"]
-EpaisseurSource = Literal["catalogue", "fallback"]
+EpaisseurSource = Literal["matiere", "fallback"]
 
 
 @dataclass(frozen=True)
@@ -64,9 +64,15 @@ class CoherenceBobineResult:
 def _resoudre_epaisseur(
     epaisseur_catalogue_um: float | None,
 ) -> tuple[float, EpaisseurSource]:
-    """Fallback : si le catalogue ne porte pas d'épaisseur, défaut 150 µm."""
+    """Source de l'épaisseur appliquée.
+
+    - `matiere` : valeur fournie par le frontend (matière catalogue + saisie
+      opérateur éditable). C'est la situation nominale.
+    - `fallback` : aucune valeur fournie → défaut 150 µm. UX affiche la note
+      « catalogue absent » uniquement dans ce cas.
+    """
     if epaisseur_catalogue_um is not None and epaisseur_catalogue_um > 0:
-        return float(epaisseur_catalogue_um), "catalogue"
+        return float(epaisseur_catalogue_um), "matiere"
     return EPAISSEUR_FALLBACK_UM, "fallback"
 
 
