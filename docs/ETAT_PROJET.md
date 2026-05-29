@@ -1,102 +1,87 @@
-# État du projet devis-flexo
+# État du projet
 
-> Vue d'ensemble vivante. Mise à jour à chaque PR Phase 2.
-> **Dernière mise à jour** : 2026-05-29 (Phase 2 Lot 4a).
-
----
-
-## Architecture cible (rappel brief stratégique v2)
-
-Faire de **devis-flexo** un SaaS configurable par entreprise :
-- chaque imprimerie pose ses propres tarifs/coûts via l'onglet **Stratégique** ;
-- le `cost_engine` lit ses paramètres depuis ces configs (scope strict `entreprise_id`) ;
-- les données ICE deviennent des **fixtures de test** (benchmark protégé), pas du seed prod.
-
-`ConfigCouts` / `ConfigChangements` / `ConfigRoulage` = source unique par tenant.
-`Machine` = override optionnel (reporté à un lot ultérieur).
-`TarifPoste` = legacy, **dépréciation progressive** (colonnes gardées en base, plus consommées).
-
-## Garde-fous (invariants sacrés)
-
-1. **Benchmark `test_cost_engine_5cas_benchmark.py` = 0 failed.** V1a 1 449,09 € HT et autres sacrés EXACT préservés à chaque lot.
-2. **Multi-tenant strict.** Toute lecture cost_engine scopée `entreprise_id` (helper `get_config_couts_or_raise` ; fix incident du bug `select(Entreprise).limit(1)` au Lot 2).
-3. **`rotation_se.py` / 8 sens** : hors périmètre Phase 2.
-4. **Pas de migration manuelle.** Alembic uniquement.
+> **Source de vérité** : ce fichier est généré à partir de `git log`,
+> `gh pr list`, et l'exécution réelle des tests. Aucune référence
+> personnelle / employeur — uniquement des faits techniques et la
+> convention métier flexographique verrouillée.
 
 ---
 
-## Phase 1 — Socle Stratégique (livré, mergé)
+## En-tête
 
-3 tables config + API CRUD `/api/strategique` + UI 7 sections.
-
-| Table | Type | PR |
-|---|---|---|
-| `ConfigCouts` | singleton/tenant | #53 |
-| `ConfigChangements` | singleton/tenant | #53 |
-| `ConfigRoulage` | collection (par format) | #53 |
-
-UI Stratégique frontend (7 sections : Machines / Complexes / Encre / Outils / Roulage / Coûts & Marges / Charges) : #54 + #55 + #57.
+- **Date** : 2026-05-29
+- **Branche active** : `main` (après merge #74 docs)
+- **Sprint en cours** : Phase 2 — refactor `cost_engine` config-driven (lots successifs sur `ConfigCouts` scopée tenant)
 
 ---
 
-## Phase 2 — Branchement cost_engine (en cours)
+## PRs récemment mergées (10 dernières)
 
-### Lot 1 — Benchmark en fixture pure (PR #67, mergé)
-Le benchmark V1a/V8 quitte la DB live (`SessionLocal()` + seed CSV) pour une **session SQLite in-memory** peuplée par INSERTs Python en dur (snapshot ICE figé). Préalable bloquant : toute édition Stratégique du démo ne casse plus les sacrés.
+- #74 — docs: ajout/maj `ETAT_PROJET.md` (source de vérité état d'avancement)
+- #73 — feat(devis): planificateur imposer nb de bobines + gestion du surplus (facture/stock/réduire)
+- #72 — refactor(cost_engine): P7 et P5 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 3)
+- #71 — fix(devis): cohérence et planificateur utilisent l'épaisseur de la matière saisie
+- #70 — refactor(cost_engine): marge depuis `ConfigCouts` scopée tenant + fix isolation multi-tenant (Phase 2 / Lot 2)
+- #69 — fix(build): exclure les tests du `next build` + correctif `PlanificateurBobines.test.tsx`
+- #68 — feat(devis): persistance plan bobines + Q ajustée + forçage motif tracé
+- #67 — test(cost_engine): benchmark V1a/V8 sur fixture figée (Phase 2 / Lot 1)
+- #66 — feat(devis): planificateur de bobines (3 scénarios) sur le rapport de fabrication
+- #64 — feat(devis): alerte cohérence Ø extérieur ↔ nb étiquettes / bobine (saisie)
 
-### Lot 2 — Marge config-driven + fix multi-tenant (PR #70, mergé)
-- `_resolve_pct_marge` lit `ConfigCouts.marge_standard_pct / 100` (scope `entreprise_id`).
-- Fix incident du bug `select(Entreprise).limit(1)` (cross-tenant).
-- Fallback `PCT_MARGE_FALLBACK = 0.18` + `Entreprise.pct_marge_defaut` → supprimés.
-- Seed démo aligné 18 % (legacy ICE).
+## PRs ouvertes
 
-### Lot 3 — P5 Roulage + P7 MO config-driven (PR #72, mergé)
-- P5 → `ConfigCouts.cout_exploitation_machine_eur_h` (au lieu de `TarifPoste.roulage_prix_horaire`).
-- P7 → `ConfigCouts.cout_operateur_eur_h` (au lieu de `TarifPoste.mo_prix_horaire`).
-- Helper `get_config_couts_or_raise` factorise la requête scopée (DRY orchestrator/P5/P7).
-- Seed démo aligné 375 / 70 (legacy ICE).
-- Override `Machine.cout_horaire_eur` (par machine pour P5) → reporté à un lot ultérieur.
-
-### Lot 4a — P1/P3/P4/P6 config-driven (cette PR)
-
-**7 tarifs migrés** depuis `TarifPoste` vers `ConfigCouts` (scope tenant) :
-
-| Poste | Champ ConfigCouts (Lot 4a) | Unité | Démo (legacy ICE) | Template (nouveaux tenants) |
-|---|---|---|---|---|
-| P1 | `marge_confort_roulage_mm` | mm | 10 | 10 |
-| P3a | `cliche_prix_couleur_eur` | €/couleur | 45.00 | 30.00 |
-| P3b | `outil_base_eur` | € | 200.00 | 150.00 |
-| P3b | `outil_par_trace_eur` | €/trace | 50.00 | 40.00 |
-| P3b | `surcout_forme_speciale_facteur` ⚠️ renommé | × multiplicateur | 1.40 | 1.30 |
-| P4 | `calage_forfait_eur` | €/devis | 225.00 | 180.00 |
-| P6 | `finitions_prix_m2_eur` | €/m² | 0.1250 | 0.1000 |
-
-⚠️ **Renommage `_pct` → `_facteur`** sur le surcoût forme spéciale : la valeur SQL est un **multiplicateur direct** (1.40 = ×1.40), pas un pourcentage — la formule reste `cout_outil × facteur`, mais le nom reflète la sémantique réelle.
-
-Migration `x8m1h2f6c4e9` :
-- Schéma additif (7 colonnes, NOT NULL, `server_default` = template).
-- Data step : `UPDATE config_couts SET … WHERE entreprise_id=1` aux valeurs ICE legacy → V1a 1 449,09 € préservé.
-- Réversible (`drop_column` ×7).
-
-`TarifPoste` correspondants (`marge_confort_roulage_mm`, `cliche_prix_couleur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_pct`, `calage_forfait`, `finitions_prix_m2`) : **conservés en base, plus consommés**. Dépréciation progressive comme Lots 2/3.
-
-**Fallback `matiere_prix_kg_defaut`** : conservé sur `TarifPoste` (Q1 audit → option c). Code mort en pratique depuis Lot 1 complexe enrichi (tous les complexes ont prix_m2_eur + grammage). Migration séparée si nécessaire.
+- #75 — refactor(cost_engine): P1/P3/P4/P6 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 4a)
+- #65 — docs(audit): cartographie config-driven vs hardcode `cost_engine` (Phase 2)
+- #54 — feat(strategique-ui): onglet Stratégique — page 6 sections
 
 ---
 
-## Pas encore branchés (lots à venir)
+## Baseline tests
 
-- **Override `Machine.cout_horaire_eur`** (P5/P7 par machine) — décision archi : Machine = override optionnel sur ConfigCouts.
-- **UI Stratégique pour les 7 nouveaux champs Lot 4a** (Lot 4b).
-- **TarifPoste cleanup** (suppression colonnes dépréciées) — quand toutes les configs sont stables en prod.
-- **`matiere_prix_kg_defaut`** (fallback P1) — à arbitrer (migrer vers ConfigCouts ou supprimer le fallback).
+- **pytest** : `1073 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-29 (branche `feat/phase2-lot4a-config-driven`, durée ≈ 338 s). CI GitHub Actions workflow `backend` à confirmer après merge.
+- **vitest** : `22 fichiers / 167 tests passed` — exécution locale 2026-05-29 ≈ 08:45 (durée ≈ 8 s, `npx vitest run`).
+- **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69, gate brief : preview Vercel vert avant merge).
 
 ---
 
-## Tests & qualité
+## En prod (modules livrés récents)
 
-- **Benchmark sacré** (`test_cost_engine_5cas_benchmark.py`) : 11/11, fixture in-memory pure.
-- **Tests Phase 2 dédiés** : `test_orchestrator_marge_phase2.py` (Lot 2, 5 tests), `test_p5_p7_config_phase2.py` (Lot 3, 7 tests), `test_p1_p3_p4_p6_config_phase2.py` (Lot 4a, 11 tests).
-- **Baseline backend complète** : voir CI sur main (≥ 1 061 après Lot 3, croissante avec les lots).
+- Rapport de fabrication par lot sur `/devis/[id]` — récap chiffrage + 7 postes color-codés (#62, #63 robustesse off-by-one).
+- Alerte cohérence Ø ext ↔ nb étiq/bobine à la saisie d'un devis — non bloquante, source de vérité backend (`bat_calculs`, SSOT mm) (#64, ε matière saisie en #71).
+- Planificateur de bobines (rapport de fabrication, par lot) — 3 scénarios géométriques (A/B/C) + scénario IMPOSE anti-fléau (#66), persistance JSONB + Q ajustée + forçage motif tracé (#68).
+- Planificateur — modes IMPOSE étendus : `nb_etiq` (historique), `nb_bobines`, `packaging` (N × X), mutuellement exclusifs. Gestion du surplus avec 3 décisions Q : facturer / stock / réduire (#73).
+- Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), **Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72)**.
+- Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
-Pipeline CI : Python 3.13.5 pinné, WeasyPrint 65.1 vérifié, `alembic upgrade head` + `pytest -v` + Next build/lint + vitest + Railway preview.
+## En cours / à venir
+
+- **Phase 2 / Lot 4a** (PR #75 ouverte) — postes P1 / P3 / P4 / P6 du `cost_engine` depuis `ConfigCouts` scopée tenant. 7 champs migrés (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`). Migration `x8m1h2f6c4e9` additive réversible. `server_default` = template neutre (≈ 20–33 % sous ICE) → nouveau tenant n'hérite pas du démo. `UPDATE` scopé `entreprise_id=1` aligne le démo aux valeurs ICE → sacrés V1a 1 449,09 € EXACT préservés. `TarifPoste` correspondants conservés en base, plus consommés (dépréciation progressive comme Lots 2/3).
+- **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a.
+- **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées quand toutes les configs sont stables en prod.
+- **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).
+- **Phase 2 / `matiere_prix_kg_defaut`** (à arbitrer) — fallback P1 conservé sur `TarifPoste` (Q1 audit Lot 4a) ; migrer vers `ConfigCouts` ou supprimer le fallback.
+- **Audit Phase 2** (PR #65 ouverte) — cartographie config-driven vs hardcode.
+- **Onglet Stratégique** (PR #54 ouverte) — UI 6 sections.
+
+---
+
+## Sacred invariants (rappel + pointeurs)
+
+Ne JAMAIS modifier sans validation explicite. Tests verrouillés en CI.
+
+- **Convention métier flexographique — 8 sens d'enroulement** : `SE1`-`SE8` mappés à des rotations VUE A / VUE C figées. Fichier : [`backend/app/services/rotation_se.py`](../backend/app/services/rotation_se.py). Les sens vierges `SE0` / `SE9` (sans impression) sont délégués à une **façade** [`sens_metadata.py`](../backend/app/services/sens_metadata.py) qui laisse `rotation_se` intact ; tests historiques `tests/test_rotation_se.py` continuent d'asserter que 0/9 lèvent `ValueError` côté `rotation_se`.
+- **Benchmark `cost_engine` V1a / V8** : valeurs figées par expertise métier terrain, asserties strictement en CI sur fixture découplée DB. Fichier : [`backend/tests/test_cost_engine_benchmark.py`](../backend/tests/test_cost_engine_benchmark.py) — `EXPECTED_TOTAL_HT = Decimal("1449.09")` · `EXPECTED_COUT_REVIENT = Decimal("1228.04")`.
+- **Benchmark `cost_engine` 5 cas (V1a / V1b / V2 / V3 / V4)** : verrou multi-cas Phase 2 sur fixture in-memory pure (snapshot ICE figé en INSERT Python). Fichier : [`backend/tests/test_cost_engine_5cas_benchmark.py`](../backend/tests/test_cost_engine_5cas_benchmark.py) — 11 tests, V1a 1 449,09 € HT / V1b 1 921,09 € / V2 743,01 € / V3 8 437,47 € / V4 1 697,17 €.
+- **Multi-tenant strict** : toute lecture `cost_engine` scopée `entreprise_id` via `get_config_couts_or_raise(db, entreprise_id)`. Pas de fallback silencieux (`CostEngineError` si la `ConfigCouts` du tenant manque). Fichier : [`backend/app/services/cost_engine/_config_reader.py`](../backend/app/services/cost_engine/_config_reader.py).
+- **Axes UI BAT / Schéma Implantation** : `X = laize` (cote horizontale au-dessus du cadre), `Y = dev` (cote verticale). TOUJOURS, indépendamment du sens d'enroulement. Fichier : [`frontend/src/components/SchemaImplantation.tsx`](../frontend/src/components/SchemaImplantation.tsx) (commentaires lignes ≈ 533 et 614+).
+- **SSOT géométrie mm** : `calcul_diametre_bobine` (et inverses `calcul_nb_max_etiq_pour_diametre` / `calcul_diametre_requis_pour_nb_etiq`) — toute formule diamètre ↔ nb étiq passe par ce module. Fichier : [`backend/app/services/optimisation/bat_calculs.py`](../backend/app/services/optimisation/bat_calculs.py). Zéro duplication côté frontend (les surfaces UI cohérence/planificateur appellent les endpoints qui réutilisent ces helpers).
+- **`cost_engine` lecture seule depuis les modules avals** : planificateur de bobines, fix planificateur surplus, rebobinage — tous alimentent une `Q` ou un `nb_bobines`, lisent le coût, ne modifient pas la logique métier `cost_engine`.
+
+---
+
+## Procédures (rappel court)
+
+- Avant tout push impactant le frontend : `cd frontend && rm -rf .next && npx tsc --noEmit && npx next lint && npm run build && npx vitest run`. Vercel preview est plus strict que le `npm run build` local non-nettoyé (cf. hotfix #69).
+- Aucun merge tant que le preview Vercel et Railway de la PR ne sont pas verts (gate brief explicite, leçon #68).
+- Les fichiers `*.test.{ts,tsx}` et `*.spec.{ts,tsx}` sont exclus du `next build` (tsconfig + eslintrc). Les ajouter au scope vitest, jamais au scope build prod.
+- **Phase 2 cost_engine — pattern de lot** : pour chaque migration de tarif depuis `TarifPoste` vers `ConfigCouts`, (1) migration alembic additive avec `server_default` = template neutre + `UPDATE` scopé `entreprise_id=1` aux valeurs ICE legacy ; (2) seed démo aligné aux mêmes ICE ; (3) `default=` modèle = template neutre (nouveaux tenants via get-or-create) ; (4) `TarifPoste` champs correspondants conservés en base, plus consommés ; (5) fixture benchmark mise à jour aux ICE → V1a 1 449,09 € EXACT préservé.
