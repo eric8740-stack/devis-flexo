@@ -1283,7 +1283,10 @@ export interface PlanificateurBobinesRequest {
   mandrin_mm: number;
   diametre_max_bobine_mm: number;
   epaisseur_matiere_um: number;
+  // 3 modes IMPOSE mutuellement exclusifs (validé côté schema, 422 sinon).
   nb_etiq_impose?: number | null;
+  nb_bobines_impose?: number | null;
+  packaging_nb_etiq_par_bobine?: number | null;
   machine_rebobineuse_id?: number | null;
   tarifs_mandrins?: TarifsMandrinsIn | null;
 }
@@ -1301,7 +1304,7 @@ export interface ScenarioBobinesOut {
   titre: string;
   repartition: RepartitionBobineOut[];
   nb_bobines_par_piste: number;
-  nb_bobines_total: number;
+  nb_bobines_total: number; // production réelle (multiple de n_laize)
   quantite_totale_etiq: number;
   surprod_etiq: number;
   q_ajustee: number | null;
@@ -1309,6 +1312,14 @@ export interface ScenarioBobinesOut {
   cout_machine_eur: string | null;
   cout_mandrins_eur: string | null;
   mode_mandrins_optimal: "pre_coupe" | "decoupe_interne" | null;
+  // Extension modes IMPOSE nb_bobines + packaging — renseignés seulement
+  // pour ces modes. Sinon defaults (None / 0).
+  nb_bobines_demande?: number | null;
+  surplus_bobines?: number;
+  surplus_etiq?: number;
+  q_si_facture?: number | null;
+  q_si_stock?: number | null;
+  q_si_reduire?: number | null;
 }
 
 export interface AlerteImposeOut {
@@ -1338,6 +1349,9 @@ export type PolitiqueReliquat =
   | "equilibrees"
   | "tomber_juste";
 
+export type ImposeType = "nb_etiq" | "nb_bobines" | "packaging";
+export type DecisionSurplus = "facture" | "stock" | "reduire";
+
 export interface PlanBobinesSelectionIn {
   scenario: ScenarioBobinesKey;
   nb_bobine: number;
@@ -1346,6 +1360,11 @@ export interface PlanBobinesSelectionIn {
   q_ajustee?: number | null;
   force_diametre?: boolean | null;
   motif_forcage?: string | null;
+  // Extension modes IMPOSE nb_bobines + packaging.
+  impose_type?: ImposeType | null;
+  nb_bobines_demande?: number | null;
+  surplus_bobines?: number | null;
+  decision_surplus?: DecisionSurplus | null;
 }
 
 export type PlanBobinesSelectionOut = PlanBobinesSelectionIn;
