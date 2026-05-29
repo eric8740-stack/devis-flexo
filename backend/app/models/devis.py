@@ -42,6 +42,16 @@ class Devis(Base):
     __tablename__ = "devis"
     __table_args__ = (
         Index("ix_devis_date_creation_desc", "date_creation"),
+        # Fix 409 (migration y9n2i3g7d5f0) — UNIQUE scope tenant :
+        # un meme numero peut exister chez deux entreprises differentes.
+        # L'index sert aussi a `generate_next_numero` qui filtre par
+        # (entreprise_id, numero LIKE 'DEV-YYYY-%').
+        Index(
+            "ix_devis_entreprise_id_numero",
+            "entreprise_id",
+            "numero",
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -55,9 +65,9 @@ class Devis(Base):
 
     # Format DEV-YYYY-NNNN (ex: DEV-2026-0001), séquence annuelle générée
     # par numero_devis_service.generate_next_numero (Lot 4b).
-    numero: Mapped[str] = mapped_column(
-        String(20), nullable=False, unique=True, index=True
-    )
+    # L'unicite est portee par `ix_devis_entreprise_id_numero` (composite,
+    # scope tenant) declaree dans __table_args__ -- pas par cette colonne.
+    numero: Mapped[str] = mapped_column(String(20), nullable=False)
 
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

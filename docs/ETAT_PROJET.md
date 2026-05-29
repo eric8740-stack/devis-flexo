@@ -17,6 +17,7 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- #75 — refactor(cost_engine): P1/P3/P4/P6 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 4a)
 - #74 — docs: ajout/maj `ETAT_PROJET.md` (source de vérité état d'avancement)
 - #73 — feat(devis): planificateur imposer nb de bobines + gestion du surplus (facture/stock/réduire)
 - #72 — refactor(cost_engine): P7 et P5 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 3)
@@ -26,11 +27,10 @@
 - #68 — feat(devis): persistance plan bobines + Q ajustée + forçage motif tracé
 - #67 — test(cost_engine): benchmark V1a/V8 sur fixture figée (Phase 2 / Lot 1)
 - #66 — feat(devis): planificateur de bobines (3 scénarios) sur le rapport de fabrication
-- #64 — feat(devis): alerte cohérence Ø extérieur ↔ nb étiquettes / bobine (saisie)
 
 ## PRs ouvertes
 
-- #75 — refactor(cost_engine): P1/P3/P4/P6 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 4a)
+- #77 — fix(devis): UNIQUE(devis.numero) scopée tenant + MAX+1 + retry loop (résout 409 sur hard-delete)
 - #65 — docs(audit): cartographie config-driven vs hardcode `cost_engine` (Phase 2)
 - #54 — feat(strategique-ui): onglet Stratégique — page 6 sections
 
@@ -38,7 +38,7 @@
 
 ## Baseline tests
 
-- **pytest** : `1073 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-29 (branche `feat/phase2-lot4a-config-driven`, durée ≈ 338 s). CI GitHub Actions workflow `backend` à confirmer après merge.
+- **pytest** : `1077 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-29 (branche `fix/devis-numero-collision-409`, durée ≈ 389 s). +4 tests dédiés au fix 409 (`test_devis_numero_fix_409.py`). CI GitHub Actions workflow `backend` à confirmer après merge.
 - **vitest** : `22 fichiers / 167 tests passed` — exécution locale 2026-05-29 ≈ 08:45 (durée ≈ 8 s, `npx vitest run`).
 - **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69, gate brief : preview Vercel vert avant merge).
 
@@ -50,12 +50,12 @@
 - Alerte cohérence Ø ext ↔ nb étiq/bobine à la saisie d'un devis — non bloquante, source de vérité backend (`bat_calculs`, SSOT mm) (#64, ε matière saisie en #71).
 - Planificateur de bobines (rapport de fabrication, par lot) — 3 scénarios géométriques (A/B/C) + scénario IMPOSE anti-fléau (#66), persistance JSONB + Q ajustée + forçage motif tracé (#68).
 - Planificateur — modes IMPOSE étendus : `nb_etiq` (historique), `nb_bobines`, `packaging` (N × X), mutuellement exclusifs. Gestion du surplus avec 3 décisions Q : facturer / stock / réduire (#73).
-- Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), **Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72)**.
+- Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72), **Lot 4a 7 tarifs P1/P3/P4/P6 scopés tenant via `ConfigCouts` (#75)**.
 - Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
 ## En cours / à venir
 
-- **Phase 2 / Lot 4a** (PR #75 ouverte) — postes P1 / P3 / P4 / P6 du `cost_engine` depuis `ConfigCouts` scopée tenant. 7 champs migrés (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`). Migration `x8m1h2f6c4e9` additive réversible. `server_default` = template neutre (≈ 20–33 % sous ICE) → nouveau tenant n'hérite pas du démo. `UPDATE` scopé `entreprise_id=1` aligne le démo aux valeurs ICE → sacrés V1a 1 449,09 € EXACT préservés. `TarifPoste` correspondants conservés en base, plus consommés (dépréciation progressive comme Lots 2/3).
+- **Fix 409 numéro devis** (PR #77 ouverte) — UNIQUE(devis.numero) passée scope tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` passé en `MAX(seq)+1` scope tenant + retry loop borné (5) sur collision résiduelle dans `crud.create_devis` / `duplicate_devis`. Résout la régression : `count(*)+1` rebouchait les trous laissés par hard-delete → UniqueViolation → 409. Migration `y9n2i3g7d5f0` additive avec pre-check anti-doublons (RuntimeError si la base contient déjà des `(entreprise_id, numero)` en double). Réversible. 4 tests dédiés (`test_devis_numero_fix_409.py`). Script de repro déterministe : `backend/scripts/repro_409_devis_numero.py`.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a.
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).
