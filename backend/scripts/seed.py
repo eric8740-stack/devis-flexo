@@ -397,6 +397,20 @@ def seed_config_strategique(session: Session) -> int:
             marge_standard_pct=18.0,
             buffer_rebut_pct=2.5,
             buffer_setup_pct=1.0,
+            # Phase 2 Lot 4a — alignement legacy : 7 valeurs ICE historiques
+            # auparavant rangées comme rows sur `tarif_poste` (sprint 9 v2)
+            # consommées par P1/P3/P4/P6. Les valeurs ci-dessous préservent
+            # V1a 1 449,09 € par construction (benchmark figé). Les défauts
+            # template du modèle (50/300/60/1.5/250/0.15) restent appliqués
+            # aux NOUVEAUX tenants (onboarding) — d'où l'override explicite
+            # ici sur le seed démo.
+            marge_confort_roulage_mm=10,
+            cliche_prix_couleur_eur=45.0,
+            outil_base_eur=200.0,
+            outil_par_trace_eur=50.0,
+            surcout_forme_speciale_facteur=1.4,
+            calage_forfait_eur=225.0,
+            finitions_prix_m2_eur=0.125,
         )
     )
     session.add(

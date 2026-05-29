@@ -1,6 +1,7 @@
 """Tests HTTP du router /api/tarif-poste (Sprint 9 v2 Lot 9c)."""
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -140,6 +141,16 @@ def test_post_reset_invalid_poste_returns_422():
     assert response.status_code == 422
 
 
+@pytest.mark.skip(
+    reason=(
+        "Phase 2 / Lot 4a — `outil_base_eur` n'est plus consommé depuis "
+        "`tarif_poste` par P3 : le moteur lit désormais `ConfigCouts."
+        "outil_base_eur` (scope tenant). Le PUT sur tarif_poste reste "
+        "valide pour la traçabilité legacy mais n'affecte plus le "
+        "chiffrage. La cohérence config → moteur est désormais testée "
+        "via `test_lot4a_config_couts_per_tenant.py` (multi-tenant)."
+    )
+)
 def test_put_tarif_then_engine_reflects_new_value_v1b():
     """Garde-fou métier : modifier outil_base_eur via API change V1b nouvel outil.
 

@@ -62,6 +62,38 @@ class ConfigCouts(Base):
         Numeric(5, 2), nullable=False, default=Decimal("1.00")
     )
 
+    # Phase 2 / Lot 4a — 7 constantes auparavant rangées comme rows sur
+    # `tarif_poste` (sprint 9 v2) consommées par P1/P3/P4/P6 ; désormais
+    # scopées tenant. server_default = baseline marché agrégée (les
+    # valeurs spécifiques au tenant démo sont posées par la migration
+    # x8m1h2j6f0g4 UPDATE entreprise_id=1, pas par ce default). Pattern
+    # nullable=False + Decimal default identique au socle Phase 1.
+    marge_confort_roulage_mm: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=10  # P1 — marge bobine fille (mm)
+    )
+    cliche_prix_couleur_eur: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), nullable=False, default=Decimal("50.00")  # P3a
+    )
+    outil_base_eur: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("300.00")  # P3b base
+    )
+    outil_par_trace_eur: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), nullable=False, default=Decimal("60.00")  # P3b par trace
+    )
+    # NB : `_facteur` (multiplicateur ∈ [1.0, 2.0], typique 1.40 démo), pas
+    # `_pct`. Le nom historique `surcout_forme_speciale_pct` côté tarif_poste
+    # était trompeur : la valeur n'est PAS un pourcentage (× 1.40), c'est un
+    # multiplicateur. Le rename Lot 4a corrige la sémantique.
+    surcout_forme_speciale_facteur: Mapped[Decimal] = mapped_column(
+        Numeric(4, 2), nullable=False, default=Decimal("1.50")  # P3b multiplicateur
+    )
+    calage_forfait_eur: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("250.00")  # P4
+    )
+    finitions_prix_m2_eur: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), nullable=False, default=Decimal("0.1500")  # P6
+    )
+
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

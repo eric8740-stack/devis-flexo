@@ -5,6 +5,7 @@ inversement (reset → restauration des valeurs exact).
 """
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -32,6 +33,15 @@ def _calculer(payload: dict) -> Decimal:
     return Decimal(str(r.json()["prix_vente_ht_eur"]))
 
 
+@pytest.mark.skip(
+    reason=(
+        "Phase 2 / Lot 4a — `outil_base_eur` n'est plus consommé depuis "
+        "`tarif_poste` par P3 : le moteur lit désormais `ConfigCouts."
+        "outil_base_eur`. Le flux PUT tarif_poste → moteur est cassé "
+        "par design (refactor config-driven). L'équivalent post-Lot 4a "
+        "est testé via `test_lot4a_config_couts_per_tenant.py`."
+    )
+)
 def test_e2e_modif_outil_base_then_reset_returns_v1b_to_1921():
     """Flux critique S9 v2 : modifier tarif → recalculer → reset → V1b EXACT.
 

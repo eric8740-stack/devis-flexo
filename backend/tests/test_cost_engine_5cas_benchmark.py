@@ -160,6 +160,17 @@ _FIXTURE_CONFIG_COUTS: dict = {
     "cout_fixe_maintenance_eur_mois": Decimal("800.00"),
     "buffer_rebut_pct": Decimal("2.50"),
     "buffer_setup_pct": Decimal("1.00"),
+    # Phase 2 / Lot 4a — 7 tarifs P1/P3/P4/P6 désormais lus depuis
+    # `ConfigCouts` scopée tenant (anciennement rows tarif_poste). Valeurs
+    # ICE legacy alignées sur l'historique sprint 9 v2 pour préserver
+    # V1a 1 449,09 € exactement.
+    "marge_confort_roulage_mm": 10,
+    "cliche_prix_couleur_eur": Decimal("45.00"),
+    "outil_base_eur": Decimal("200.00"),
+    "outil_par_trace_eur": Decimal("50.00"),
+    "surcout_forme_speciale_facteur": Decimal("1.40"),
+    "calage_forfait_eur": Decimal("225.00"),
+    "finitions_prix_m2_eur": Decimal("0.1250"),
 }
 
 

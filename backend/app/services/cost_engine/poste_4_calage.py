@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.crud.tarif_poste import get_by_cle
 from app.schemas.devis import DevisInput
 from app.schemas.poste_result import PosteResult
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 from app.services.cost_engine.errors import CostEngineError
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,11 @@ class CalculateurPoste4Calage:
         self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
-        tarif = get_by_cle(self.db, "calage_forfait", self.entreprise_id)
-        if tarif is None:
-            raise CostEngineError(
-                "Tarif 'calage_forfait' introuvable — seed tarif_poste manquant"
-            )
-        cout = Decimal(tarif.valeur_defaut).quantize(Decimal("0.01"))
+        # Phase 2 / Lot 4a — `calage_forfait_eur` lue depuis `ConfigCouts`
+        # scopée tenant via reader DRY (anciennement clé `calage_forfait`
+        # rangée comme row sur `tarif_poste`, dépréciée mais conservée).
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
+        cout = Decimal(config.calage_forfait_eur).quantize(Decimal("0.01"))
 
         logger.info("P4 Calage (forfait): %s €", cout)
         return PosteResult(

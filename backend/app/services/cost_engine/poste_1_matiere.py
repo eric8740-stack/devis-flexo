@@ -27,6 +27,7 @@ from app.crud.tarif_poste import get_by_cle
 from app.models import Complexe
 from app.schemas.devis import DevisInput
 from app.schemas.poste_result import PosteResult
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 from app.services.cost_engine.errors import CostEngineError
 
 logger = logging.getLogger(__name__)
@@ -48,14 +49,11 @@ class CalculateurPoste1Matiere:
                 f"Complexe id={devis.complexe_id} introuvable"
             )
 
-        tarif_marge = get_by_cle(
-            self.db, "marge_confort_roulage_mm", self.entreprise_id
-        )
-        if tarif_marge is None:
-            raise CostEngineError(
-                "Tarif 'marge_confort_roulage_mm' introuvable — seed manquant"
-            )
-        marge_mm = int(tarif_marge.valeur_defaut)
+        # Phase 2 / Lot 4a — `marge_confort_roulage_mm` lue depuis
+        # `ConfigCouts` scopée tenant via reader DRY (anciennement clé
+        # rangée comme row sur `tarif_poste`, dépréciée mais conservée).
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
+        marge_mm = int(config.marge_confort_roulage_mm)
 
         # Dérivation prix_kg depuis le complexe, fallback tarif global
         prix_kg, prix_kg_source = self._resolve_prix_kg(complexe)

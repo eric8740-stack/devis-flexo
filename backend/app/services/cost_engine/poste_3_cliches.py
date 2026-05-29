@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from app.crud.tarif_poste import get_by_cle
 from app.schemas.devis import DevisInput
 from app.schemas.poste_result import PosteResult
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 from app.services.cost_engine.errors import CostEngineError
 
 logger = logging.getLogger(__name__)
@@ -65,32 +66,33 @@ class CalculateurPoste3ClichesOutillage:
         self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
+        # Phase 2 / Lot 4a — 4 valeurs P3 (cliché par couleur, outil base,
+        # outil par trace, multiplicateur forme spéciale) lues depuis
+        # `ConfigCouts` scopée tenant via reader DRY. Anciennement clés
+        # rangées comme rows sur `tarif_poste` (sprint 9 v2), dépréciées
+        # mais conservées (rows pas supprimées). NB : le champ `_pct`
+        # legacy était sémantiquement faux — c'est un multiplicateur,
+        # d'où le rename `_facteur` en colonne ConfigCouts.
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
+        prix_couleur = Decimal(config.cliche_prix_couleur_eur)
+
         # 3a Clichés (inchangé Sprint 3)
-        prix_couleur = _get_tarif_value(
-            self.db, "cliche_prix_couleur", self.entreprise_id
-        )
         nb_couleurs_total = sum(devis.nb_couleurs_par_type.values())
         cout_3a = (Decimal(nb_couleurs_total) * prix_couleur).quantize(Decimal("0.01"))
 
-        # 3b Outil découpe — Sprint 9 v2 : lecture des 3 valeurs depuis tarif_poste
+        # 3b Outil découpe — Lot 4a : lectures depuis ConfigCouts.
         if devis.outil_decoupe_existant:
             cout_3b = Decimal("0.00")
             mode_outil = "existant"
             surcout_pct = 0
         else:
-            outil_base = _get_tarif_value(
-                self.db, "outil_base_eur", self.entreprise_id
-            )
-            outil_par_trace = _get_tarif_value(
-                self.db, "outil_par_trace_eur", self.entreprise_id
-            )
+            outil_base = Decimal(config.outil_base_eur)
+            outil_par_trace = Decimal(config.outil_par_trace_eur)
             cout_base = outil_base + (
                 Decimal(devis.nb_traces_complexite) * outil_par_trace
             )
             if devis.forme_speciale:
-                surcout_factor = _get_tarif_value(
-                    self.db, "surcout_forme_speciale_pct", self.entreprise_id
-                )
+                surcout_factor = Decimal(config.surcout_forme_speciale_facteur)
                 cout_3b = (cout_base * surcout_factor).quantize(Decimal("0.01"))
                 # Le pct affiché = (factor - 1) × 100 (ex. 1.40 → 40 %)
                 surcout_pct = int(((surcout_factor - Decimal("1")) * Decimal("100")).quantize(Decimal("1")))
