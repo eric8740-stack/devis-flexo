@@ -701,6 +701,18 @@ def update_devis(
         _chiffrer_devis_multilots(
             db, devis, nouveaux_lots, devis.payload_input, devis.entreprise_id
         )
+        # Fix regression rapport + plan : quand le serveur vient de recalculer
+        # payload_output via `_chiffrer_devis_multilots`, un payload_output
+        # transmis par le body (placeholder front du flux optim etape 4 par
+        # exemple) ne doit PAS l'ecraser dans la boucle `setattr` ci-dessous.
+        # Idem payload_input : le moteur s'appuie sur `devis.payload_input` qui
+        # contient l'etat persistant ; le body ne doit pas non plus l'ecraser
+        # de facon a desynchroniser le payload_output deja recalcule. Option D
+        # : pop conditionnel uniquement quand un recalcul a eu lieu (lots
+        # fournis). Le flux mono-config legacy (DevisSaveBar, sans lots) garde
+        # son contrat actuel : le body decrit le payload stocke tel quel.
+        fields.pop("payload_output", None)
+        fields.pop("payload_input", None)
 
     # Si payload_input ou payload_output changent, on re-dérive dénormalisés.
     if "payload_input" in fields or "payload_output" in fields:

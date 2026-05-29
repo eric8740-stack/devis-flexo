@@ -30,6 +30,7 @@
 
 ## PRs ouvertes
 
+- #78 — fix(devis): update_devis préserve payload_output recalculé (pop conditionnel) — résout rapport+plan absents après modif
 - #77 — fix(devis): UNIQUE(devis.numero) scopée tenant + MAX+1 + retry loop (résout 409 sur hard-delete)
 - #65 — docs(audit): cartographie config-driven vs hardcode `cost_engine` (Phase 2)
 - #54 — feat(strategique-ui): onglet Stratégique — page 6 sections
@@ -38,7 +39,7 @@
 
 ## Baseline tests
 
-- **pytest** : `1077 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-29 (branche `fix/devis-numero-collision-409`, durée ≈ 389 s). +4 tests dédiés au fix 409 (`test_devis_numero_fix_409.py`). CI GitHub Actions workflow `backend` à confirmer après merge.
+- **pytest** : `1083 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-29 (branche `fix/update-devis-preserve-payload`, durée ≈ 337 s). +6 tests dédiés au fix update_devis (`test_devis_update_preserve_payload_output.py`), +4 au fix 409 (`test_devis_numero_fix_409.py`). CI GitHub Actions workflow `backend` à confirmer après merge.
 - **vitest** : `22 fichiers / 167 tests passed` — exécution locale 2026-05-29 ≈ 08:45 (durée ≈ 8 s, `npx vitest run`).
 - **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69, gate brief : preview Vercel vert avant merge).
 
@@ -55,6 +56,8 @@
 
 ## En cours / à venir
 
+- **Fix update_devis préserve payload_output recalculé** (PR #78 ouverte) — `update_devis` (PUT `/api/devis/{id}`) appelait `_chiffrer_devis_multilots` qui enrichissait `payload_output` (mode='multi-lots' + `details_par_lot[].details.postes[7]`), puis la boucle `for field, value in fields.items(): setattr(...)` réécrasait avec le placeholder transmis par le body (flux optim étape 4) → côté front [`DevisResultMultiLots.tsx:131-132`](../frontend/src/components/devis/DevisResultMultiLots.tsx) masquait Rapport de fabrication + PlanificateurBobines. **Fix option D** : pop conditionnel `payload_output` + `payload_input` du `fields` APRÈS `_chiffrer_devis_multilots`, **seulement quand `lots_in is not None`** (le flux mono-config legacy `DevisSaveBar` sans lots garde son contrat actuel). 6 tests dédiés (`test_devis_update_preserve_payload_output.py`) couvrent les 4 cas du repro + mono-config legacy + payload_output forgé ignoré. Script de repro déterministe : [`backend/scripts/dump_payload_output_post_put.py`](../backend/scripts/dump_payload_output_post_put.py).
+- **Dette : `payload_output` = donnée serveur** — durcissement intégral (recalcul serveur mono-config OU purge `DevisSaveBar` si `/devis/nouveau` abandonné) reporté à un PR séparé. Le pop conditionnel actuel suffit à éteindre la régression sans casser le flux legacy.
 - **Fix 409 numéro devis** (PR #77 ouverte) — UNIQUE(devis.numero) passée scope tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` passé en `MAX(seq)+1` scope tenant + retry loop borné (5) sur collision résiduelle dans `crud.create_devis` / `duplicate_devis`. Résout la régression : `count(*)+1` rebouchait les trous laissés par hard-delete → UniqueViolation → 409. Migration `y9n2i3g7d5f0` additive avec pre-check anti-doublons (RuntimeError si la base contient déjà des `(entreprise_id, numero)` en double). Réversible. 4 tests dédiés (`test_devis_numero_fix_409.py`). Script de repro déterministe : `backend/scripts/repro_409_devis_numero.py`.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a.
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées quand toutes les configs sont stables en prod.
