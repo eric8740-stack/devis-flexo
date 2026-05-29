@@ -19,7 +19,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.models import ConfigCouts, Machine
+from app.models import Machine
 from app.schemas.devis import (
     CandidatCylindreOutput,
     DevisInput,
@@ -27,6 +27,7 @@ from app.schemas.devis import (
     DevisOutputMatching,
 )
 from app.schemas.poste_result import PosteResult
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 from app.services.cost_engine.cylindre_matcher import find_cylindre_candidats
 from app.services.cost_engine.errors import CostEngineError
 from app.services.cost_engine.poste_1_matiere import CalculateurPoste1Matiere
@@ -241,17 +242,7 @@ class MoteurDevis:
         """
         if devis.pct_marge_override is not None:
             return devis.pct_marge_override
-        config = (
-            self.db.query(ConfigCouts)
-            .filter_by(entreprise_id=self.entreprise_id)
-            .first()
-        )
-        if config is None:
-            raise CostEngineError(
-                f"ConfigCouts introuvable pour entreprise_id={self.entreprise_id} "
-                "— marge non résoluble. Initialise la config via "
-                "/api/strategique/couts."
-            )
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
         # `marge_standard_pct` est stocké en POURCENTAGE (0..100) côté
         # ConfigCouts (UI Stratégique, défaut template 35.00 %). On convertit
         # en fraction pour la formule `prix_vente_ht = cout × (1 + marge)`.

@@ -19,11 +19,13 @@ def test_get_couts_returns_seeded_template_defaults():
     r = client.get("/api/strategique/couts")
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["cout_operateur_eur_h"] == 25.0
-    assert d["cout_exploitation_machine_eur_h"] == 50.0
-    # Phase 2 Lot 2 — le seed démo passe de 35 % (template) à 18 %, valeur
-    # historique ICE alignée sur l'ancien `Entreprise.pct_marge_defaut`.
-    # Le défaut 35 % du modèle reste actif pour les nouveaux tenants.
+    # Phase 2 Lots 2/3 — alignement legacy : le seed démo reflète les
+    # valeurs ICE historiques (anciennement TarifPoste roulage_prix_horaire=
+    # 375, mo_prix_horaire=70, Entreprise.pct_marge_defaut=0.18). Les
+    # défauts template du modèle (25/50/35) restent actifs pour les nouveaux
+    # tenants via /api/strategique/couts (get-or-create).
+    assert d["cout_operateur_eur_h"] == 70.0
+    assert d["cout_exploitation_machine_eur_h"] == 375.0
     assert d["marge_standard_pct"] == 18.0
 
 
@@ -32,8 +34,10 @@ def test_put_couts_partial_update_preserve_autres_champs():
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["marge_standard_pct"] == 42.0
-    # Upsert partiel : les autres champs gardent la valeur template.
-    assert d["cout_operateur_eur_h"] == 25.0
+    # Upsert partiel : les autres champs gardent la valeur SEEDÉE (et non
+    # les défauts du modèle). Phase 2 Lot 3 — le démo seede 70 €/h pour
+    # cout_operateur (alignement legacy ICE).
+    assert d["cout_operateur_eur_h"] == 70.0
 
 
 def test_put_couts_hors_bornes_422():
