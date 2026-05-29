@@ -272,6 +272,8 @@ def planificateur_bobines(
             diametre_max_bobine_mm=payload.diametre_max_bobine_mm,
             epaisseur_matiere_um=payload.epaisseur_matiere_um,
             nb_etiq_impose=payload.nb_etiq_impose,
+            nb_bobines_impose=payload.nb_bobines_impose,
+            packaging_nb_etiq_par_bobine=payload.packaging_nb_etiq_par_bobine,
             machine=machine_params,
             tarifs=tarifs_obj,
             parametres=parametres,

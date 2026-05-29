@@ -81,7 +81,7 @@ class ScenarioBobines:
     titre: str  # libellé court UI
     repartition: list[RepartitionBobine]
     nb_bobines_par_piste: int  # sum(r.nb_bobines_par_piste)
-    nb_bobines_total: int  # = nb_bobines_par_piste × n_laize
+    nb_bobines_total: int  # = nb_bobines_par_piste × n_laize (production RÉELLE)
     quantite_totale_etiq: int  # produite par ce scénario (≥ Q sauf C_inf)
     surprod_etiq: int  # quantite_totale - Q (négatif si C_inf)
     q_ajustee: int | None  # défini pour C_inf / C_sup, None sinon
@@ -90,6 +90,21 @@ class ScenarioBobines:
     cout_machine_eur: Decimal | None
     cout_mandrins_eur: Decimal | None
     mode_mandrins_optimal: str | None  # "pre_coupe" / "decoupe_interne"
+    # --- Modes IMPOSE nb_bobines + packaging (extension) ---
+    # Renseigné UNIQUEMENT pour les modes IMPOSE qui partent d'une demande
+    # client de N bobines (pas pour le mode nb_etiq classique). Sinon None
+    # côté demande, 0 côté surplus, None côté 3 options Q.
+    nb_bobines_demande: int | None = None  # demande client (nb_bobines / packaging)
+    surplus_bobines: int = 0  # bobines_produites − nb_bobines_demande (≥ 0)
+    surplus_etiq: int = 0  # surplus_bobines × etiq_par_bobine (≥ 0)
+    # 3 options de décision sur le surplus (commercial choisit). None si pas
+    # pertinent (modes non-demande). Sinon : Q facturée selon chaque option.
+    #   facture : production totale (max) — le client paie le surplus
+    #   stock   : Q demandée (surplus en stock atelier)
+    #   reduire : multiple inférieur de n_laize en dessous de la demande
+    q_si_facture: int | None = None
+    q_si_stock: int | None = None
+    q_si_reduire: int | None = None
 
 
 @dataclass(frozen=True)
@@ -345,6 +360,197 @@ def _scenario_C(
     )
 
 
+def _calcul_options_q_si_demande(
+    nb_bobines_demande: int,
+    nb_bobines_produites: int,
+    etiq_par_bobine: int,
+    n_laize: int,
+) -> tuple[int, int, int]:
+    """3 options de Q facturée selon la décision sur le surplus.
+
+    Args:
+      nb_bobines_demande : ce que le client a demandé.
+      nb_bobines_produites : ce que la machine produit (multiple de n_laize).
+      etiq_par_bobine : taille de bobine pleine retenue.
+      n_laize : nb de pistes parallèles.
+
+    Returns:
+      (q_si_facture, q_si_stock, q_si_reduire)
+        - facture : production totale (max) — surplus facturé au client
+        - stock   : Q demandée — surplus en stock atelier
+        - reduire : multiple inférieur de n_laize sous la demande, 0 surplus
+
+    `reduire` peut donner 0 si la demande est < n_laize (cas dégénéré) ;
+    on garde 0 pour signaler explicitement à l'UI « cette option n'est
+    pas pertinente ici » plutôt que d'inventer un fallback.
+    """
+    q_si_facture = nb_bobines_produites * etiq_par_bobine
+    q_si_stock = nb_bobines_demande * etiq_par_bobine
+    # Multiple inférieur de n_laize <= nb_bobines_demande.
+    nb_bobines_reduit = (nb_bobines_demande // n_laize) * n_laize
+    q_si_reduire = nb_bobines_reduit * etiq_par_bobine
+    return q_si_facture, q_si_stock, q_si_reduire
+
+
+def _scenario_IMPOSE_NB_BOBINES(
+    R: int,
+    n_laize: int,
+    Q: int,
+    nb_bobines_demande: int,
+    mandrin_mm: int,
+    epaisseur_um: float,
+    pas_mm: float,
+) -> ScenarioBobines:
+    """Mode IMPOSE nb_bobines : le client dit « je veux N bobines ».
+
+    Étiq/bobine est DÉRIVÉ : on prend `ceil(R / nb_sets)` où
+    `nb_sets = ceil(nb_bobines_demande / n_laize)`. La machine produit
+    `nb_sets × n_laize` bobines (synchronisation pistes), d'où surplus
+    si la demande n'est pas un multiple de n_laize.
+
+    NE filtre PAS le cas étiq/bobine > nb_max : la garde anti-fléau
+    remonte dans `alerte_impose` séparément.
+    """
+    nb_sets = math.ceil(nb_bobines_demande / n_laize)
+    nb_bobines_produites = nb_sets * n_laize
+    # Étiq/bobine = ce qu'il faut pour couvrir R sur nb_sets sets.
+    etiq_par_bobine = math.ceil(R / nb_sets) if nb_sets > 0 else 0
+    surplus_bobines = nb_bobines_produites - nb_bobines_demande
+    surplus_etiq = surplus_bobines * etiq_par_bobine
+    d_bobine = _diametre_pour_nb(
+        etiq_par_bobine, mandrin_mm, epaisseur_um, pas_mm
+    )
+    repartition = [
+        RepartitionBobine(
+            nb_etiq_par_bobine=etiq_par_bobine,
+            nb_bobines_par_piste=nb_sets,
+            diametre_mm=d_bobine,
+        )
+    ]
+    q_facture, q_stock, q_reduire = _calcul_options_q_si_demande(
+        nb_bobines_demande=nb_bobines_demande,
+        nb_bobines_produites=nb_bobines_produites,
+        etiq_par_bobine=etiq_par_bobine,
+        n_laize=n_laize,
+    )
+    quantite_totale_produite = nb_bobines_produites * etiq_par_bobine
+    return ScenarioBobines(
+        cle="IMPOSE",
+        titre=f"Imposé client ({nb_bobines_demande} bobines)",
+        repartition=repartition,
+        nb_bobines_par_piste=nb_sets,
+        nb_bobines_total=nb_bobines_produites,
+        quantite_totale_etiq=quantite_totale_produite,
+        surprod_etiq=quantite_totale_produite - Q,
+        q_ajustee=None,
+        cout_total_eur=None,
+        cout_machine_eur=None,
+        cout_mandrins_eur=None,
+        mode_mandrins_optimal=None,
+        nb_bobines_demande=nb_bobines_demande,
+        surplus_bobines=surplus_bobines,
+        surplus_etiq=surplus_etiq,
+        q_si_facture=q_facture,
+        q_si_stock=q_stock,
+        q_si_reduire=q_reduire,
+    )
+
+
+def _scenario_IMPOSE_PACKAGING(
+    R: int,
+    n_laize: int,
+    Q: int,
+    nb_bobines_demande: int,
+    nb_etiq_par_bobine: int,
+    mandrin_mm: int,
+    epaisseur_um: float,
+    pas_mm: float,
+) -> ScenarioBobines:
+    """Mode IMPOSE packaging : le client dit « N bobines de X étiquettes ».
+
+    Les deux contraintes sont imposées simultanément. La machine produit
+    `ceil(N / n_laize) × n_laize` bobines de X étiq chacune (synchronisation
+    pistes), d'où :
+        - surplus_bobines = bobines_produites − N
+        - surplus_etiq    = surplus_bobines × X
+
+    Ø calculé via SSOT sur X. NE filtre PAS X > nb_max : garde anti-fléau
+    remonte dans `alerte_impose`.
+    """
+    nb_sets = math.ceil(nb_bobines_demande / n_laize)
+    nb_bobines_produites = nb_sets * n_laize
+    surplus_bobines = nb_bobines_produites - nb_bobines_demande
+    surplus_etiq = surplus_bobines * nb_etiq_par_bobine
+    d_bobine = _diametre_pour_nb(
+        nb_etiq_par_bobine, mandrin_mm, epaisseur_um, pas_mm
+    )
+    repartition = [
+        RepartitionBobine(
+            nb_etiq_par_bobine=nb_etiq_par_bobine,
+            nb_bobines_par_piste=nb_sets,
+            diametre_mm=d_bobine,
+        )
+    ]
+    q_facture, q_stock, q_reduire = _calcul_options_q_si_demande(
+        nb_bobines_demande=nb_bobines_demande,
+        nb_bobines_produites=nb_bobines_produites,
+        etiq_par_bobine=nb_etiq_par_bobine,
+        n_laize=n_laize,
+    )
+    quantite_totale_produite = nb_bobines_produites * nb_etiq_par_bobine
+    return ScenarioBobines(
+        cle="IMPOSE",
+        titre=f"Imposé client ({nb_bobines_demande} bobines × {nb_etiq_par_bobine})",
+        repartition=repartition,
+        nb_bobines_par_piste=nb_sets,
+        nb_bobines_total=nb_bobines_produites,
+        quantite_totale_etiq=quantite_totale_produite,
+        surprod_etiq=quantite_totale_produite - Q,
+        q_ajustee=None,
+        cout_total_eur=None,
+        cout_machine_eur=None,
+        cout_mandrins_eur=None,
+        mode_mandrins_optimal=None,
+        nb_bobines_demande=nb_bobines_demande,
+        surplus_bobines=surplus_bobines,
+        surplus_etiq=surplus_etiq,
+        q_si_facture=q_facture,
+        q_si_stock=q_stock,
+        q_si_reduire=q_reduire,
+    )
+
+
+def _construire_alerte_impose(
+    *,
+    nb_pour_bobine: int,
+    nb_max: int,
+    pas_mm: float,
+    epaisseur_um: float,
+    mandrin_mm: int,
+) -> AlerteImpose:
+    """Anti-fléau commun aux 3 modes IMPOSE.
+
+    `nb_pour_bobine` = étiq/bobine effectivement appliqué au scénario
+    (imposé directement en mode nb_etiq/packaging, dérivé en mode
+    nb_bobines). On compare au `nb_max(Dmax)` et on remonte le Ø requis.
+    """
+    ml_m = nb_pour_bobine * pas_mm / 1000.0
+    d_pour_nb = calcul_diametre_bobine(
+        ml_total_m=ml_m,
+        epaisseur_matiere_um=epaisseur_um,
+        mandrin_mm=mandrin_mm,
+        # La laize papier ne change pas le calcul Ø (volumétrique
+        # par section transverse) : placeholder > 0.
+        laize_papier_mm=100.0,
+    )
+    return AlerteImpose(
+        nb_impose=nb_pour_bobine,
+        nb_realisable_max=nb_max,
+        diametre_requis_mm=d_pour_nb,
+        physiquement_impossible=nb_pour_bobine > nb_max,
+    )
+
+
 def _scenario_IMPOSE(
     R: int,
     n_laize: int,
@@ -474,7 +680,10 @@ def _evaluer_cout_rebobinage(
         Decimal("0.0001")
     )
 
-    # ScenarioBobines est frozen — on construit un nouveau dataclass.
+    # ScenarioBobines est frozen — on construit un nouveau dataclass. On
+    # propage toutes les nouvelles métadonnées surplus/options Q pour les
+    # modes IMPOSE nb_bobines / packaging (sinon valeurs neutres héritées
+    # des defaults dataclass).
     return ScenarioBobines(
         cle=scenario.cle,
         titre=scenario.titre,
@@ -488,6 +697,12 @@ def _evaluer_cout_rebobinage(
         cout_machine_eur=temps.cout_machine_eur,
         cout_mandrins_eur=cout_mandrins,
         mode_mandrins_optimal=arbitrage.mode_optimal,
+        nb_bobines_demande=scenario.nb_bobines_demande,
+        surplus_bobines=scenario.surplus_bobines,
+        surplus_etiq=scenario.surplus_etiq,
+        q_si_facture=scenario.q_si_facture,
+        q_si_stock=scenario.q_si_stock,
+        q_si_reduire=scenario.q_si_reduire,
     )
 
 
@@ -500,6 +715,8 @@ def calculer_plan_bobines(
     diametre_max_bobine_mm: float,
     epaisseur_matiere_um: float,
     nb_etiq_impose: int | None = None,
+    nb_bobines_impose: int | None = None,
+    packaging_nb_etiq_par_bobine: int | None = None,
     machine: MachineRebobinageParams | None = None,
     tarifs: TarifsMandrins | None = None,
     parametres: ParametresMandrinRuntime | None = None,
@@ -512,8 +729,16 @@ def calculer_plan_bobines(
     désigne le moins cher ; sinon, scénarios renvoyés sans coût et
     `recommande_cle = None`.
 
+    Modes IMPOSE (mutuellement exclusifs, un seul actif à la fois) :
+      - `nb_etiq_impose` : client impose étiq/bobine, nb_bobines dérivé.
+      - `nb_bobines_impose` : client impose nb_bobines, étiq/bobine dérivé.
+      - `nb_bobines_impose + packaging_nb_etiq_par_bobine` : packaging
+        complet, les 2 imposés simultanément. Surplus calculé + 3 options
+        de décision exposées (facture / stock / réduire).
+
     Raises:
-      ValueError : Q ≤ 0, n_laize ≤ 0, pas ≤ 0, Dmax ≤ mandrin, ε ≤ 0.
+      ValueError : Q ≤ 0, n_laize ≤ 0, pas ≤ 0, Dmax ≤ mandrin, ε ≤ 0,
+      ou plusieurs modes IMPOSE actifs simultanément (mutex).
     """
     if quantite_commandee <= 0:
         raise ValueError(f"quantite_commandee doit être > 0 (reçu {quantite_commandee})")
@@ -558,41 +783,92 @@ def calculer_plan_bobines(
     if sc_sup is not None:
         scenarios.append(sc_sup)
 
-    # Scénario imposé + garde anti-fléau. On l'ajoute SEULEMENT si l'input
-    # est fourni (le commercial a saisi un nb client) — sinon on évite de
-    # polluer l'UI avec un scénario hors contexte.
+    # Mutex : un seul mode IMPOSE actif à la fois (brief explicite).
+    # `packaging` = nb_bobines_impose ET packaging_nb_etiq_par_bobine
+    # ensemble ; sinon c'est `nb_bobines` seul ou `nb_etiq` seul.
+    nb_etiq_actif = nb_etiq_impose is not None and nb_etiq_impose > 0
+    nb_bob_actif = nb_bobines_impose is not None and nb_bobines_impose > 0
+    pack_etiq_actif = (
+        packaging_nb_etiq_par_bobine is not None
+        and packaging_nb_etiq_par_bobine > 0
+    )
+    if nb_etiq_actif and (nb_bob_actif or pack_etiq_actif):
+        raise ValueError(
+            "Modes IMPOSE mutuellement exclusifs : nb_etiq_impose ne peut "
+            "pas être combiné avec nb_bobines_impose / packaging."
+        )
+    if pack_etiq_actif and not nb_bob_actif:
+        raise ValueError(
+            "Mode packaging incomplet : packaging_nb_etiq_par_bobine fourni "
+            "sans nb_bobines_impose. Les deux sont requis ensemble."
+        )
+
+    # Scénario imposé + garde anti-fléau. On l'ajoute SEULEMENT si un mode
+    # est actif (le commercial a saisi une contrainte client) — sinon on
+    # évite de polluer l'UI avec un scénario hors contexte.
     alerte_impose: AlerteImpose | None = None
-    if nb_etiq_impose is not None and nb_etiq_impose > 0:
+    if nb_etiq_actif:
+        # Mode 1 — nb_etiq imposé. Comportement historique.
         scenarios.append(
             _scenario_IMPOSE(
                 R,
                 n_laize,
                 Q,
-                nb_etiq_impose,
+                nb_etiq_impose,  # type: ignore[arg-type]
                 mandrin_mm,
                 epaisseur_matiere_um,
                 pas_mm,
             )
         )
-        # Diagnostic anti-fléau : remontre les 2 chiffres clés que le
-        # commercial doit annoncer au client si le nb voulu dépasse Dmax.
-        # Ø requis : on calcule via la SSOT forward (calcul_diametre_bobine)
-        # pour rester cohérent avec l'inverse `calcul_diametre_requis_*`.
-        ml_impose_m = nb_etiq_impose * pas_mm / 1000.0
-        d_pour_impose = calcul_diametre_bobine(
-            ml_total_m=ml_impose_m,
-            epaisseur_matiere_um=epaisseur_matiere_um,
+        alerte_impose = _construire_alerte_impose(
+            nb_pour_bobine=nb_etiq_impose,  # type: ignore[arg-type]
+            nb_max=nb_max,
+            pas_mm=pas_mm,
+            epaisseur_um=epaisseur_matiere_um,
             mandrin_mm=mandrin_mm,
-            # La laize papier ne change pas le calcul Ø (volumétrique
-            # par section transverse) : on passe un placeholder > 0.
-            laize_papier_mm=100.0,
         )
-        alerte_impose = AlerteImpose(
-            nb_impose=nb_etiq_impose,
-            nb_realisable_max=nb_max,
-            diametre_requis_mm=d_pour_impose,
-            physiquement_impossible=nb_etiq_impose > nb_max,
+    elif nb_bob_actif and pack_etiq_actif:
+        # Mode 3 — packaging (nb_bobines + nb_etiq_par_bobine).
+        scenarios.append(
+            _scenario_IMPOSE_PACKAGING(
+                R,
+                n_laize,
+                Q,
+                nb_bobines_impose,  # type: ignore[arg-type]
+                packaging_nb_etiq_par_bobine,  # type: ignore[arg-type]
+                mandrin_mm,
+                epaisseur_matiere_um,
+                pas_mm,
+            )
         )
+        alerte_impose = _construire_alerte_impose(
+            nb_pour_bobine=packaging_nb_etiq_par_bobine,  # type: ignore[arg-type]
+            nb_max=nb_max,
+            pas_mm=pas_mm,
+            epaisseur_um=epaisseur_matiere_um,
+            mandrin_mm=mandrin_mm,
+        )
+    elif nb_bob_actif:
+        # Mode 2 — nb_bobines imposé seul (étiq/bobine dérivé).
+        sc = _scenario_IMPOSE_NB_BOBINES(
+            R,
+            n_laize,
+            Q,
+            nb_bobines_impose,  # type: ignore[arg-type]
+            mandrin_mm,
+            epaisseur_matiere_um,
+            pas_mm,
+        )
+        scenarios.append(sc)
+        # Alerte anti-fléau sur l'étiq/bobine dérivé (pas sur la demande).
+        if sc.repartition:
+            alerte_impose = _construire_alerte_impose(
+                nb_pour_bobine=sc.repartition[0].nb_etiq_par_bobine,
+                nb_max=nb_max,
+                pas_mm=pas_mm,
+                epaisseur_um=epaisseur_matiere_um,
+                mandrin_mm=mandrin_mm,
+            )
 
     # Enrichit chaque scénario avec son coût rebobinage (lecture seule).
     scenarios = [
