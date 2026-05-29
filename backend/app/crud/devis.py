@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -31,6 +32,27 @@ from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.numero_devis_service import generate_next_numero
 
 logger = logging.getLogger(__name__)
+
+# Fix 409 (migration y9n2i3g7d5f0) — borne du retry loop autour de l'INSERT
+# Devis sur collision UNIQUE(entreprise_id, numero). Couvre la race residuelle
+# entre `generate_next_numero(MAX+1)` et l'INSERT effectif quand deux POST du
+# meme tenant arrivent simultanement. Au-dela on relaie l'IntegrityError au
+# handler global -> 409 explicite.
+_MAX_RETRIES_NUMERO = 5
+# Sous-chaines utilisees pour detecter une collision sur notre UNIQUE composite
+# dans le message psycopg / sqlite (l'index s'appelle pareil sur les 2
+# dialectes : `ix_devis_entreprise_id_numero`).
+_COLLISION_HINTS = ("ix_devis_entreprise_id_numero", "devis.numero")
+
+
+def _is_numero_collision(exc: IntegrityError) -> bool:
+    """True si l'IntegrityError vient de notre UNIQUE(entreprise_id, numero).
+
+    Toute autre violation (FK invalide, NOT NULL manquant) doit etre laissee
+    remonter telle quelle vers le handler global -- pas de masquage.
+    """
+    msg = (str(exc.orig) if exc.orig is not None else str(exc)).lower()
+    return any(hint in msg for hint in _COLLISION_HINTS)
 
 # Sprint 16 fix chiffrage — message métier affiché quand le chiffrage auto
 # d'un devis multi-lots optim échoue (cause connue : matière du lot non
@@ -266,30 +288,56 @@ def create_devis(
     "chiffrage à compléter via /devis/[id]/edit".
     """
     denorm = _extract_denormalised_fields(data.payload_input, data.payload_output)
-    numero = generate_next_numero(db)
-    devis = Devis(
-        # S12-C : entreprise_id passé en paramètre par le router (user.entreprise_id)
-        entreprise_id=entreprise_id,
-        numero=numero,
-        statut=data.statut,
-        client_id=data.client_id,
-        payload_input=data.payload_input,
-        payload_output=data.payload_output,
-        cylindre_choisi_z=data.cylindre_choisi_z,
-        cylindre_choisi_nb_etiq=data.cylindre_choisi_nb_etiq,
-        # Sprint 14 Lot 1 — brief client unifié. Lot 1 avait câblé le modèle DB
-        # et le schema Pydantic mais OUBLIÉ le CRUD : sans ces 5 lignes, les
-        # valeurs envoyées par l'API étaient silencieusement remplacées par
-        # les server_default DB (bug détecté par Lot 5 E2E pipeline).
-        nb_etiquettes_par_rouleau=data.nb_etiquettes_par_rouleau,
-        diametre_max_bobine_mm=data.diametre_max_bobine_mm,
-        nb_fronts_sortie=data.nb_fronts_sortie,
-        type_entree_fichier=data.type_entree_fichier,
-        conditions_stockage=data.conditions_stockage,
-        **denorm,
-    )
-    db.add(devis)
-    db.flush()  # On a besoin de devis.id avant de créer les lots.
+
+    # Fix 409 — retry loop sur collision UNIQUE(entreprise_id, numero).
+    # Cause historique : generate_next_numero etait `count+1` non scope
+    # tenant -> rebouchait les trous laisses par hard-delete. Le service
+    # est passe en `MAX+1 scope tenant` (migration y9n2i3g7d5f0) ; il reste
+    # une race entre lecture du MAX et INSERT effectif (2 POST simultanes
+    # du meme tenant). On la borne ici.
+    devis: Devis | None = None
+    last_exc: IntegrityError | None = None
+    for _tentative in range(_MAX_RETRIES_NUMERO):
+        devis = Devis(
+            # S12-C : entreprise_id passe en parametre par le router (user.entreprise_id)
+            entreprise_id=entreprise_id,
+            numero=generate_next_numero(db, entreprise_id),
+            statut=data.statut,
+            client_id=data.client_id,
+            payload_input=data.payload_input,
+            payload_output=data.payload_output,
+            cylindre_choisi_z=data.cylindre_choisi_z,
+            cylindre_choisi_nb_etiq=data.cylindre_choisi_nb_etiq,
+            # Sprint 14 Lot 1 — brief client unifie. Lot 1 avait cable le modele DB
+            # et le schema Pydantic mais OUBLIE le CRUD : sans ces 5 lignes, les
+            # valeurs envoyees par l'API etaient silencieusement remplacees par
+            # les server_default DB (bug detecte par Lot 5 E2E pipeline).
+            nb_etiquettes_par_rouleau=data.nb_etiquettes_par_rouleau,
+            diametre_max_bobine_mm=data.diametre_max_bobine_mm,
+            nb_fronts_sortie=data.nb_fronts_sortie,
+            type_entree_fichier=data.type_entree_fichier,
+            conditions_stockage=data.conditions_stockage,
+            **denorm,
+        )
+        db.add(devis)
+        try:
+            db.flush()  # On a besoin de devis.id avant de creer les lots.
+            break
+        except IntegrityError as exc:
+            db.rollback()
+            if not _is_numero_collision(exc):
+                # FK invalide, NOT NULL manquant : on laisse remonter
+                # tel quel au handler global.
+                raise
+            last_exc = exc
+            # On reboucle avec un nouveau numero. L'instance `devis`
+            # courante est detached suite au rollback ; la prochaine
+            # iteration la recree from scratch.
+    else:
+        # _MAX_RETRIES_NUMERO collisions consecutives -- tres improbable
+        # en pratique. On rebascule la derniere exception au handler global.
+        assert last_exc is not None
+        raise last_exc
 
     # Sprint 13 avenant — lots de production (cascade depuis devis.id).
     lots_persistes: list[LotProduction] = []
@@ -688,30 +736,52 @@ def duplicate_devis(db: Session, devis_id: int) -> Devis | None:
     src = db.get(Devis, devis_id)
     if src is None:
         return None
-    numero = generate_next_numero(db)
-    nouveau = Devis(
-        # S12-A : copie l'entreprise_id du devis source (préserve le scope tenant)
-        entreprise_id=src.entreprise_id,
-        numero=numero,
-        statut="brouillon",
-        client_id=src.client_id,
-        payload_input=src.payload_input,
-        payload_output=src.payload_output,
-        mode_calcul=src.mode_calcul,
-        cylindre_choisi_z=src.cylindre_choisi_z,
-        cylindre_choisi_nb_etiq=src.cylindre_choisi_nb_etiq,
-        ht_total_eur=src.ht_total_eur,
-        format_h_mm=src.format_h_mm,
-        format_l_mm=src.format_l_mm,
-        machine_id=src.machine_id,
-        # Sprint 14 Lot 1 — copie du brief client (cohérence avec create_devis).
-        nb_etiquettes_par_rouleau=src.nb_etiquettes_par_rouleau,
-        diametre_max_bobine_mm=src.diametre_max_bobine_mm,
-        nb_fronts_sortie=src.nb_fronts_sortie,
-        type_entree_fichier=src.type_entree_fichier,
-        conditions_stockage=src.conditions_stockage,
-    )
-    db.add(nouveau)
+
+    # Fix 409 — meme retry loop que create_devis : la collision UNIQUE
+    # (entreprise_id, numero) peut survenir si deux duplicate_devis du
+    # meme tenant arrivent simultanement et lisent le meme MAX.
+    src_entreprise_id = src.entreprise_id
+    src_snapshot = {
+        "client_id": src.client_id,
+        "payload_input": src.payload_input,
+        "payload_output": src.payload_output,
+        "mode_calcul": src.mode_calcul,
+        "cylindre_choisi_z": src.cylindre_choisi_z,
+        "cylindre_choisi_nb_etiq": src.cylindre_choisi_nb_etiq,
+        "ht_total_eur": src.ht_total_eur,
+        "format_h_mm": src.format_h_mm,
+        "format_l_mm": src.format_l_mm,
+        "machine_id": src.machine_id,
+        "nb_etiquettes_par_rouleau": src.nb_etiquettes_par_rouleau,
+        "diametre_max_bobine_mm": src.diametre_max_bobine_mm,
+        "nb_fronts_sortie": src.nb_fronts_sortie,
+        "type_entree_fichier": src.type_entree_fichier,
+        "conditions_stockage": src.conditions_stockage,
+    }
+
+    nouveau: Devis | None = None
+    last_exc: IntegrityError | None = None
+    for _tentative in range(_MAX_RETRIES_NUMERO):
+        nouveau = Devis(
+            # S12-A : copie l'entreprise_id du devis source (preserve le scope tenant)
+            entreprise_id=src_entreprise_id,
+            numero=generate_next_numero(db, src_entreprise_id),
+            statut="brouillon",
+            **src_snapshot,
+        )
+        db.add(nouveau)
+        try:
+            db.flush()
+            break
+        except IntegrityError as exc:
+            db.rollback()
+            if not _is_numero_collision(exc):
+                raise
+            last_exc = exc
+    else:
+        assert last_exc is not None
+        raise last_exc
+
     db.commit()
     db.refresh(nouveau)
     return _attach_relation_names(nouveau, db)
