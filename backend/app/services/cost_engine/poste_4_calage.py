@@ -1,7 +1,7 @@
 """Poste 4 — Mise en route / Calage (forfait machine).
 
 Formule v1 (forfait simple) :
-    cout = tarif("calage_forfait")  # 225 €/devis par défaut
+    cout = ConfigCouts.calage_forfait_eur  # 225 €/devis (démo ICE)
 
 Mode "détaillé" prévu en évolution : cout = sum(operations × minutes ×
 prix_horaire_machine) avec temps_operation_standard. À ne PAS faire en
@@ -11,16 +11,19 @@ devra y faire attention.
 
 `details["mode"] = "forfait"` et `operations_count = 0` pour préparer
 l'évolution future.
+
+Phase 2 Lot 4a (2026-05-29) : le forfait passe de `TarifPoste.cle=
+"calage_forfait"` (legacy, déprécié) à `ConfigCouts.calage_forfait_eur`
+(Stratégique, scopée tenant).
 """
 import logging
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.crud.tarif_poste import get_by_cle
 from app.schemas.devis import DevisInput
 from app.schemas.poste_result import PosteResult
-from app.services.cost_engine.errors import CostEngineError
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -30,17 +33,13 @@ class CalculateurPoste4Calage:
     LIBELLE = "Mise en route / Calage"
 
     def __init__(self, db: Session, entreprise_id: int) -> None:
-        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
+        """Sprint 12-C : `entreprise_id` requis pour scoper ConfigCouts."""
         self.db = db
         self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
-        tarif = get_by_cle(self.db, "calage_forfait", self.entreprise_id)
-        if tarif is None:
-            raise CostEngineError(
-                "Tarif 'calage_forfait' introuvable — seed tarif_poste manquant"
-            )
-        cout = Decimal(tarif.valeur_defaut).quantize(Decimal("0.01"))
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
+        cout = Decimal(str(config.calage_forfait_eur)).quantize(Decimal("0.01"))
 
         logger.info("P4 Calage (forfait): %s €", cout)
         return PosteResult(

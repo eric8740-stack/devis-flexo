@@ -397,6 +397,20 @@ def seed_config_strategique(session: Session) -> int:
             marge_standard_pct=18.0,
             buffer_rebut_pct=2.5,
             buffer_setup_pct=1.0,
+            # Phase 2 Lot 4a — alignement legacy P1/P3/P4/P6 (anciens
+            # TarifPoste marge_confort_roulage_mm=10, cliche_prix_couleur=45,
+            # outil_base_eur=200, outil_par_trace_eur=50,
+            # surcout_forme_speciale_pct=1.40, calage_forfait=225,
+            # finitions_prix_m2=0.1250). Préserve V1a 1 449,09 € et les
+            # autres sacrés du benchmark. Defaults template du modèle
+            # (10/30/150/40/1.30/180/0.10) restent actifs aux nouveaux tenants.
+            marge_confort_roulage_mm=10,
+            cliche_prix_couleur_eur=45.0,
+            outil_base_eur=200.0,
+            outil_par_trace_eur=50.0,
+            surcout_forme_speciale_facteur=1.40,
+            calage_forfait_eur=225.0,
+            finitions_prix_m2_eur=0.1250,
         )
     )
     session.add(

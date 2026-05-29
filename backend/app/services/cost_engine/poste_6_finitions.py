@@ -2,22 +2,25 @@
 
 Formule :
     surface_imprimee_m2 = (laize_utile_mm / 1000) × ml_total
-    cout_finitions_base = surface_imprimee_m2 × tarif("finitions_prix_m2")
+    cout_finitions_base = surface_imprimee_m2 × ConfigCouts.finitions_prix_m2_eur
     cout_st = sum(forfait.montant_eur for forfait in devis.forfaits_st)
     cout = cout_finitions_base + cout_st
 
 Note : surface UTILE (pas surface support — la marge_confort est consommée
 par P1 mais ne reçoit pas de finition).
+
+Phase 2 Lot 4a (2026-05-29) : le prix m² passe de `TarifPoste.cle=
+"finitions_prix_m2"` (legacy, déprécié) à `ConfigCouts.finitions_prix_m2_eur`
+(Stratégique, scopée tenant).
 """
 import logging
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.crud.tarif_poste import get_by_cle
 from app.schemas.devis import DevisInput
 from app.schemas.poste_result import PosteResult
-from app.services.cost_engine.errors import CostEngineError
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +30,13 @@ class CalculateurPoste6Finitions:
     LIBELLE = "Finitions"
 
     def __init__(self, db: Session, entreprise_id: int) -> None:
-        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
+        """Sprint 12-C : `entreprise_id` requis pour scoper ConfigCouts."""
         self.db = db
         self.entreprise_id = entreprise_id
 
     def calculer(self, devis: DevisInput) -> PosteResult:
-        tarif = get_by_cle(self.db, "finitions_prix_m2", self.entreprise_id)
-        if tarif is None:
-            raise CostEngineError(
-                "Tarif 'finitions_prix_m2' introuvable — seed tarif_poste manquant"
-            )
-        prix_m2 = Decimal(tarif.valeur_defaut)
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
+        prix_m2 = Decimal(str(config.finitions_prix_m2_eur))
         surface_m2 = Decimal(devis.laize_utile_mm) / Decimal(1000) * Decimal(devis.ml_total)
         cout_base = (surface_m2 * prix_m2).quantize(Decimal("0.01"))
         cout_st = sum(

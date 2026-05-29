@@ -32,34 +32,39 @@ def _calculer(payload: dict) -> Decimal:
     return Decimal(str(r.json()["prix_vente_ht_eur"]))
 
 
-def test_e2e_modif_outil_base_then_reset_returns_v1b_to_1921():
-    """Flux critique S9 v2 : modifier tarif → recalculer → reset → V1b EXACT.
+def test_e2e_modif_outil_base_then_restore_returns_v1b_to_1921():
+    """Flux critique : modifier ConfigCouts → recalculer → restaurer → V1b EXACT.
+
+    Mis à jour Phase 2 Lot 4a : la source de vérité du moteur pour P3
+    n'est plus `TarifPoste` mais `ConfigCouts.outil_base_eur`. Le PUT et
+    la restauration sont donc pilotés via `/api/strategique/couts`.
 
     Étapes :
-    1. V1b nouvel outil = 1 921,09 € (baseline)
-    2. PUT outil_base_eur 200 → 250 (+50)
+    1. V1b nouvel outil = 1 921,09 € (baseline, démo seedé à 200 €)
+    2. PUT /api/strategique/couts {outil_base_eur: 250} (+50)
     3. V1b devient 1 980,09 € (+ 59 = 50 × 1.18 marge)
-    4. POST reset poste 3 → 4 paramètres restaurés
+    4. PUT /api/strategique/couts {outil_base_eur: 200} (restaure démo)
     5. V1b retombe à 1 921,09 € EXACT
     """
     # Baseline
     assert _calculer(_PAYLOAD_V1B) == Decimal("1921.09")
 
-    # Modification tarif
+    # Modification via la source de vérité moderne (ConfigCouts)
     r = client.put(
-        "/api/tarif-poste/outil_base_eur", json={"valeur_defaut": "250.00"}
+        "/api/strategique/couts", json={"outil_base_eur": 250.00}
     )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
+    assert float(r.json()["outil_base_eur"]) == 250.0
     assert _calculer(_PAYLOAD_V1B) == Decimal("1980.09")
 
-    # Reset poste 3
-    r = client.post("/api/tarif-poste/reset/3")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["poste_numero"] == 3
-    assert body["n_reset"] == 4  # cliche + 3 outillage
+    # Restauration de la valeur démo (équivalent fonctionnel du reset legacy)
+    r = client.put(
+        "/api/strategique/couts", json={"outil_base_eur": 200.00}
+    )
+    assert r.status_code == 200, r.text
+    assert float(r.json()["outil_base_eur"]) == 200.0
 
-    # V1b retombé à la valeur EXACT seedée
+    # V1b retombé à la valeur démo EXACT (sacré)
     assert _calculer(_PAYLOAD_V1B) == Decimal("1921.09")
 
 
