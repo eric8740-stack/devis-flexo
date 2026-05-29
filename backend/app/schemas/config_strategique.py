@@ -24,6 +24,17 @@ class ConfigCoutsBase(BaseModel):
     marge_standard_pct: float = Field(ge=0, le=100)
     buffer_rebut_pct: float = Field(ge=0, le=100)
     buffer_setup_pct: float = Field(ge=0, le=100)
+    # Phase 2 Lot 4a — tarifs P1/P3/P4/P6 migrés depuis TarifPoste.
+    # `surcout_forme_speciale_facteur` est un MULTIPLICATEUR direct
+    # (1.30 = +30 %), pas un pourcentage — la valeur entre dans la formule
+    # `cout_outil_base × facteur`. Borne haute 10.0 raisonnable (= +900 %).
+    marge_confort_roulage_mm: int = Field(ge=0)
+    cliche_prix_couleur_eur: float = Field(ge=0)
+    outil_base_eur: float = Field(ge=0)
+    outil_par_trace_eur: float = Field(ge=0)
+    surcout_forme_speciale_facteur: float = Field(ge=1.0, le=10.0)
+    calage_forfait_eur: float = Field(ge=0)
+    finitions_prix_m2_eur: float = Field(ge=0)
 
 
 class ConfigCoutsRead(ConfigCoutsBase):
@@ -44,6 +55,16 @@ class ConfigCoutsUpdate(BaseModel):
     marge_standard_pct: float | None = Field(default=None, ge=0, le=100)
     buffer_rebut_pct: float | None = Field(default=None, ge=0, le=100)
     buffer_setup_pct: float | None = Field(default=None, ge=0, le=100)
+    # Phase 2 Lot 4a
+    marge_confort_roulage_mm: int | None = Field(default=None, ge=0)
+    cliche_prix_couleur_eur: float | None = Field(default=None, ge=0)
+    outil_base_eur: float | None = Field(default=None, ge=0)
+    outil_par_trace_eur: float | None = Field(default=None, ge=0)
+    surcout_forme_speciale_facteur: float | None = Field(
+        default=None, ge=1.0, le=10.0
+    )
+    calage_forfait_eur: float | None = Field(default=None, ge=0)
+    finitions_prix_m2_eur: float | None = Field(default=None, ge=0)
 
 
 # ---------------------------------------------------------------------------

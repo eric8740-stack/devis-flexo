@@ -62,6 +62,38 @@ class ConfigCouts(Base):
         Numeric(5, 2), nullable=False, default=Decimal("1.00")
     )
 
+    # Phase 2 Lot 4a — tarifs P1/P3/P4/P6 migrés depuis TarifPoste vers
+    # ConfigCouts (source unique par tenant). Defaults template neutres
+    # comme Lot 3 ; les tenants existants (seed démo) sont alignés par
+    # UPDATE legacy en migration.
+    # P1 : marge de confort surface support, en mm (entier).
+    marge_confort_roulage_mm: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=10
+    )
+    # P3a : prix d'un cliché par couleur.
+    cliche_prix_couleur_eur: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), nullable=False, default=Decimal("30.00")
+    )
+    # P3b : forfait nouvel outil + supplément par trace + facteur forme spé.
+    # Le facteur est un MULTIPLICATEUR direct (1.30 = +30 %), pas un %.
+    outil_base_eur: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("150.00")
+    )
+    outil_par_trace_eur: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), nullable=False, default=Decimal("40.00")
+    )
+    surcout_forme_speciale_facteur: Mapped[Decimal] = mapped_column(
+        Numeric(4, 2), nullable=False, default=Decimal("1.30")
+    )
+    # P4 : forfait calage devis.
+    calage_forfait_eur: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("180.00")
+    )
+    # P6 : prix m² finitions (€/m² fin → 4 décimales utiles).
+    finitions_prix_m2_eur: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), nullable=False, default=Decimal("0.1000")
+    )
+
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

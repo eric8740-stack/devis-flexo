@@ -1,7 +1,7 @@
 """Poste 1 — Matière.
 
 Formule :
-    laize_machine_mm = laize_utile_mm + tarif("marge_confort_roulage_mm")
+    laize_machine_mm = laize_utile_mm + ConfigCouts.marge_confort_roulage_mm
     surface_support_m2 = (laize_machine_mm / 1000) × ml_total
     poids_kg = surface_support_m2 × grammage_g_m2 / 1000
     cout = poids_kg × prix_kg
@@ -11,12 +11,19 @@ prix_kg : dérivé de complexe.prix_m2_eur si défini, fallback tarif global.
         prix_kg = prix_m2_eur × 1000 / grammage_g_m2
         details["prix_kg_source"] = "complexe_derived"
     Sinon :
-        prix_kg = tarif("matiere_prix_kg_defaut")
+        prix_kg = tarif("matiere_prix_kg_defaut")    ← reste sur TarifPoste
         details["prix_kg_source"] = "fallback_tarif_global"
 
 Justification dérivation : le métier flexo raisonne au kg (rouleaux pesés),
 mais les fournisseurs facturent au m². On expose le passage par prix_kg
 pour rester défendable en démo.
+
+Phase 2 Lot 4a (2026-05-29) : la marge de confort passe de `TarifPoste.cle=
+"marge_confort_roulage_mm"` (legacy, déprécié) à `ConfigCouts.marge_confort_
+roulage_mm` (Stratégique, scopée tenant). Le fallback prix_kg
+`matiere_prix_kg_defaut` reste sur `TarifPoste` (chemin rare ; depuis Lot 1
+complexe enrichi, tous les complexes démo ont prix_m2_eur + grammage — le
+fallback n'est plus exécuté en pratique, migration séparée si nécessaire).
 """
 import logging
 from decimal import Decimal
@@ -27,6 +34,7 @@ from app.crud.tarif_poste import get_by_cle
 from app.models import Complexe
 from app.schemas.devis import DevisInput
 from app.schemas.poste_result import PosteResult
+from app.services.cost_engine._config_reader import get_config_couts_or_raise
 from app.services.cost_engine.errors import CostEngineError
 
 logger = logging.getLogger(__name__)
@@ -37,7 +45,8 @@ class CalculateurPoste1Matiere:
     LIBELLE = "Matière"
 
     def __init__(self, db: Session, entreprise_id: int) -> None:
-        """Sprint 12-C : `entreprise_id` requis pour scoper tarif_poste."""
+        """Sprint 12-C : `entreprise_id` requis pour scoper ConfigCouts +
+        le fallback TarifPoste matiere_prix_kg_defaut."""
         self.db = db
         self.entreprise_id = entreprise_id
 
@@ -48,14 +57,8 @@ class CalculateurPoste1Matiere:
                 f"Complexe id={devis.complexe_id} introuvable"
             )
 
-        tarif_marge = get_by_cle(
-            self.db, "marge_confort_roulage_mm", self.entreprise_id
-        )
-        if tarif_marge is None:
-            raise CostEngineError(
-                "Tarif 'marge_confort_roulage_mm' introuvable — seed manquant"
-            )
-        marge_mm = int(tarif_marge.valeur_defaut)
+        config = get_config_couts_or_raise(self.db, self.entreprise_id)
+        marge_mm = int(config.marge_confort_roulage_mm)
 
         # Dérivation prix_kg depuis le complexe, fallback tarif global
         prix_kg, prix_kg_source = self._resolve_prix_kg(complexe)

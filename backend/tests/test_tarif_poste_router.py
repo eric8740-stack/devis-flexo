@@ -140,33 +140,57 @@ def test_post_reset_invalid_poste_returns_422():
     assert response.status_code == 422
 
 
-def test_put_tarif_then_engine_reflects_new_value_v1b():
-    """Garde-fou métier : modifier outil_base_eur via API change V1b nouvel outil.
+_PAYLOAD_V1B = {
+    "complexe_id": 31,
+    "laize_utile_mm": 220,
+    "ml_total": 3000,
+    "nb_couleurs_par_type": {"process_cmj": 4, "pantone": 1},
+    "machine_id": 1,
+    "outil_decoupe_existant": False,
+    "nb_traces_complexite": 4,
+    "forme_speciale": False,
+    "forfaits_st": [{"partenaire_st_id": 1, "montant_eur": "50.00"}],
+}
 
-    V1b initial = 1 921,09 € (outil_base 200). Si on passe outil_base à 250 :
-    nouveau cout_3b = 250 + 4×50 = 450 (vs 400). Donc P3 augmente de 50 €,
-    cout_revient + 50, prix_HT + 50×1.18 = 59 €, total ≈ 1 980,09 €.
 
-    Préserve la cohérence du moteur après refactor Lot 9b.
+def test_put_tarif_outil_base_eur_no_longer_affects_engine_v1b_lot4a():
+    """Phase 2 Lot 4a — TarifPoste.outil_base_eur est DÉPRÉCIÉE.
+
+    Le moteur ne lit plus cette table pour P3 ; il lit `ConfigCouts.
+    outil_base_eur`. Donc un PUT sur l'API TarifPoste n'a plus d'effet sur
+    le résultat du calcul — V1b reste à 1 921,09 € malgré la modification.
+
+    (Ancien contrat S9 v2 : V1b passait à 1 980,09 € après PUT 200→250.
+    On documente ici la rupture volontaire du contrat avec la dépréciation.)
     """
-    # Modifier outil_base_eur 200 → 250
-    r = client.put("/api/tarif-poste/outil_base_eur", json={"valeur_defaut": "250.00"})
+    # PUT TarifPoste 200 → 250 (legacy, désormais sans effet moteur)
+    r = client.put(
+        "/api/tarif-poste/outil_base_eur", json={"valeur_defaut": "250.00"}
+    )
     assert r.status_code == 200
-    # Recalculer V1b nouvel outil
-    payload_v1b = {
-        "complexe_id": 31,
-        "laize_utile_mm": 220,
-        "ml_total": 3000,
-        "nb_couleurs_par_type": {"process_cmj": 4, "pantone": 1},
-        "machine_id": 1,
-        "outil_decoupe_existant": False,
-        "nb_traces_complexite": 4,
-        "forme_speciale": False,
-        "forfaits_st": [{"partenaire_st_id": 1, "montant_eur": "50.00"}],
-    }
-    r = client.post("/api/cost/calculer", json=payload_v1b)
+    # V1b inchangé : le moteur lit ConfigCouts (200 € seedé démo)
+    r = client.post("/api/cost/calculer", json=_PAYLOAD_V1B)
     assert r.status_code == 200
     prix_ht = Decimal(str(r.json()["prix_vente_ht_eur"]))
-    # V1b avant = 1921.09. Δ outil_base = +50 → Δ cout_revient = +50
-    # → Δ prix_HT = +50 × 1.18 = +59 → cible ≈ 1980.09 €
+    assert prix_ht == Decimal("1921.09"), (
+        f"V1b devrait rester EXACT à 1921.09 (TarifPoste déprécié), "
+        f"obtenu {prix_ht}"
+    )
+
+
+def test_put_strategique_couts_outil_base_affects_engine_v1b_lot4a():
+    """Phase 2 Lot 4a — contrat moderne : `PUT /api/strategique/couts` change
+    V1b. Équivalent fonctionnel de l'ancien `PUT /api/tarif-poste/outil_base_eur`,
+    avec la nouvelle source de vérité ConfigCouts."""
+    r = client.put(
+        "/api/strategique/couts", json={"outil_base_eur": 250.00}
+    )
+    assert r.status_code == 200, r.text
+    assert float(r.json()["outil_base_eur"]) == 250.0
+    # V1b reflète la nouvelle valeur ConfigCouts.
+    r = client.post("/api/cost/calculer", json=_PAYLOAD_V1B)
+    assert r.status_code == 200
+    prix_ht = Decimal(str(r.json()["prix_vente_ht_eur"]))
+    # Δ outil_base = +50 → Δ cout_revient = +50 → Δ prix_HT = +50 × 1.18
+    # = +59 → cible 1 980,09 €.
     assert prix_ht == Decimal("1980.09")
