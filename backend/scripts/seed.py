@@ -380,16 +380,20 @@ def seed_config_strategique(session: Session) -> int:
     session.add(
         ConfigCouts(
             entreprise_id=DEMO_ENTREPRISE_ID,
-            cout_exploitation_machine_eur_h=50.0,
-            cout_operateur_eur_h=25.0,
+            # Phase 2 Lot 3 — alignement legacy : P5 Roulage et P7 MO basculent
+            # sur ConfigCouts (au lieu des TarifPoste roulage_prix_horaire=375
+            # et mo_prix_horaire=70 € dépréciés). Le seed démo reflète ces
+            # valeurs ICE historiques pour préserver V1a 1 449,09 €. Les
+            # défauts template du modèle (50/25) restent appliqués aux
+            # nouveaux tenants (onboarding).
+            cout_exploitation_machine_eur_h=375.0,
+            cout_operateur_eur_h=70.0,
             cout_energies_eur_h=3.5,
             cout_fixe_atelier_eur_mois=2500.0,
             cout_fixe_maintenance_eur_mois=800.0,
             # Phase 2 Lot 2 — alignement legacy : la marge du tenant démo passe
             # de 35 % (template neutre par défaut) à 18 %, valeur historique
-            # ICE de `Entreprise.pct_marge_defaut`. Préserve V1a 1 449,09 € et
-            # le coût des devis seedés. Le défaut 35 % du modèle reste appliqué
-            # aux nouveaux tenants (onboarding).
+            # ICE de `Entreprise.pct_marge_defaut`.
             marge_standard_pct=18.0,
             buffer_rebut_pct=2.5,
             buffer_setup_pct=1.0,

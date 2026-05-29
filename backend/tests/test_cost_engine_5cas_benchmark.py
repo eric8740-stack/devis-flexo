@@ -147,9 +147,14 @@ _FIXTURE_ENTREPRISE: dict = {
 # par le moteur dans ce lot (à brancher dans les lots Phase 2 suivants).
 _FIXTURE_CONFIG_COUTS: dict = {
     "id": 1,
+    # Marge (Phase 2 Lot 2) — alignée sur l'ancien Entreprise.pct_marge_defaut.
     "marge_standard_pct": Decimal("18.00"),
-    "cout_exploitation_machine_eur_h": Decimal("50.00"),
-    "cout_operateur_eur_h": Decimal("25.00"),
+    # Phase 2 Lot 3 — P5 Roulage et P7 MO basculent sur ConfigCouts. Les
+    # valeurs ICE legacy étaient TarifPoste.roulage_prix_horaire=375 €/h et
+    # mo_prix_horaire=70 €/h ; on les seede ici à l'identique pour préserver
+    # V1a 1 449,09 € par construction.
+    "cout_exploitation_machine_eur_h": Decimal("375.00"),
+    "cout_operateur_eur_h": Decimal("70.00"),
     "cout_energies_eur_h": Decimal("3.50"),
     "cout_fixe_atelier_eur_mois": Decimal("2500.00"),
     "cout_fixe_maintenance_eur_mois": Decimal("800.00"),
