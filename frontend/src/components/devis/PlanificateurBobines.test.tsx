@@ -355,4 +355,174 @@ describe("PlanificateurBobines — finition (persistance + Q + forçage)", () =>
       "/optimisation?devis_id=777&q=10002",
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Extension : 3 modes IMPOSE mutex + surplus + 3 décisions
+  // ---------------------------------------------------------------------
+
+  it("3 modes IMPOSE rendus comme radios mutuellement exclusifs", async () => {
+    installFetchMock(buildResponseSimple());
+    render(
+      <PlanificateurBobines
+        devisId={42}
+        quantiteCommandee={10000}
+        nLaize={3}
+        pasMm={82}
+        mandrinMm={76}
+        diametreMaxBobineMm={200}
+        epaisseurMatiereUm={150}
+      />,
+    );
+    expect(screen.getByTestId("plan-bobines-mode-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("plan-bobines-mode-aucun")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await userEvent.click(screen.getByTestId("plan-bobines-mode-packaging"));
+    expect(screen.getByTestId("plan-bobines-mode-packaging")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("plan-bobines-mode-aucun")).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    // Inputs spécifiques au mode packaging visibles.
+    expect(screen.getByLabelText(/Nb bobines/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Étiquettes \/ bobine/)).toBeInTheDocument();
+  });
+
+  it("Mode packaging : bloc surplus + 3 boutons décision exposent les 3 options Q", async () => {
+    const resp: PlanificateurBobinesResponse = {
+      scenarios: [
+        {
+          cle: "IMPOSE",
+          titre: "Imposé client (40 bobines × 1000)",
+          repartition: [
+            { nb_etiq_par_bobine: 1000, nb_bobines_par_piste: 14, diametre_mm: 180 },
+          ],
+          nb_bobines_par_piste: 14,
+          nb_bobines_total: 42,
+          quantite_totale_etiq: 42_000,
+          surprod_etiq: 32_000,
+          q_ajustee: null,
+          cout_total_eur: null,
+          cout_machine_eur: null,
+          cout_mandrins_eur: null,
+          mode_mandrins_optimal: null,
+          nb_bobines_demande: 40,
+          surplus_bobines: 2,
+          surplus_etiq: 2_000,
+          q_si_facture: 42_000,
+          q_si_stock: 40_000,
+          q_si_reduire: 39_000,
+        },
+      ],
+      recommande_cle: null,
+      nb_max_par_bobine: 2239,
+      pas_mm: 82,
+      alerte_impose: null,
+    };
+    installFetchMock(resp);
+    render(
+      <PlanificateurBobines
+        devisId={42}
+        quantiteCommandee={10000}
+        nLaize={3}
+        pasMm={82}
+        mandrinMm={76}
+        diametreMaxBobineMm={200}
+        epaisseurMatiereUm={150}
+      />,
+    );
+    // Bloc surplus visible.
+    const surplus = await screen.findByTestId("plan-bobines-surplus-block");
+    expect(surplus).toHaveTextContent(/40/); // demandé
+    expect(surplus).toHaveTextContent(/42/); // produit
+    // 3 décisions présentes.
+    expect(screen.getByTestId("plan-bobines-decision-facture")).toHaveTextContent(
+      /42 000|42000/,
+    );
+    expect(screen.getByTestId("plan-bobines-decision-stock")).toHaveTextContent(
+      /40 000|40000/,
+    );
+    expect(screen.getByTestId("plan-bobines-decision-reduire")).toHaveTextContent(
+      /39 000|39000/,
+    );
+  });
+
+  it("Choisir IMPOSE avec décision = stock → PUT body porte impose_type=packaging + q_ajustee=q_si_stock", async () => {
+    const resp: PlanificateurBobinesResponse = {
+      scenarios: [
+        {
+          cle: "IMPOSE",
+          titre: "Imposé client (40 bobines × 1000)",
+          repartition: [
+            { nb_etiq_par_bobine: 1000, nb_bobines_par_piste: 14, diametre_mm: 180 },
+          ],
+          nb_bobines_par_piste: 14,
+          nb_bobines_total: 42,
+          quantite_totale_etiq: 42_000,
+          surprod_etiq: 32_000,
+          q_ajustee: null,
+          cout_total_eur: null,
+          cout_machine_eur: null,
+          cout_mandrins_eur: null,
+          mode_mandrins_optimal: null,
+          nb_bobines_demande: 40,
+          surplus_bobines: 2,
+          surplus_etiq: 2_000,
+          q_si_facture: 42_000,
+          q_si_stock: 40_000,
+          q_si_reduire: 39_000,
+        },
+      ],
+      recommande_cle: null,
+      nb_max_par_bobine: 2239,
+      pas_mm: 82,
+      alerte_impose: null,
+    };
+    installFetchMock(resp);
+    render(
+      <PlanificateurBobines
+        devisId={42}
+        quantiteCommandee={10000}
+        nLaize={3}
+        pasMm={82}
+        mandrinMm={76}
+        diametreMaxBobineMm={200}
+        epaisseurMatiereUm={150}
+      />,
+    );
+    // Activer le mode packaging (pour que le composant passe impose_type=packaging).
+    await userEvent.click(
+      await screen.findByTestId("plan-bobines-mode-packaging"),
+    );
+    // Sélectionner la décision "stock".
+    await userEvent.click(
+      await screen.findByTestId("plan-bobines-decision-stock"),
+    );
+    // Choisir le scénario IMPOSE.
+    await userEvent.click(await screen.findByTestId("plan-bobines-btn-IMPOSE"));
+
+    await waitFor(() => {
+      const putCalls = fetchSpy.mock.calls.filter(
+        (c) =>
+          String(c[0]).endsWith("/plan-bobines") &&
+          (c[1] as RequestInit)?.method === "PUT",
+      );
+      expect(putCalls.length).toBeGreaterThan(0);
+    });
+    const putCall = fetchSpy.mock.calls.find(
+      (c) =>
+        String(c[0]).endsWith("/plan-bobines") &&
+        (c[1] as RequestInit)?.method === "PUT",
+    );
+    const body = JSON.parse((putCall?.[1] as RequestInit).body as string);
+    expect(body.impose_type).toBe("packaging");
+    expect(body.decision_surplus).toBe("stock");
+    expect(body.q_ajustee).toBe(40_000);
+    expect(body.nb_bobines_demande).toBe(40);
+    expect(body.surplus_bobines).toBe(2);
+  });
 });

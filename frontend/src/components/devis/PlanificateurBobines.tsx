@@ -28,6 +28,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   planifierBobines,
   sauvegarderPlanBobines,
+  type DecisionSurplus,
+  type ImposeType,
   type PlanBobinesSelectionIn,
   type PlanificateurBobinesRequest,
   type PlanificateurBobinesResponse,
@@ -100,11 +102,36 @@ export function PlanificateurBobines({
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
-  const [nbImposeInput, setNbImposeInput] = useState<string>(
-    initialSelection?.scenario === "IMPOSE"
+  // Mode IMPOSE actif : "aucun" (par défaut, scénarios A/B/C seuls) ou 1
+  // des 3 modes mutuellement exclusifs. Restauré au reload selon
+  // `initialSelection.impose_type`.
+  const initialImposeMode: "aucun" | ImposeType =
+    initialSelection?.impose_type ??
+    (initialSelection?.scenario === "IMPOSE" ? "nb_etiq" : "aucun");
+  const [imposeMode, setImposeMode] = useState<"aucun" | ImposeType>(
+    initialImposeMode,
+  );
+  const [nbEtiqImposeInput, setNbEtiqImposeInput] = useState<string>(
+    initialSelection?.scenario === "IMPOSE" &&
+      initialSelection.impose_type === "nb_etiq"
       ? String(initialSelection.nb_bobine)
       : "",
   );
+  const [nbBobinesImposeInput, setNbBobinesImposeInput] = useState<string>(
+    initialSelection?.nb_bobines_demande !== undefined &&
+      initialSelection?.nb_bobines_demande !== null
+      ? String(initialSelection.nb_bobines_demande)
+      : "",
+  );
+  const [packagingEtiqInput, setPackagingEtiqInput] = useState<string>(
+    initialSelection?.impose_type === "packaging"
+      ? String(initialSelection.nb_bobine)
+      : "",
+  );
+  const [decisionSurplus, setDecisionSurplus] =
+    useState<DecisionSurplus | null>(
+      initialSelection?.decision_surplus ?? null,
+    );
   const [result, setResult] = useState<PlanificateurBobinesResponse | null>(
     null,
   );
@@ -151,19 +178,37 @@ export function PlanificateurBobines({
       return;
     }
     let cancelled = false;
-    const nbImpose = nbImposeInput.trim()
-      ? parseInt(nbImposeInput, 10)
-      : null;
+    // Dispatch selon le mode IMPOSE actif. Mutex enforced côté backend
+    // aussi (422 sinon), mais ici on garantit déjà la cohérence des
+    // params envoyés.
+    const nbEtiq = parseInt(nbEtiqImposeInput.trim(), 10);
+    const nbBob = parseInt(nbBobinesImposeInput.trim(), 10);
+    const packEtiq = parseInt(packagingEtiqInput.trim(), 10);
+    const req: PlanificateurBobinesRequest = {
+      quantite_commandee: quantiteCommandee,
+      n_laize: nLaize,
+      pas_mm: pasMm,
+      mandrin_mm: mandrinMm,
+      diametre_max_bobine_mm: diametreMaxBobineMm!,
+      epaisseur_matiere_um: epaisseurMatiereUm!,
+      nb_etiq_impose:
+        imposeMode === "nb_etiq" && Number.isFinite(nbEtiq) && nbEtiq > 0
+          ? nbEtiq
+          : null,
+      nb_bobines_impose:
+        (imposeMode === "nb_bobines" || imposeMode === "packaging") &&
+        Number.isFinite(nbBob) &&
+        nbBob > 0
+          ? nbBob
+          : null,
+      packaging_nb_etiq_par_bobine:
+        imposeMode === "packaging" &&
+        Number.isFinite(packEtiq) &&
+        packEtiq > 0
+          ? packEtiq
+          : null,
+    };
     const handle = setTimeout(() => {
-      const req: PlanificateurBobinesRequest = {
-        quantite_commandee: quantiteCommandee,
-        n_laize: nLaize,
-        pas_mm: pasMm,
-        mandrin_mm: mandrinMm,
-        diametre_max_bobine_mm: diametreMaxBobineMm!,
-        epaisseur_matiere_um: epaisseurMatiereUm!,
-        nb_etiq_impose: nbImpose && nbImpose > 0 ? nbImpose : null,
-      };
       setChargement(true);
       planifierBobines(req)
         .then((res) => {
@@ -193,7 +238,10 @@ export function PlanificateurBobines({
     mandrinMm,
     diametreMaxBobineMm,
     epaisseurMatiereUm,
-    nbImposeInput,
+    imposeMode,
+    nbEtiqImposeInput,
+    nbBobinesImposeInput,
+    packagingEtiqInput,
     inputsManquants.length,
   ]);
 
@@ -214,14 +262,40 @@ export function PlanificateurBobines({
       });
       return;
     }
+    // q_ajustee selon le mode :
+    //   - C_inf / C_sup : valeur native du scénario.
+    //   - IMPOSE nb_bobines/packaging avec décision surplus : Q dérivée.
+    //   - sinon : null (pas de modification de la Q du devis).
+    let qAjusteePersist: number | null = scenario.q_ajustee ?? null;
+    let imposeTypePersist = scenario.cle === "IMPOSE" ? imposeMode : null;
+    if (imposeTypePersist === "aucun") imposeTypePersist = null;
+    let decisionPersist: DecisionSurplus | null = null;
+    if (
+      scenario.cle === "IMPOSE" &&
+      (imposeMode === "nb_bobines" || imposeMode === "packaging") &&
+      decisionSurplus !== null
+    ) {
+      decisionPersist = decisionSurplus;
+      if (decisionSurplus === "facture") {
+        qAjusteePersist = scenario.q_si_facture ?? null;
+      } else if (decisionSurplus === "stock") {
+        qAjusteePersist = scenario.q_si_stock ?? null;
+      } else if (decisionSurplus === "reduire") {
+        qAjusteePersist = scenario.q_si_reduire ?? null;
+      }
+    }
     const body: PlanBobinesSelectionIn = {
       scenario: scenario.cle,
       nb_bobine: scenario.repartition[0]?.nb_etiq_par_bobine ?? 0,
       nb_bobines_total: scenario.nb_bobines_total,
       politique_reliquat: POLITIQUE_PAR_SCENARIO[scenario.cle],
-      q_ajustee: scenario.q_ajustee,
+      q_ajustee: qAjusteePersist,
       force_diametre: forcer ? true : null,
       motif_forcage: forcer ? motif : null,
+      impose_type: imposeTypePersist,
+      nb_bobines_demande: scenario.nb_bobines_demande ?? null,
+      surplus_bobines: scenario.surplus_bobines ?? null,
+      decision_surplus: decisionPersist,
     };
     setPersisting(true);
     sauvegarderPlanBobines(devisId, body)
@@ -266,31 +340,119 @@ export function PlanificateurBobines({
 
   return (
     <div className="space-y-3" data-testid="plan-bobines">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
+      <header className="space-y-2">
         <div>
           <h4 className="text-sm font-semibold">Plan de bobines</h4>
           <p className="text-xs text-muted-foreground">
             Interne · {result ? `nb max physique : ${result.nb_max_par_bobine} étiq` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Label
-            htmlFor="plan-bobines-impose"
-            className="text-xs text-muted-foreground"
-          >
-            Nb/bobine imposé client
-          </Label>
-          <Input
-            id="plan-bobines-impose"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            placeholder="optionnel"
-            className="h-8 w-24 text-sm"
-            value={nbImposeInput}
-            onChange={(e) => setNbImposeInput(e.target.value)}
-          />
+        {/* 3 modes IMPOSE mutuellement exclusifs (un seul à la fois).
+            Le commerciale choisit le mode selon la contrainte client :
+              - aucun (par défaut) : scénarios A/B/C seuls
+              - nb_etiq : « 1500 étiq/bobine »
+              - nb_bobines : « 40 bobines »
+              - packaging : « 40 bobines × 1000 étiq » (les 2)
+            Le backend rejette en 422 si plusieurs modes simultanés. */}
+        <div
+          role="radiogroup"
+          aria-label="Mode imposé client"
+          data-testid="plan-bobines-mode-selector"
+          className="flex flex-wrap gap-2 text-xs"
+        >
+          {(
+            [
+              ["aucun", "Aucun"],
+              ["nb_etiq", "Nb/bobine"],
+              ["nb_bobines", "Nb bobines"],
+              ["packaging", "Packaging (N × X)"],
+            ] as const
+          ).map(([mode, label]) => {
+            const active = imposeMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                data-testid={`plan-bobines-mode-${mode}`}
+                onClick={() => setImposeMode(mode)}
+                className={
+                  "rounded-full border px-3 py-1 transition " +
+                  (active
+                    ? "border-blue-600 bg-blue-50 font-medium text-blue-900"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/40")
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
+        {imposeMode !== "aucun" && (
+          <div className="flex flex-wrap items-end gap-3">
+            {imposeMode === "nb_etiq" && (
+              <div className="flex flex-col gap-1">
+                <Label
+                  htmlFor="plan-bobines-nb-etiq"
+                  className="text-xs text-muted-foreground"
+                >
+                  Nb étiquettes / bobine
+                </Label>
+                <Input
+                  id="plan-bobines-nb-etiq"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder="ex : 1500"
+                  className="h-8 w-32 text-sm"
+                  value={nbEtiqImposeInput}
+                  onChange={(e) => setNbEtiqImposeInput(e.target.value)}
+                />
+              </div>
+            )}
+            {(imposeMode === "nb_bobines" || imposeMode === "packaging") && (
+              <div className="flex flex-col gap-1">
+                <Label
+                  htmlFor="plan-bobines-nb-bobines"
+                  className="text-xs text-muted-foreground"
+                >
+                  Nb bobines
+                </Label>
+                <Input
+                  id="plan-bobines-nb-bobines"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder="ex : 40"
+                  className="h-8 w-32 text-sm"
+                  value={nbBobinesImposeInput}
+                  onChange={(e) => setNbBobinesImposeInput(e.target.value)}
+                />
+              </div>
+            )}
+            {imposeMode === "packaging" && (
+              <div className="flex flex-col gap-1">
+                <Label
+                  htmlFor="plan-bobines-pack-etiq"
+                  className="text-xs text-muted-foreground"
+                >
+                  Étiquettes / bobine
+                </Label>
+                <Input
+                  id="plan-bobines-pack-etiq"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder="ex : 1000"
+                  className="h-8 w-32 text-sm"
+                  value={packagingEtiqInput}
+                  onChange={(e) => setPackagingEtiqInput(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Alerte anti-fléau : nb_impose > nb_max physique. */}
@@ -337,6 +499,16 @@ export function PlanificateurBobines({
             motifForcage={motifForcage}
             onChangeMotif={setMotifForcage}
             persisting={persisting}
+            // Décision surplus (IMPOSE nb_bobines/packaging uniquement). La
+            // décision pilote la Q persistée (facture=production, stock=
+            // demande, reduire=multiple inférieur de n_laize sous demande).
+            decisionSurplus={
+              sc.cle === "IMPOSE" &&
+              (imposeMode === "nb_bobines" || imposeMode === "packaging")
+                ? decisionSurplus
+                : null
+            }
+            onChangeDecisionSurplus={setDecisionSurplus}
             onChoisir={() => persisterChoix(sc, false)}
             onForcer={() => persisterChoix(sc, true)}
             onAppliquerQ={
@@ -361,6 +533,8 @@ function ScenarioCard({
   motifForcage,
   onChangeMotif,
   persisting,
+  decisionSurplus,
+  onChangeDecisionSurplus,
   onChoisir,
   onForcer,
   onAppliquerQ,
@@ -374,6 +548,8 @@ function ScenarioCard({
   motifForcage: string;
   onChangeMotif: (v: string) => void;
   persisting: boolean;
+  decisionSurplus: DecisionSurplus | null;
+  onChangeDecisionSurplus: (d: DecisionSurplus) => void;
   onChoisir: () => void;
   onForcer: () => void;
   onAppliquerQ?: () => void;
@@ -451,6 +627,81 @@ function ScenarioCard({
           </li>
         )}
       </ul>
+
+      {/* Bloc surplus : visible UNIQUEMENT pour IMPOSE nb_bobines / packaging
+          quand l'opérateur a demandé un nb précis. Affiche le delta entre
+          la production réelle (sortie machine, multiple n_laize) et la
+          demande client, plus les 3 options de décision sur ce surplus. */}
+      {scenario.cle === "IMPOSE" &&
+        scenario.nb_bobines_demande !== null &&
+        scenario.nb_bobines_demande !== undefined && (
+          <div
+            data-testid="plan-bobines-surplus-block"
+            className="mt-2 space-y-1.5 rounded border border-amber-300 bg-amber-50/60 p-2 text-xs"
+          >
+            <p>
+              <span className="text-muted-foreground">Demandé :</span>{" "}
+              <strong>{scenario.nb_bobines_demande}</strong> bobines
+              {" · "}
+              <span className="text-muted-foreground">Produit :</span>{" "}
+              <strong>{scenario.nb_bobines_total}</strong> bobines
+              {" · "}
+              <span className="text-muted-foreground">Surplus :</span>{" "}
+              <strong>{scenario.surplus_bobines ?? 0}</strong> bobines /{" "}
+              <strong>{scenario.surplus_etiq ?? 0}</strong> étiq
+            </p>
+            {(scenario.surplus_bobines ?? 0) > 0 && (
+              <div className="space-y-1">
+                <p className="text-muted-foreground">
+                  Décision sur le surplus :
+                </p>
+                <div
+                  role="radiogroup"
+                  aria-label="Décision sur le surplus"
+                  data-testid="plan-bobines-decision-surplus"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  {(
+                    [
+                      [
+                        "facture",
+                        `Facturer (${scenario.q_si_facture ?? "—"})`,
+                      ],
+                      [
+                        "stock",
+                        `Stock (${scenario.q_si_stock ?? "—"})`,
+                      ],
+                      [
+                        "reduire",
+                        `Réduire (${scenario.q_si_reduire ?? "—"})`,
+                      ],
+                    ] as const
+                  ).map(([decision, label]) => {
+                    const active = decisionSurplus === decision;
+                    return (
+                      <button
+                        key={decision}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        data-testid={`plan-bobines-decision-${decision}`}
+                        onClick={() => onChangeDecisionSurplus(decision)}
+                        className={
+                          "rounded border px-2 py-1 transition " +
+                          (active
+                            ? "border-blue-600 bg-blue-50 font-medium text-blue-900"
+                            : "border-border bg-white text-foreground hover:bg-muted/40")
+                        }
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* Forçage IMPOSE : motif obligatoire (anti-fléau, traçabilité). */}
       {estImposeCarte && estImpossible && (

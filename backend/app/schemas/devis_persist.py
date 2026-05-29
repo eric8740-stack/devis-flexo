@@ -405,11 +405,44 @@ class PlanificateurBobinesRequest(BaseModel):
     mandrin_mm: int = Field(gt=0, le=500)
     diametre_max_bobine_mm: float = Field(gt=0, le=2000)
     epaisseur_matiere_um: float = Field(gt=0, le=10000)
-    # Scénario imposé — anti-fléau. Si None, pas de carte IMPOSE/alerte.
+    # Scénarios imposés — anti-fléau. 3 modes mutuellement exclusifs :
+    #   - `nb_etiq_impose` seul : étiq/bobine imposé, nb_bobines dérivé.
+    #   - `nb_bobines_impose` seul : nb_bobines imposé, étiq/bobine dérivé.
+    #   - `nb_bobines_impose + packaging_nb_etiq_par_bobine` : packaging
+    #     complet (les deux imposés). Surplus + 3 options Q exposés.
+    # Si tous None → pas de carte IMPOSE/alerte (scénarios A/B/C seuls).
     nb_etiq_impose: int | None = Field(default=None, ge=1)
+    nb_bobines_impose: int | None = Field(default=None, ge=1)
+    packaging_nb_etiq_par_bobine: int | None = Field(default=None, ge=1)
     # Cost rebobinage (LECTURE SEULE moteur). Optionnels — sans, pas de coût.
     machine_rebobineuse_id: int | None = None
     tarifs_mandrins: TarifsMandrinsIn | None = None
+
+    @model_validator(mode="after")
+    def _valider_modes_impose_mutex(self) -> "PlanificateurBobinesRequest":
+        """Mutex : un seul mode IMPOSE actif à la fois.
+
+        `packaging` = nb_bobines_impose ET packaging_nb_etiq_par_bobine.
+        Sinon mode `nb_bobines` ou `nb_etiq` seul. Le mode mixte
+        (nb_etiq + nb_bobines) est rejeté côté schema (422).
+        """
+        if self.nb_etiq_impose is not None and (
+            self.nb_bobines_impose is not None
+            or self.packaging_nb_etiq_par_bobine is not None
+        ):
+            raise ValueError(
+                "Modes IMPOSE mutuellement exclusifs : nb_etiq_impose ne "
+                "peut pas être combiné avec nb_bobines_impose / packaging."
+            )
+        if (
+            self.packaging_nb_etiq_par_bobine is not None
+            and self.nb_bobines_impose is None
+        ):
+            raise ValueError(
+                "Mode packaging incomplet : packaging_nb_etiq_par_bobine "
+                "fourni sans nb_bobines_impose. Les deux sont requis ensemble."
+            )
+        return self
 
 
 class RepartitionBobineOut(BaseModel):
@@ -429,7 +462,7 @@ class ScenarioBobinesOut(BaseModel):
     titre: str
     repartition: list[RepartitionBobineOut]
     nb_bobines_par_piste: int
-    nb_bobines_total: int
+    nb_bobines_total: int  # production RÉELLE (multiple de n_laize)
     quantite_totale_etiq: int
     surprod_etiq: int
     q_ajustee: int | None
@@ -438,6 +471,15 @@ class ScenarioBobinesOut(BaseModel):
     cout_machine_eur: Decimal | None
     cout_mandrins_eur: Decimal | None
     mode_mandrins_optimal: Literal["pre_coupe", "decoupe_interne"] | None
+    # --- Extension modes IMPOSE nb_bobines + packaging ---
+    # Renseigné UNIQUEMENT pour ces modes — sinon valeurs neutres.
+    nb_bobines_demande: int | None = None
+    surplus_bobines: int = 0
+    surplus_etiq: int = 0
+    # 3 options Q (None si mode non concerné par la décision surplus).
+    q_si_facture: int | None = None
+    q_si_stock: int | None = None
+    q_si_reduire: int | None = None
 
 
 class AlerteImposeOut(BaseModel):
@@ -486,6 +528,16 @@ class PlanBobinesSelectionIn(BaseModel):
     q_ajustee: int | None = Field(default=None, ge=1)
     force_diametre: bool | None = None
     motif_forcage: str | None = Field(default=None, max_length=500)
+    # --- Extension modes IMPOSE nb_bobines + packaging ---
+    # `impose_type` distingue les 3 modes IMPOSE. None = scénario A/B/C non
+    # IMPOSE (pas de demande client). `nb_bobines_demande` rappelle le
+    # quoi-demandé par le client (vs nb_bobines_total = production réelle).
+    # `decision_surplus` trace le choix du commercial (alimente la Q côté
+    # cost_engine lecture seule). `surplus_bobines` snapshot du diff.
+    impose_type: Literal["nb_etiq", "nb_bobines", "packaging"] | None = None
+    nb_bobines_demande: int | None = Field(default=None, ge=1)
+    surplus_bobines: int | None = Field(default=None, ge=0)
+    decision_surplus: Literal["facture", "stock", "reduire"] | None = None
 
     @model_validator(mode="after")
     def _valider_forcage(self) -> "PlanBobinesSelectionIn":
@@ -515,3 +567,8 @@ class PlanBobinesSelectionOut(BaseModel):
     q_ajustee: int | None = None
     force_diametre: bool | None = None
     motif_forcage: str | None = None
+    # Extension modes IMPOSE nb_bobines + packaging — mêmes champs qu'en In.
+    impose_type: Literal["nb_etiq", "nb_bobines", "packaging"] | None = None
+    nb_bobines_demande: int | None = None
+    surplus_bobines: int | None = None
+    decision_surplus: Literal["facture", "stock", "reduire"] | None = None
