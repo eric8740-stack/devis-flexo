@@ -6,16 +6,16 @@ Ce fichier sert de référence vivante du moteur de coût v2 :
   pour vérifier la cohérence métier en démo
 - Fige le total HT attendu pour détecter toute régression du moteur
 
-Cas-test médian calibré sur statistiques de production réelle (croisement
-Eric, 28 avril 2026, 1 301 dossiers analysés) :
+Cas-test médian calibré sur statistiques de production réelle
+(1 301 dossiers analysés, expertise flexographique terrain) :
 - Matière représentative ~25 % de la production réelle (papier vélin
   standard 80g) ; le COUCHE_BRILLANT_80 initial ne couvrait que 0.2 %.
 - Machine Mark Andy P5 — la plus utilisée du parc.
 - Tirage 3 000 ml — proche de la médiane sectorielle (3 348 ml).
 
-Total HT figé (1449.09 €) validé par Eric le 28 avril 2026 sur le
-rapport cost_breakdown.md généré. Si une modif du moteur fait bouger
-ce nombre, c'est volontaire et il faut ajuster ici.
+Total HT figé (1449.09 €) validé sur le rapport cost_breakdown.md
+généré (tarifs métier figés). Si une modif du moteur fait bouger ce
+nombre, c'est volontaire et il faut ajuster ici.
 
 Choix des paramètres du cas médian :
 - Complexe id=31 (VELIN_STANDARD_80, papier 80g/m², 0.35 €/m²)
