@@ -22,11 +22,12 @@ class MachineBase(BaseModel):
     duree_calage_h: float | None = Field(default=None, ge=0)
     # B1 — champs optim absorbes depuis MachineImprimerie (migration
     # z0p4n6r8s1t3). Tenant demo seede par data migration (laize_utile :=
-    # laize_max, vitesse_pratique := vitesse_max). Nouveaux tenants :
-    # nullable -> a completer via UI B2.
+    # laize_max). Nouveaux tenants : nullable -> a completer via UI B2.
+    # B2 : `vitesse_pratique_m_min` (colonne DB conservee, deprecation
+    # progressive) NE figure PAS dans l'API. L'optim derivera de
+    # `vitesse_moyenne_m_h / 60` en B3 (drop colonne au meme lot).
     laize_utile_mm: Decimal | None = Field(default=None, gt=0)
     nb_postes_decoupe: int = Field(default=1, ge=1, le=4)
-    vitesse_pratique_m_min: int | None = Field(default=None, gt=0)
     options: list[str] = Field(default_factory=list)
     # Sprint 9 v2 — soft delete uniformisé Boolean (refactor depuis statut String)
     actif: bool = True
@@ -57,7 +58,6 @@ class MachineUpdate(BaseModel):
     duree_calage_h: float | None = Field(default=None, ge=0)
     laize_utile_mm: Decimal | None = Field(default=None, gt=0)
     nb_postes_decoupe: int | None = Field(default=None, ge=1, le=4)
-    vitesse_pratique_m_min: int | None = Field(default=None, gt=0)
     options: list[str] | None = None
     actif: bool | None = None
     commentaire: str | None = None

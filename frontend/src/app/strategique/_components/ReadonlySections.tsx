@@ -51,7 +51,7 @@ export function MachinesSection() {
         <TableHeader>
           <TableRow>
             <TableHead>Référence</TableHead>
-            <TableHead>Vitesse max (m/min)</TableHead>
+            <TableHead>Vitesse réelle (m/min)</TableHead>
             <TableHead>Coût exploitation (€/h)</TableHead>
             <TableHead>Durée calage (h)</TableHead>
           </TableRow>
@@ -60,7 +60,14 @@ export function MachinesSection() {
           {(rows ?? []).map((m) => (
             <TableRow key={m.id}>
               <TableCell>{m.nom}</TableCell>
-              <TableCell>{fmt(m.vitesse_max_m_min)}</TableCell>
+              {/* B2 : aligné sur /machines — `vitesse_moyenne_m_h ÷ 60`
+                  (et non plus `vitesse_max_m_min` qui n'alimente aucun
+                  chiffrage). Les 2 pages affichent la même valeur. */}
+              <TableCell>
+                {m.vitesse_moyenne_m_h != null
+                  ? Math.round(m.vitesse_moyenne_m_h / 60)
+                  : "—"}
+              </TableCell>
               <TableCell>{fmt(m.cout_horaire_eur)}</TableCell>
               <TableCell>{fmt(m.duree_calage_h)}</TableCell>
             </TableRow>

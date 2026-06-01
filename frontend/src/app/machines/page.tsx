@@ -97,11 +97,12 @@ export default function MachinesPage() {
     },
     { key: "nb_groupes_couleurs", label: "Nb couleurs" },
     {
-      // Mini-fix vitesse-machine 05/05/2026 : on affiche la VRAIE vitesse
-      // utilisée par le moteur (vitesse_moyenne_m_h ÷ 60), pas la valeur
-      // catalogue indicative `vitesse_max_m_min` qui n'impacte pas le calcul.
+      // B2 : « Vitesse réelle » (m/min). Une seule vitesse réelle par
+      // machine, lue depuis `vitesse_moyenne_m_h ÷ 60`. Pilote chiffrage
+      // ET optim. La page Stratégique > Machines doit afficher la même
+      // valeur sous le même label (cf. ReadonlySections.tsx).
       key: "vitesse_moyenne_m_h",
-      label: "Vitesse (m/min)",
+      label: "Vitesse réelle (m/min)",
       render: (m) =>
         m.vitesse_moyenne_m_h != null
           ? Math.round(m.vitesse_moyenne_m_h / 60)

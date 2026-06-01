@@ -17,6 +17,8 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- #80 — feat(machine): B1 enrichir Machine pour absorber les besoins optim (convergence option B)
+- #79 — docs(etat-projet): cleanup branches + PRs fermées + sacred fix #77/#78
 - #78 — fix(devis): update_devis préserve payload_output recalculé (pop conditionnel)
 - #77 — fix(devis): UNIQUE(devis.numero) scopée tenant + MAX+1 + retry loop (résout 409 sur hard-delete)
 - #75 — refactor(cost_engine): P1/P3/P4/P6 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 4a)
@@ -25,12 +27,10 @@
 - #72 — refactor(cost_engine): P7 et P5 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 3)
 - #71 — fix(devis): cohérence et planificateur utilisent l'épaisseur de la matière saisie
 - #70 — refactor(cost_engine): marge depuis `ConfigCouts` scopée tenant + fix isolation multi-tenant (Phase 2 / Lot 2)
-- #69 — fix(build): exclure les tests du `next build` + correctif `PlanificateurBobines.test.tsx`
-- #68 — feat(devis): persistance plan bobines + Q ajustée + forçage motif tracé
 
 ## PRs ouvertes
 
-- #80 — feat(machine): B1 enrichir Machine pour absorber les besoins optim (convergence option B)
+- #81 — feat(machine): B2 exposer champs optim Machine + harmoniser vitesse réelle (chiffrage ET optim)
 
 ## PRs récemment fermées (non mergées)
 
@@ -42,8 +42,8 @@
 
 ## Baseline tests
 
-- **pytest** : `1087 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-30 (branche `feat/machine-enrichir-champs-optim`, durée ≈ 336 s). +4 tests dédiés à B1 (`test_machine_b1_enrichir_optim.py`), +6 au fix update_devis, +4 au fix 409 numéro, +11 au Lot 4a.
-- **vitest** : `22 fichiers / 167 tests passed` — exécution locale 2026-05-29 ≈ 08:45 (durée ≈ 8 s, `npx vitest run`).
+- **pytest** : `1091 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-30 (branche `feat/machine-form-b2-saisie-optim`, durée ≈ 339 s). +4 tests B2 (`test_machines_modules_disponibles_b2.py`), +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a.
+- **vitest** : `23 fichiers / 172 tests passed` — locale 2026-05-30 (+1 fichier `MachineForm.test.tsx`, 5 tests B2).
 - **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69, gate brief : preview Vercel vert avant merge).
 
 ---
@@ -60,7 +60,8 @@
 
 ## En cours / à venir
 
-- **B1 convergence machines** (PR #80 ouverte) — `Machine` legacy enrichi des 4 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `vitesse_pratique_m_min`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs` aligné sur `MachineImprimerie`. Migration `z0p4n6r8s1t3` additive + 1 rename + data migration tenant démo (`laize_utile := laize_max`, `vitesse_pratique := vitesse_max`). Réversible. Champs SACRÉS (`laize_max_mm`, `vitesse_moyenne_m_h`, `duree_calage_h`) intacts → V1a 1 449,09 € EXACT préservé. Étapes restantes : **B2** UI pour saisir les vraies valeurs `laize_utile_mm` / `vitesse_pratique_m_min` / `nb_postes_decoupe` / `options` par machine ; **B3** repointer l'optim (`charger_machines_actives`) sur `Machine` puis déprécier `MachineImprimerie`.
+- **B2 convergence machines — exposition UI + harmonisation vitesse** (PR #81 ouverte) — UI MachineForm enrichie d'un bloc DISTINCT « Paramètres optimisation » : `laize_utile_mm`, `nb_postes_decoupe`, `options` (multi-select alimenté par nouveau endpoint `GET /api/machines/modules-disponibles` qui union les `OptionFabrication.modules_speciaux_requis` tenant + globaux). Pas d'input `vitesse_pratique_m_min` : décision actée « une seule vitesse réelle par machine » → `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim. Wording aligné : label « Vitesse réelle de production (m/min) » avec aide explicite. `vitesse_max_m_min` réétiqueté « Vitesse catalogue (m/min) » avec aide « Indicative (constructeur), n'affecte aucun calcul ». Harmonisation des récaps : `/machines` colonne « Vitesse réelle (m/min) » + Stratégique > Machines colonne « Vitesse réelle (m/min) » lue depuis `vitesse_moyenne_m_h ÷ 60` (au lieu de `vitesse_max_m_min`) → les 2 pages affichent désormais 100/58/75 cohérents.
+- **Dette `vitesse_pratique_m_min`** — colonne DB conservée (migration z0p4n6r8s1t3 B1) mais retirée de l'API (MachineCreate/Update/Read post B2). **Drop colonne prévu en B3** + le loader optim (`charger_machines_actives`) dérivera `vitesse_pratique` de `vitesse_moyenne_m_h ÷ 60` au moment du repointage sur `Machine`.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).
