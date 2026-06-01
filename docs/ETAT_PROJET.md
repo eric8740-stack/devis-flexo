@@ -30,7 +30,7 @@
 
 ## PRs ouvertes
 
-Aucune.
+- #82 — feat(optim): B3a repoint moteur sur `Machine` + vitesse réelle dérivée (`vitesse_moyenne_m_h ÷ 60`)
 
 ## PRs récemment fermées (non mergées)
 
@@ -42,8 +42,8 @@ Aucune.
 
 ## Baseline tests
 
-- **pytest** : `1091 passed`, 5 skipped, 21 warnings — main post-merge #81 (durée ≈ 339 s). +4 tests B2 (`test_machines_modules_disponibles_b2.py`), +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a. **Benchmark V1a 1 449,09 € EXACT** (11/11 sacrés).
-- **vitest** : `172/172 tests passed` (23/23 fichiers) — main post-merge #81 (+1 fichier `MachineForm.test.tsx`, 5 tests B2).
+- **pytest** : `1098 passed`, 5 skipped, 21 warnings — branche `feat/optim-repoint-machine-b3a` (durée ≈ 333 s). +7 tests B3a (`test_optim_loader_repoint_machine_b3a.py`), +4 B2, +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a. **Benchmark V1a 1 449,09 € + 5 cas + V8 : 13/13 EXACT**.
+- **vitest** : `172/172 tests passed` (23/23 fichiers) — branche `feat/optim-repoint-machine-b3a` (inchangé vs B2, B3a est 100 % backend).
 - **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69 + gate Vercel preview vert avant merge #81).
 
 ---
@@ -61,12 +61,11 @@ Aucune.
 
 ## En cours / à venir
 
-- **B3 convergence machines — repointer optim sur Machine + drop `vitesse_pratique_m_min`** (à venir) — étape 3 et dernière de la convergence option B :
-  - Migration alembic réversible : `DROP COLUMN machine.vitesse_pratique_m_min` (colonne DB conservée jusque-là, retirée de l'API depuis B2).
-  - Repointer `optimisation_loader.charger_machines_actives` (`backend/app/services/optimisation_loader.py`) sur la table `Machine` (au lieu de `MachineImprimerie`). Idem pour la lookup `nom_par_machine` dans `routers/optimisation.py:301-304`.
-  - Dériver `vitesse_pratique_m_min` à la volée dans le loader : `int(round(machine.vitesse_moyenne_m_h / 60))`.
-  - Déprécier `MachineImprimerie` (colonnes conservées, plus consommées — cleanup ultérieur).
-  - Tests : benchmark V1a 1 449,09 € EXACT, étape 2 « Candidats viables » montre les 3 machines parc réel (Mark Andy P5, Daco D250, Atelier 2) au lieu de Mark Andy 2200 catalogue.
+- **B3a convergence machines — repoint moteur optim sur `Machine`** (PR #82 ouverte) — `optimisation_loader.charger_machines_actives` lit désormais le parc réel `Machine` (P5/Daco/Atelier 2) au lieu de `MachineImprimerie` legacy (catalogue Mark Andy 2200 / OMET / Nilpeter). `vitesse_pratique_m_min` (dataclass moteur) dérivée à la volée : `round(vitesse_moyenne_m_h / 60)`. Lookup `nom_par_machine` dans `routers/optimisation.py:301-307` mise à jour. `MachineImprimerie` marquée **DÉPRÉCIÉE** dans le docstring du modèle (table conservée en BDD, plus lue côté application). Backend uniquement, pas de migration. 7 tests dédiés.
+- **B3b convergence machines — drop colonne et table MachineImprimerie** (à venir, après validation prod B3a) :
+  - Migration alembic réversible : `DROP COLUMN machine.vitesse_pratique_m_min` (colonne DB inutilisée depuis B2, dérivée à la volée depuis B3a).
+  - Évaluer le drop de la table `machine_imprimerie` (vérifier l'absence de FK orphelines depuis `lot_production`, `porte_cliche` ; data migration éventuelle).
+  - Critère succès : `MachineImprimerie` retirée du code applicatif + des modèles, baseline EXACT.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).

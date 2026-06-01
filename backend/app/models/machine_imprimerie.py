@@ -1,4 +1,20 @@
-"""Modèle MachineImprimerie — Sprint 13 Lot S13.B.
+"""Modèle MachineImprimerie — DÉPRÉCIÉ B3a (2026-06-01).
+
+> ⚠️ **DÉPRÉCIÉ — convergence option B / B3a.**
+>
+> Depuis le commit B3a, le moteur d'optimisation pose
+> (`optimisation_loader.charger_machines_actives` + lookup nom dans
+> `routers/optimisation.py`) lit le parc réel `Machine` (Sprint 2,
+> enrichi en B1/B2 des champs optim `laize_utile_mm`,
+> `nb_postes_decoupe`, `options`). `MachineImprimerie` n'est **plus
+> lue** côté application — la table reste en BDD pour ne pas casser
+> les enregistrements historiques (porte-clichés référençant
+> `machine_imprimerie_id`).
+>
+> **Drop colonne(s) + table prévu en B3b** une fois la donnée legacy
+> migrée ou abandonnée. Ne pas réintroduire de lecture sur ce modèle.
+
+Histoire (avant B3a) — Sprint 13 Lot S13.B :
 
 Parc machines de l'imprimerie (presses flexo). Coexiste avec la table
 existante `machine` (Sprint 2) sans la remplacer : `machine` continue
@@ -11,10 +27,6 @@ Sprint 13 et porte les vrais paramètres réalistes :
   - nb_postes_decoupe (1 ou 2, conditionne split-liner)
   - options JSON (UV, dorure_froid, sérigraphie_inline…)
   - cylindres_compatibles JSON (mapping machine → cylindres montables)
-
-À terme (Sprint 14+) on pourra fusionner les 2 tables ou migrer
-progressivement, mais le pari Sprint 13 = ne JAMAIS casser les sacrés
-EXACT en gardant l'ancien moteur intact.
 
 Multi-tenant : entreprise_id NOT NULL FK CASCADE.
 """

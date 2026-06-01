@@ -19,7 +19,6 @@ from app.models import (
     CylindreMagnetique,
     Entreprise,
     Machine,
-    MachineImprimerie,
     Matiere,
     OptionFabrication,
     User,
@@ -298,8 +297,11 @@ def post_calculer(
                  db.query(CylindreMagnetique)
                  .filter_by(entreprise_id=user.entreprise_id, actif=True)
                  .all()}
+    # B3a : lookup nom depuis le parc reel `Machine` (au lieu de
+    # MachineImprimerie deprecie). Cohérent avec `charger_machines_actives`
+    # qui rentourne maintenant les machines du parc utilisateur.
     nom_par_machine = {m.id: m.nom for m in
-                       db.query(MachineImprimerie)
+                       db.query(Machine)
                        .filter_by(entreprise_id=user.entreprise_id, actif=True)
                        .all()}
     chute_min = float(entreprise.chute_laterale_min_mm)
@@ -538,8 +540,9 @@ def post_matcher_outil(
 
     Utilise le modèle `Machine` (table `machine` Sprint 2) — cohérent avec
     le sacred `cylindre_matcher.py` Sprint 7 qui consomme `Machine.laize_max_mm`.
-    `MachineImprimerie` (Sprint 13.B) reste réservé au moteur d'optimisation
-    pose `/calculer`.
+    Depuis B3a, `/calculer` (moteur d'optimisation pose) lit lui aussi
+    `Machine` (au lieu de `MachineImprimerie` deprecie). `MachineImprimerie`
+    reste en BDD jusqu'au drop colonne B3b.
     """
     # 1) Récupère la machine scopée (404 si cross-tenant)
     machine = get_or_404_scoped(db, Machine, body.machine_id, user)
