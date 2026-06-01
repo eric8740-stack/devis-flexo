@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type MachineCreate } from "@/lib/api";
+import {
+  listMachineModulesDisponibles,
+  type MachineCreate,
+} from "@/lib/api";
 
 // Mini-fix vitesse-machine 05/05/2026 :
 // - On expose 3 champs jusque-là invisibles : laize_max_mm (NOT NULL BDD),
@@ -35,11 +38,13 @@ const EMPTY: MachineCreate = {
   duree_calage_h: DEFAULT_DUREE_CALAGE_H,
   nb_groupes_couleurs: null,
   cout_horaire_eur: null,
-  // B1 (convergence option B) — champs optim absorbes depuis MachineImprimerie.
-  // L'imprimeur les ajustera via UI B2 ; pour l'instant defaults neutres.
+  // B1/B2 — champs optim absorbes depuis MachineImprimerie. L'imprimeur
+  // saisit laize_utile_mm + nb_postes_decoupe + options via le bloc
+  // « Paramètres optimisation » ci-dessous. Pas de vitesse_pratique_m_min :
+  // une seule vitesse réelle, c'est `vitesse_moyenne_m_h` ÷ 60 qui pilote
+  // chiffrage ET optim (drop colonne déprécié prévu B3).
   laize_utile_mm: null,
   nb_postes_decoupe: 1,
-  vitesse_pratique_m_min: null,
   options: [],
   actif: true,
   commentaire: null,
@@ -70,11 +75,42 @@ export function MachineForm({
       : null
   );
   const [busy, setBusy] = useState(false);
+  // B2 — liste fermée des modules optim que le moteur reconnaît. Fetch au
+  // mount depuis /api/machines/modules-disponibles (union options tenant +
+  // catalogue global). Null = en chargement, [] = aucun module connu (cas
+  // tenant sans option-fabrication seedée).
+  const [modulesDispo, setModulesDispo] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listMachineModulesDisponibles()
+      .then((mods) => {
+        if (!cancelled) setModulesDispo(mods);
+      })
+      .catch(() => {
+        if (!cancelled) setModulesDispo([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setField = <K extends keyof MachineCreate>(
     field: K,
     value: MachineCreate[K]
   ) => setData((prev) => ({ ...prev, [field]: value }));
+
+  const toggleOption = (module: string) => {
+    setData((prev) => {
+      const has = prev.options.includes(module);
+      return {
+        ...prev,
+        options: has
+          ? prev.options.filter((m) => m !== module)
+          : [...prev.options, module],
+      };
+    });
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -135,11 +171,9 @@ export function MachineForm({
             </p>
           </div>
 
-          {/* 3. Vitesse catalogue (m/min, indicative) — facultatif, pas utilisé par le moteur */}
+          {/* 3. Vitesse catalogue (m/min) — facultatif, indicatif. B2 wording. */}
           <div className="grid gap-2">
-            <Label htmlFor="vitesse_max_m_min">
-              Vitesse catalogue (m/min, indicative)
-            </Label>
+            <Label htmlFor="vitesse_max_m_min">Vitesse catalogue (m/min)</Label>
             <Input
               id="vitesse_max_m_min"
               type="number"
@@ -153,16 +187,15 @@ export function MachineForm({
               }
             />
             <p className="text-xs text-muted-foreground">
-              Donnée du constructeur, à titre indicatif. N&apos;impacte pas
-              le calcul du devis — c&apos;est le champ <em>Vitesse moyenne
-              réaliste</em> juste en-dessous qui pilote P5 et P7.
+              Indicative (constructeur), n&apos;affecte aucun calcul.
             </p>
           </div>
 
-          {/* 4. Vitesse moyenne réaliste (m/min) — required, pilote P5+P7 */}
+          {/* 4. Vitesse réelle de production (m/min) — required, pilote
+              chiffrage ET optim. B2 wording : une SEULE vitesse réelle. */}
           <div className="grid gap-2">
             <Label htmlFor="vitesse_moyenne_m_min">
-              Vitesse moyenne réaliste (m/min) *
+              Vitesse réelle de production (m/min) *
             </Label>
             <Input
               id="vitesse_moyenne_m_min"
@@ -179,10 +212,9 @@ export function MachineForm({
               }
             />
             <p className="text-xs text-muted-foreground">
-              La vitesse réelle que tu tiens en production sur un job complet
-              (avec arrêts, changements bobine, séchage). C&apos;est elle
-              qui pilote le calcul P5 (Roulage) et P7 (MO opérateur).
-              Ordre de grandeur flexo : 70-100 m/min, pas la 250-300 catalogue.
+              Vitesse à laquelle la presse tourne réellement. Pilote le
+              chiffrage ET l&apos;optimisation. Ordre de grandeur flexo :
+              70-100 m/min, pas la 250-300 catalogue.
             </p>
           </div>
 
@@ -243,6 +275,109 @@ export function MachineForm({
                   )
                 }
               />
+            </div>
+          </div>
+
+          {/* === Bloc DISTINCT B2 — Paramètres optimisation (pose) ===
+              Champs consommés par le moteur d'optimisation pose (étape 2
+              candidats viables). Séparés visuellement des champs cost_engine
+              ci-dessus (Sprint 5/7) qui pilotent V1a 1 449,09 €. */}
+          <div className="border-t pt-6 mt-2">
+            <h3 className="text-base font-semibold mb-1">
+              Paramètres optimisation (pose)
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Caractéristiques de la presse utilisées par le moteur
+              d&apos;optimisation pose. Si non renseignés, la presse
+              n&apos;apparaîtra pas en étape 2 « Candidats viables ».
+            </p>
+
+            <div className="grid gap-6">
+              {/* Laize utile (mm) */}
+              <div className="grid gap-2">
+                <Label htmlFor="laize_utile_mm">Laize utile (mm)</Label>
+                <Input
+                  id="laize_utile_mm"
+                  type="number"
+                  step="0.01"
+                  min={1}
+                  value={data.laize_utile_mm ?? ""}
+                  onChange={(e) =>
+                    setField(
+                      "laize_utile_mm",
+                      e.target.value === "" ? null : Number(e.target.value),
+                    )
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Laize réellement imprimable (inférieure à la laize max
+                  ci-dessus, après marges techniques). Pilote
+                  <em> nb_poses_laize_max</em> du moteur optim.
+                </p>
+              </div>
+
+              {/* Nb postes découpe (B2 : pas de vitesse pratique, déprécié --
+                  une SEULE vitesse réelle = vitesse_moyenne_m_h ÷ 60). */}
+              <div className="grid gap-2">
+                <Label htmlFor="nb_postes_decoupe">Nb postes découpe *</Label>
+                <Input
+                  id="nb_postes_decoupe"
+                  type="number"
+                  min={1}
+                  max={4}
+                  required
+                  value={data.nb_postes_decoupe}
+                  onChange={(e) =>
+                    setField(
+                      "nb_postes_decoupe",
+                      e.target.value === "" ? 1 : Number(e.target.value),
+                    )
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  1 ou 2 (conditionne split-liner). Default&nbsp;: 1.
+                </p>
+              </div>
+
+              {/* Options modules (multi-select via checkboxes) */}
+              <div className="grid gap-2">
+                <Label>Modules / options optim</Label>
+                {modulesDispo === null && (
+                  <p className="text-sm text-muted-foreground">
+                    Chargement des modules disponibles…
+                  </p>
+                )}
+                {modulesDispo !== null && modulesDispo.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Aucun module d&apos;option-fabrication seedé. Configure
+                    d&apos;abord tes options sur la page Paramètres &gt;
+                    Options fabrication.
+                  </p>
+                )}
+                {modulesDispo !== null && modulesDispo.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {modulesDispo.map((module) => (
+                      <label
+                        key={module}
+                        className="flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={data.options.includes(module)}
+                          onChange={() => toggleOption(module)}
+                        />
+                        <span>{module}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Coche les modules physiquement présents sur la presse
+                  (filtre dur : si une option-devis requiert un module non
+                  coché, le moteur exclut la presse pour ce devis).
+                </p>
+              </div>
             </div>
           </div>
 

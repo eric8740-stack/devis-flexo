@@ -262,12 +262,14 @@ export interface Machine {
   // groupes couleurs de la presse (filtre dur optim, cf MachineImprimerie).
   nb_groupes_couleurs: number | null;
   cout_horaire_eur: number | null;
-  // B1 — champs optim absorbes depuis MachineImprimerie. Tenant demo seede
-  // par data migration (laize_utile := laize_max, vitesse_pratique :=
-  // vitesse_max). Nouveaux tenants : nullable -> a completer via UI B2.
+  // B1/B2 — champs optim absorbes depuis MachineImprimerie. Tenant demo
+  // seedé par data migration (laize_utile := laize_max). Nouveaux tenants :
+  // nullable → à compléter via UI B2.
+  // NB : `vitesse_pratique_m_min` est déprécié (colonne DB conservée
+  // jusqu'au drop B3). L'optim dérivera de vitesse_moyenne_m_h ÷ 60.
+  // Le champ ne figure pas dans l'API → pas dans cette interface.
   laize_utile_mm: number | null;
   nb_postes_decoupe: number;
-  vitesse_pratique_m_min: number | null;
   options: string[];
   actif: boolean;
   commentaire: string | null;
@@ -282,6 +284,11 @@ export const listMachines = (includeInactives = false) =>
   apiFetch<Machine[]>(
     `/api/machines?limit=200${includeInactives ? "&include_inactives=true" : ""}`
   );
+// B2 — liste fermée des modules optim reconnus par le moteur, calculée à la
+// volée depuis OptionFabrication.modules_speciaux_requis (tenant + globaux).
+// Alimente le multi-select `options` de MachineForm.
+export const listMachineModulesDisponibles = () =>
+  apiFetch<string[]>(`/api/machines/modules-disponibles`);
 export const getMachine = (id: number) => apiFetch<Machine>(`/api/machines/${id}`);
 export const createMachine = (data: MachineCreate) =>
   apiFetch<Machine>("/api/machines", { method: "POST", body: JSON.stringify(data) });

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.crud import machine as crud
 from app.db import get_db
 from app.dependencies import get_current_user
-from app.models import Machine, User
+from app.models import Machine, OptionFabrication, User
 from app.schemas.machine import MachineCreate, MachineRead, MachineUpdate
 from app.services.scope_service import get_or_404_scoped, scope_to_entreprise
 
@@ -24,6 +24,42 @@ def list_machines(
     if not include_inactives:
         query = query.filter(Machine.actif.is_(True))
     return query.order_by(Machine.id).offset(skip).limit(limit).all()
+
+
+@router.get("/modules-disponibles", response_model=list[str])
+def list_modules_disponibles(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[str]:
+    """B2 — Liste des modules optim que le moteur reconnait, calcules a la
+    volee depuis `OptionFabrication.modules_speciaux_requis` (union des
+    options tenant + options catalogue globales, cf. `parametres_options`).
+
+    Alimente le multi-select `options` du formulaire Machine
+    (`MachineForm.tsx`). Liste fermee = strictement les modules qu'au moins
+    une option-fabrication declare requerir ; l'imprimeur evite ainsi de
+    saisir un module fantome qui ne serait jamais matche par le moteur
+    ([capacite_couleurs.py:50-65] : `module not in modules_disponibles` ->
+    `module_manquant`).
+
+    Multi-tenant : on union les options scope tenant + globales
+    (entreprise_id IS NULL), comme `charger_options_par_codes`
+    ([optimisation_loader.py:72-100]) pour rester coherent avec la
+    resolution moteur.
+    """
+    rows = (
+        db.query(OptionFabrication.modules_speciaux_requis)
+        .filter(
+            (OptionFabrication.entreprise_id == user.entreprise_id)
+            | (OptionFabrication.entreprise_id.is_(None))
+        )
+        .all()
+    )
+    modules: set[str] = set()
+    for (mods,) in rows:
+        if mods:
+            modules.update(mods)
+    return sorted(modules)
 
 
 @router.get("/{machine_id}", response_model=MachineRead)
