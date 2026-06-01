@@ -9,7 +9,7 @@
 
 ## En-tête
 
-- **Date** : 2026-05-30
+- **Date** : 2026-06-01
 - **Branche active** : `main` (après merge #81)
 - **Sprint en cours** : Phase 2 — refactor `cost_engine` config-driven (lots successifs sur `ConfigCouts` scopée tenant)
 
@@ -43,7 +43,7 @@ Aucune.
 ## Baseline tests
 
 - **pytest** : `1091 passed`, 5 skipped, 21 warnings — main post-merge #81 (durée ≈ 339 s). +4 tests B2 (`test_machines_modules_disponibles_b2.py`), +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a. **Benchmark V1a 1 449,09 € EXACT** (11/11 sacrés).
-- **vitest** : `23 fichiers / 172 tests passed` — main post-merge #81 (+1 fichier `MachineForm.test.tsx`, 5 tests B2).
+- **vitest** : `172/172 tests passed` (23/23 fichiers) — main post-merge #81 (+1 fichier `MachineForm.test.tsx`, 5 tests B2).
 - **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69 + gate Vercel preview vert avant merge #81).
 
 ---
