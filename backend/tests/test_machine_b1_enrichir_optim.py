@@ -2,20 +2,22 @@
 les champs optim.
 
 Couvre :
-  - Machine a les 4 nouveaux champs : laize_utile_mm, nb_postes_decoupe,
-    vitesse_pratique_m_min, options.
+  - Machine a les champs : laize_utile_mm, nb_postes_decoupe, options.
+    (vitesse_pratique_m_min retiree en B3b migration a1b2c3d4e5f6 --
+    le moteur derive `vitesse_moyenne_m_h / 60` a la volee.)
   - Le champ `nb_couleurs` a ete renomme en `nb_groupes_couleurs` (donnee
     preservee).
   - Le parc seedé (entreprise_id=1) a les valeurs derivees correctement :
-    laize_utile_mm = laize_max_mm, vitesse_pratique_m_min = vitesse_max_m_min,
-    nb_postes_decoupe = 1 (server_default), options = [] (server_default).
+    laize_utile_mm = laize_max_mm, nb_postes_decoupe = 1 (server_default),
+    options = [] (server_default).
   - Les champs SACRES (laize_max_mm, vitesse_moyenne_m_h, duree_calage_h)
     sont INTACTS (pas de modification dans la migration B1).
 
 Sources :
   - backend/alembic/versions/z0p4n6r8s1t3_machine_enrichir_champs_optim.py
-  - backend/app/models/machine.py (B1 -- champs ajoutes)
-  - backend/scripts/seed.py (B1 -- derivation laize_utile / vitesse_pratique)
+  - backend/alembic/versions/a1b2c3d4e5f6_drop_machine_vitesse_pratique_m_min.py (B3b)
+  - backend/app/models/machine.py (B1 -- champs ajoutes ; B3b -- drop vitesse_pratique)
+  - backend/scripts/seed.py (B1 -- derivation laize_utile)
 """
 from app.db import SessionLocal
 from app.models import Machine
@@ -24,16 +26,18 @@ from app.models import Machine
 DEMO_ENTREPRISE_ID = 1
 
 
-def test_machine_a_4_nouveaux_champs_optim():
-    """Les 4 champs optim absorbes existent et sont typeés correctement."""
+def test_machine_a_champs_optim_b1():
+    """Les champs optim B1 existent. `vitesse_pratique_m_min` a ete
+    droppee en B3b (migration a1b2c3d4e5f6) -- le moteur derive a la
+    volee."""
     with SessionLocal() as db:
         m = db.query(Machine).filter_by(entreprise_id=DEMO_ENTREPRISE_ID).first()
         assert m is not None, "seed machine demo manquant"
-        # 4 champs ajoutes par migration z0p4n6r8s1t3.
         assert hasattr(m, "laize_utile_mm")
         assert hasattr(m, "nb_postes_decoupe")
-        assert hasattr(m, "vitesse_pratique_m_min")
         assert hasattr(m, "options")
+        # B3b : la colonne et l'attribut SQLAlchemy ont disparu.
+        assert not hasattr(m, "vitesse_pratique_m_min")
 
 
 def test_machine_nb_couleurs_renomme_en_nb_groupes_couleurs():
@@ -49,12 +53,14 @@ def test_machine_nb_couleurs_renomme_en_nb_groupes_couleurs():
 
 
 def test_seed_demo_machines_ont_les_valeurs_derivees_b1():
-    """Le seed demo (3 machines) peuple les nouveaux champs B1 selon la
-    derivation transitoire definie dans le brief :
+    """Le seed demo (3 machines) peuple les champs B1 selon la derivation
+    transitoire definie dans le brief :
       - laize_utile_mm := laize_max_mm
-      - vitesse_pratique_m_min := vitesse_max_m_min
       - nb_postes_decoupe := 1 (server_default)
       - options := [] (server_default)
+
+    NB : `vitesse_pratique_m_min` retiree en B3b (le moteur derive
+    `vitesse_moyenne_m_h / 60` a la volee dans `optimisation_loader`).
     """
     with SessionLocal() as db:
         machines = (
@@ -70,11 +76,6 @@ def test_seed_demo_machines_ont_les_valeurs_derivees_b1():
             assert m.laize_utile_mm == m.laize_max_mm, (
                 f"Machine {m.nom} : laize_utile_mm ({m.laize_utile_mm}) "
                 f"devrait etre derivee de laize_max_mm ({m.laize_max_mm})."
-            )
-            assert m.vitesse_pratique_m_min == m.vitesse_max_m_min, (
-                f"Machine {m.nom} : vitesse_pratique_m_min "
-                f"({m.vitesse_pratique_m_min}) devrait etre derivee de "
-                f"vitesse_max_m_min ({m.vitesse_max_m_min})."
             )
             assert m.nb_postes_decoupe == 1, (
                 f"Machine {m.nom} : nb_postes_decoupe attendu 1 "
