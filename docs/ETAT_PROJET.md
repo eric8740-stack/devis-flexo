@@ -9,14 +9,15 @@
 
 ## En-tête
 
-- **Date** : 2026-05-29
-- **Branche active** : `main` (après merge #78)
+- **Date** : 2026-05-30
+- **Branche active** : `main` (après merge #81)
 - **Sprint en cours** : Phase 2 — refactor `cost_engine` config-driven (lots successifs sur `ConfigCouts` scopée tenant)
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- #81 — feat(machine): B2 exposer champs optim Machine + harmoniser vitesse réelle (chiffrage ET optim)
 - #80 — feat(machine): B1 enrichir Machine pour absorber les besoins optim (convergence option B)
 - #79 — docs(etat-projet): cleanup branches + PRs fermées + sacred fix #77/#78
 - #78 — fix(devis): update_devis préserve payload_output recalculé (pop conditionnel)
@@ -26,11 +27,10 @@
 - #73 — feat(devis): planificateur imposer nb de bobines + gestion du surplus (facture/stock/réduire)
 - #72 — refactor(cost_engine): P7 et P5 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 3)
 - #71 — fix(devis): cohérence et planificateur utilisent l'épaisseur de la matière saisie
-- #70 — refactor(cost_engine): marge depuis `ConfigCouts` scopée tenant + fix isolation multi-tenant (Phase 2 / Lot 2)
 
 ## PRs ouvertes
 
-- #81 — feat(machine): B2 exposer champs optim Machine + harmoniser vitesse réelle (chiffrage ET optim)
+Aucune.
 
 ## PRs récemment fermées (non mergées)
 
@@ -42,9 +42,9 @@
 
 ## Baseline tests
 
-- **pytest** : `1091 passed`, 5 skipped, 21 warnings — exécution locale 2026-05-30 (branche `feat/machine-form-b2-saisie-optim`, durée ≈ 339 s). +4 tests B2 (`test_machines_modules_disponibles_b2.py`), +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a.
-- **vitest** : `23 fichiers / 172 tests passed` — locale 2026-05-30 (+1 fichier `MachineForm.test.tsx`, 5 tests B2).
-- **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69, gate brief : preview Vercel vert avant merge).
+- **pytest** : `1091 passed`, 5 skipped, 21 warnings — main post-merge #81 (durée ≈ 339 s). +4 tests B2 (`test_machines_modules_disponibles_b2.py`), +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a. **Benchmark V1a 1 449,09 € EXACT** (11/11 sacrés).
+- **vitest** : `23 fichiers / 172 tests passed` — main post-merge #81 (+1 fichier `MachineForm.test.tsx`, 5 tests B2).
+- **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69 + gate Vercel preview vert avant merge #81).
 
 ---
 
@@ -56,12 +56,17 @@
 - Planificateur — modes IMPOSE étendus : `nb_etiq` (historique), `nb_bobines`, `packaging` (N × X), mutuellement exclusifs. Gestion du surplus avec 3 décisions Q : facturer / stock / réduire (#73).
 - Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72), **Lot 4a 7 tarifs P1/P3/P4/P6 scopés tenant via `ConfigCouts` (#75)**. **Dette config-driven Phase 2 identifiée 28/05 → résolue par Lots 1/2/3/4a (marge, P5/P7, P1/P3/P4/P6).**
 - Numérotation devis robuste (#77, 29/05) — `UNIQUE(devis.numero)` scopée tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` en `MAX(seq)+1` scope tenant + retry loop borné (5). Résout 409 sur hard-delete (count+1 rebouchait les trous) et autorise deux tenants à avoir chacun `DEV-YYYY-0001` sans collision.
+- **Convergence machines B1/B2 (#80 + #81, 29-30/05)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). `vitesse_pratique_m_min` (B1) **déprécié** — retiré de l'API, colonne DB conservée → drop B3.
 - Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
 ## En cours / à venir
 
-- **B2 convergence machines — exposition UI + harmonisation vitesse** (PR #81 ouverte) — UI MachineForm enrichie d'un bloc DISTINCT « Paramètres optimisation » : `laize_utile_mm`, `nb_postes_decoupe`, `options` (multi-select alimenté par nouveau endpoint `GET /api/machines/modules-disponibles` qui union les `OptionFabrication.modules_speciaux_requis` tenant + globaux). Pas d'input `vitesse_pratique_m_min` : décision actée « une seule vitesse réelle par machine » → `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim. Wording aligné : label « Vitesse réelle de production (m/min) » avec aide explicite. `vitesse_max_m_min` réétiqueté « Vitesse catalogue (m/min) » avec aide « Indicative (constructeur), n'affecte aucun calcul ». Harmonisation des récaps : `/machines` colonne « Vitesse réelle (m/min) » + Stratégique > Machines colonne « Vitesse réelle (m/min) » lue depuis `vitesse_moyenne_m_h ÷ 60` (au lieu de `vitesse_max_m_min`) → les 2 pages affichent désormais 100/58/75 cohérents.
-- **Dette `vitesse_pratique_m_min`** — colonne DB conservée (migration z0p4n6r8s1t3 B1) mais retirée de l'API (MachineCreate/Update/Read post B2). **Drop colonne prévu en B3** + le loader optim (`charger_machines_actives`) dérivera `vitesse_pratique` de `vitesse_moyenne_m_h ÷ 60` au moment du repointage sur `Machine`.
+- **B3 convergence machines — repointer optim sur Machine + drop `vitesse_pratique_m_min`** (à venir) — étape 3 et dernière de la convergence option B :
+  - Migration alembic réversible : `DROP COLUMN machine.vitesse_pratique_m_min` (colonne DB conservée jusque-là, retirée de l'API depuis B2).
+  - Repointer `optimisation_loader.charger_machines_actives` (`backend/app/services/optimisation_loader.py`) sur la table `Machine` (au lieu de `MachineImprimerie`). Idem pour la lookup `nom_par_machine` dans `routers/optimisation.py:301-304`.
+  - Dériver `vitesse_pratique_m_min` à la volée dans le loader : `int(round(machine.vitesse_moyenne_m_h / 60))`.
+  - Déprécier `MachineImprimerie` (colonnes conservées, plus consommées — cleanup ultérieur).
+  - Tests : benchmark V1a 1 449,09 € EXACT, étape 2 « Candidats viables » montre les 3 machines parc réel (Mark Andy P5, Daco D250, Atelier 2) au lieu de Mark Andy 2200 catalogue.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).
