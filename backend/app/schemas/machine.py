@@ -12,11 +12,22 @@ class MachineBase(BaseModel):
     # plaque ≤ laize_max - 2 × MARGE_SECURITE_LAIZE_MM.
     laize_max_mm: Decimal = Field(gt=0)
     vitesse_max_m_min: int | None = Field(default=None, gt=0)
-    nb_couleurs: int | None = Field(default=None, ge=1, le=12)
+    # B1 (convergence option B) — renomme depuis nb_couleurs. Aligne sur
+    # MachineImprimerie.nb_groupes_couleurs (Sprint 13.B). Le champ est lu
+    # par l'optim (filtre dur capacite couleurs).
+    nb_groupes_couleurs: int | None = Field(default=None, ge=1, le=12)
     cout_horaire_eur: float | None = Field(default=None, ge=0)
     # Paramètres calcul S3
     vitesse_moyenne_m_h: int | None = Field(default=None, gt=0)
     duree_calage_h: float | None = Field(default=None, ge=0)
+    # B1 — champs optim absorbes depuis MachineImprimerie (migration
+    # z0p4n6r8s1t3). Tenant demo seede par data migration (laize_utile :=
+    # laize_max, vitesse_pratique := vitesse_max). Nouveaux tenants :
+    # nullable -> a completer via UI B2.
+    laize_utile_mm: Decimal | None = Field(default=None, gt=0)
+    nb_postes_decoupe: int = Field(default=1, ge=1, le=4)
+    vitesse_pratique_m_min: int | None = Field(default=None, gt=0)
+    options: list[str] = Field(default_factory=list)
     # Sprint 9 v2 — soft delete uniformisé Boolean (refactor depuis statut String)
     actif: bool = True
     commentaire: str | None = None
@@ -40,9 +51,13 @@ class MachineUpdate(BaseModel):
     largeur_max_mm: int | None = Field(default=None, gt=0)
     laize_max_mm: Decimal | None = Field(default=None, gt=0)
     vitesse_max_m_min: int | None = Field(default=None, gt=0)
-    nb_couleurs: int | None = Field(default=None, ge=1, le=12)
+    nb_groupes_couleurs: int | None = Field(default=None, ge=1, le=12)
     cout_horaire_eur: float | None = Field(default=None, ge=0)
     vitesse_moyenne_m_h: int | None = Field(default=None, gt=0)
     duree_calage_h: float | None = Field(default=None, ge=0)
+    laize_utile_mm: Decimal | None = Field(default=None, gt=0)
+    nb_postes_decoupe: int | None = Field(default=None, ge=1, le=4)
+    vitesse_pratique_m_min: int | None = Field(default=None, gt=0)
+    options: list[str] | None = None
     actif: bool | None = None
     commentaire: str | None = None

@@ -1,14 +1,25 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 
 
 class Machine(Base):
-    """Presse flexo de l'imprimerie. Sert au calcul du temps de roulage (S3)."""
+    """Presse flexo de l'imprimerie. Sert au calcul du temps de roulage (S3).
+
+    B1 (convergence option B, 2026-05-30) : champs optim ajoutes
+    (`laize_utile_mm`, `nb_postes_decoupe`, `vitesse_pratique_m_min`,
+    `options`) + renommage `nb_couleurs` -> `nb_groupes_couleurs` pour
+    converger avec `MachineImprimerie` (deprecie en B3). `Machine` devient
+    la source unique du parc machines. Les champs SACRES (`laize_max_mm`,
+    `vitesse_moyenne_m_h`, `duree_calage_h`) restent INTOUCHES -- ils sont
+    lus par cost_engine (cylindre_matcher / poste_5_roulage / poste_7_mo)
+    et garantissent V1a 1 449,09 EUR EXACT.
+    """
 
     __tablename__ = "machine"
 
@@ -24,7 +35,9 @@ class Machine(Base):
     nom: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     largeur_max_mm: Mapped[int | None] = mapped_column(Integer)
     vitesse_max_m_min: Mapped[int | None] = mapped_column(Integer)
-    nb_couleurs: Mapped[int | None] = mapped_column(Integer)
+    # B1 : renomme depuis `nb_couleurs` (migration z0p4n6r8s1t3). Aligne sur
+    # `MachineImprimerie.nb_groupes_couleurs` (Sprint 13.B). Donnees preservees.
+    nb_groupes_couleurs: Mapped[int | None] = mapped_column(Integer)
     cout_horaire_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
     # Sprint 7 Lot 7a — laize machine (largeur max imprimable physique de la
@@ -37,6 +50,20 @@ class Machine(Base):
     # qui reste un argument catalogue) et durée de mise au point machine.
     vitesse_moyenne_m_h: Mapped[int | None] = mapped_column(Integer)
     duree_calage_h: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+
+    # B1 (convergence option B, migration z0p4n6r8s1t3) — champs optim absorbes
+    # depuis MachineImprimerie. Consommes par le loader optimisation_loader.
+    # Tenant demo seede par data migration (laize_utile := laize_max,
+    # vitesse_pratique := vitesse_max). Nouveaux tenants : nullable -> a
+    # completer via l'UI B2.
+    laize_utile_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    nb_postes_decoupe: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    vitesse_pratique_m_min: Mapped[int | None] = mapped_column(Integer)
+    options: Mapped[list[str] | None] = mapped_column(
+        JSON, default=list, server_default="[]"
+    )
 
     # Sprint 9 v2 : refactor `statut` String → `actif` Boolean.
     # Mapping migration : 'actif'/'maintenance' → True, 'inactif' → False
