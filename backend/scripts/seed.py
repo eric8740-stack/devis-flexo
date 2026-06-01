@@ -256,12 +256,12 @@ def seed_machine(session: Session) -> int:
         # Sprint 9 v2 — `actif` Boolean (refactor depuis statut String)
         actif_val = row.get("actif")
         actif = _to_bool(actif_val) if actif_val is not None else True
-        # B1 — derivation transitoire pour le tenant demo : on aligne les
-        # champs optim (laize_utile, vitesse_pratique) sur les valeurs
-        # existantes (laize_max, vitesse_max). nb_postes_decoupe a 1 et
-        # options a [] par defaut (server_default). A affiner via UI B2.
+        # B1 — derivation transitoire pour le tenant demo : laize_utile :=
+        # laize_max. nb_postes_decoupe a 1 et options a [] par defaut
+        # (server_default). A affiner via UI B2.
+        # B3b : `vitesse_pratique_m_min` retire (colonne droppee, le moteur
+        # derive `vitesse_moyenne_m_h / 60` a la volee).
         laize_max_val = _to_float(row.get("laize_max_mm"))
-        vitesse_max_val = _to_int(row.get("vitesse_max_m_min"))
         session.add(
             Machine(
                 id=_to_int(row["id"]),
@@ -269,13 +269,12 @@ def seed_machine(session: Session) -> int:
                 nom=row["nom"],
                 largeur_max_mm=_to_int(row.get("largeur_max_mm")),
                 laize_max_mm=laize_max_val,
-                vitesse_max_m_min=vitesse_max_val,
+                vitesse_max_m_min=_to_int(row.get("vitesse_max_m_min")),
                 nb_groupes_couleurs=_to_int(row.get("nb_groupes_couleurs")),
                 cout_horaire_eur=_to_float(row.get("cout_horaire_eur")),
                 vitesse_moyenne_m_h=_to_int(row.get("vitesse_moyenne_m_h")),
                 duree_calage_h=_to_float(row.get("duree_calage_h")),
                 laize_utile_mm=laize_max_val,
-                vitesse_pratique_m_min=vitesse_max_val,
                 actif=actif,
                 commentaire=row.get("commentaire"),
             )

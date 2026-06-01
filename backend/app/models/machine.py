@@ -12,13 +12,20 @@ class Machine(Base):
     """Presse flexo de l'imprimerie. Sert au calcul du temps de roulage (S3).
 
     B1 (convergence option B, 2026-05-30) : champs optim ajoutes
-    (`laize_utile_mm`, `nb_postes_decoupe`, `vitesse_pratique_m_min`,
-    `options`) + renommage `nb_couleurs` -> `nb_groupes_couleurs` pour
-    converger avec `MachineImprimerie` (deprecie en B3). `Machine` devient
-    la source unique du parc machines. Les champs SACRES (`laize_max_mm`,
-    `vitesse_moyenne_m_h`, `duree_calage_h`) restent INTOUCHES -- ils sont
-    lus par cost_engine (cylindre_matcher / poste_5_roulage / poste_7_mo)
-    et garantissent V1a 1 449,09 EUR EXACT.
+    (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage
+    `nb_couleurs` -> `nb_groupes_couleurs` pour converger avec
+    `MachineImprimerie` (deprecie depuis B3a). `Machine` est la source
+    unique du parc machines.
+
+    B3b (2026-06-01) : DROP COLUMN `vitesse_pratique_m_min` (cleanup post
+    B3a -- le moteur derive `vitesse_moyenne_m_h / 60` a la volee dans
+    `optimisation_loader.charger_machines_actives`, plus aucune lecture
+    de la colonne).
+
+    Les champs SACRES (`laize_max_mm`, `vitesse_moyenne_m_h`,
+    `duree_calage_h`) restent INTOUCHES -- ils sont lus par cost_engine
+    (cylindre_matcher / poste_5_roulage / poste_7_mo) et garantissent
+    V1a 1 449,09 EUR EXACT.
     """
 
     __tablename__ = "machine"
@@ -53,14 +60,14 @@ class Machine(Base):
 
     # B1 (convergence option B, migration z0p4n6r8s1t3) — champs optim absorbes
     # depuis MachineImprimerie. Consommes par le loader optimisation_loader.
-    # Tenant demo seede par data migration (laize_utile := laize_max,
-    # vitesse_pratique := vitesse_max). Nouveaux tenants : nullable -> a
-    # completer via l'UI B2.
+    # Tenant demo seede par data migration (laize_utile := laize_max).
+    # Nouveaux tenants : nullable -> a completer via l'UI B2.
+    # B3b (migration a1b2c3d4e5f6) : `vitesse_pratique_m_min` retire --
+    # le moteur derive `vitesse_moyenne_m_h / 60` a la volee.
     laize_utile_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     nb_postes_decoupe: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
-    vitesse_pratique_m_min: Mapped[int | None] = mapped_column(Integer)
     options: Mapped[list[str] | None] = mapped_column(
         JSON, default=list, server_default="[]"
     )

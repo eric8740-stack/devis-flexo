@@ -30,7 +30,7 @@
 
 ## PRs ouvertes
 
-Aucune.
+- #83 — chore(machine): drop colonne morte `vitesse_pratique_m_min` (B3b)
 
 ## PRs récemment fermées (non mergées)
 
@@ -61,11 +61,8 @@ Aucune.
 
 ## En cours / à venir
 
-- **B3b convergence machines — drop colonne `vitesse_pratique_m_min` + cleanup `MachineImprimerie`** (à venir, après vérification prod de l'étape 2 « Candidats viables » sur B3a) :
-  - Migration alembic réversible : `DROP COLUMN machine.vitesse_pratique_m_min` (colonne DB inutilisée depuis B2, dérivée à la volée depuis B3a).
-  - Évaluer le drop de la table `machine_imprimerie` (vérifier l'absence de FK orphelines depuis `lot_production`, `porte_cliche` ; data migration éventuelle).
-  - Cleanup imports `MachineImprimerie` du code mort restant (`crud/devis.py` garde encore des références pour le chiffrage multi-lots — à auditer).
-  - Critère succès : `MachineImprimerie` retirée du code applicatif + des modèles, baseline EXACT.
+- **B3b convergence machines — drop colonne `vitesse_pratique_m_min`** (PR #83 ouverte) — migration `a1b2c3d4e5f6` réversible (`DROP COLUMN machine.vitesse_pratique_m_min`, downgrade re-`ADD` nullable). Cleanup du modèle `Machine`, du seed démo (`scripts/seed.py`) et des assertions devenues caduques dans `test_machine_b1_enrichir_optim.py`. Cycle alembic up/down/up validé. Le moteur d'optim continue de dériver `vitesse_pratique = vitesse_moyenne_m_h ÷ 60` à la volée (B3a, intouché).
+- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** (sprint dédié à planifier — **HORS B3b**) — repoint du chiffrage multi-lots `crud.devis._construire_devis_input_pour_lot:593-623` qui lit encore `MachineImprimerie.laize_utile_mm` (touche `cost_engine` SACRED) + data migration `lot_production.machine_id` (FK historique vers `machine_imprimerie.id`). Cleanup imports `MachineImprimerie` + drop éventuel de la table dépendent de ce repoint. **Brief séparé requis** (impact benchmark sacré V1a/V1b/V2/V3/V4 à valider).
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).

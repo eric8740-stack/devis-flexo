@@ -23,9 +23,8 @@ class MachineBase(BaseModel):
     # B1 — champs optim absorbes depuis MachineImprimerie (migration
     # z0p4n6r8s1t3). Tenant demo seede par data migration (laize_utile :=
     # laize_max). Nouveaux tenants : nullable -> a completer via UI B2.
-    # B2 : `vitesse_pratique_m_min` (colonne DB conservee, deprecation
-    # progressive) NE figure PAS dans l'API. L'optim derivera de
-    # `vitesse_moyenne_m_h / 60` en B3 (drop colonne au meme lot).
+    # B3b (migration a1b2c3d4e5f6) : `vitesse_pratique_m_min` droppee --
+    # le moteur derive `vitesse_moyenne_m_h / 60` a la volee.
     laize_utile_mm: Decimal | None = Field(default=None, gt=0)
     nb_postes_decoupe: int = Field(default=1, ge=1, le=4)
     options: list[str] = Field(default_factory=list)
