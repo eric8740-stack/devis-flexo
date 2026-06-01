@@ -10,13 +10,14 @@
 ## En-tête
 
 - **Date** : 2026-06-01
-- **Branche active** : `main` (après merge #81)
+- **Branche active** : `main` (après merge #82)
 - **Sprint en cours** : Phase 2 — refactor `cost_engine` config-driven (lots successifs sur `ConfigCouts` scopée tenant)
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- #82 — feat(optim): B3a repoint moteur sur `Machine` + vitesse réelle dérivée (`vitesse_moyenne_m_h ÷ 60`)
 - #81 — feat(machine): B2 exposer champs optim Machine + harmoniser vitesse réelle (chiffrage ET optim)
 - #80 — feat(machine): B1 enrichir Machine pour absorber les besoins optim (convergence option B)
 - #79 — docs(etat-projet): cleanup branches + PRs fermées + sacred fix #77/#78
@@ -26,11 +27,10 @@
 - #74 — docs: ajout/maj `ETAT_PROJET.md` (source de vérité état d'avancement)
 - #73 — feat(devis): planificateur imposer nb de bobines + gestion du surplus (facture/stock/réduire)
 - #72 — refactor(cost_engine): P7 et P5 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 3)
-- #71 — fix(devis): cohérence et planificateur utilisent l'épaisseur de la matière saisie
 
 ## PRs ouvertes
 
-- #82 — feat(optim): B3a repoint moteur sur `Machine` + vitesse réelle dérivée (`vitesse_moyenne_m_h ÷ 60`)
+Aucune.
 
 ## PRs récemment fermées (non mergées)
 
@@ -42,9 +42,9 @@
 
 ## Baseline tests
 
-- **pytest** : `1098 passed`, 5 skipped, 21 warnings — branche `feat/optim-repoint-machine-b3a` (durée ≈ 333 s). +7 tests B3a (`test_optim_loader_repoint_machine_b3a.py`), +4 B2, +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a. **Benchmark V1a 1 449,09 € + 5 cas + V8 : 13/13 EXACT**.
-- **vitest** : `172/172 tests passed` (23/23 fichiers) — branche `feat/optim-repoint-machine-b3a` (inchangé vs B2, B3a est 100 % backend).
-- **next build** : ✓ compiled successfully (vérifié hors cache `.next` lors du hotfix #69 + gate Vercel preview vert avant merge #81).
+- **pytest** : `1098 passed`, 5 skipped, 21 warnings — main post-merge #82. +7 tests B3a (`test_optim_loader_repoint_machine_b3a.py`), +4 B2, +4 B1, +6 fix update_devis, +4 fix 409, +11 Lot 4a. **Benchmark V1a 1 449,09 € + 5 cas + V8 : 13/13 EXACT**.
+- **vitest** : `172/172 tests passed` (23/23 fichiers) — main post-merge #82 (inchangé vs B2, B3a est 100 % backend).
+- **next build** : ✓ compiled successfully (vérifié hors cache `.next` + gate Vercel preview vert avant merge #82).
 
 ---
 
@@ -56,15 +56,15 @@
 - Planificateur — modes IMPOSE étendus : `nb_etiq` (historique), `nb_bobines`, `packaging` (N × X), mutuellement exclusifs. Gestion du surplus avec 3 décisions Q : facturer / stock / réduire (#73).
 - Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72), **Lot 4a 7 tarifs P1/P3/P4/P6 scopés tenant via `ConfigCouts` (#75)**. **Dette config-driven Phase 2 identifiée 28/05 → résolue par Lots 1/2/3/4a (marge, P5/P7, P1/P3/P4/P6).**
 - Numérotation devis robuste (#77, 29/05) — `UNIQUE(devis.numero)` scopée tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` en `MAX(seq)+1` scope tenant + retry loop borné (5). Résout 409 sur hard-delete (count+1 rebouchait les trous) et autorise deux tenants à avoir chacun `DEV-YYYY-0001` sans collision.
-- **Convergence machines B1/B2 (#80 + #81, 29-30/05)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). `vitesse_pratique_m_min` (B1) **déprécié** — retiré de l'API, colonne DB conservée → drop B3.
+- **Convergence machines B1/B2/B3a (#80 + #81 + #82, 29/05-01/06)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). **Moteur d'optim repointé sur `Machine` (B3a #82)** : `optimisation_loader.charger_machines_actives` lit le parc réel (P5/Daco/Atelier 2) au lieu du catalogue `MachineImprimerie` (Mark Andy 2200) → étape 2 « Candidats viables » affiche le vrai parc utilisateur. `MachineImprimerie` marqué **déprécié** (table conservée en BDD pour FK historiques, plus lue côté application).
 - Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
 ## En cours / à venir
 
-- **B3a convergence machines — repoint moteur optim sur `Machine`** (PR #82 ouverte) — `optimisation_loader.charger_machines_actives` lit désormais le parc réel `Machine` (P5/Daco/Atelier 2) au lieu de `MachineImprimerie` legacy (catalogue Mark Andy 2200 / OMET / Nilpeter). `vitesse_pratique_m_min` (dataclass moteur) dérivée à la volée : `round(vitesse_moyenne_m_h / 60)`. Lookup `nom_par_machine` dans `routers/optimisation.py:301-307` mise à jour. `MachineImprimerie` marquée **DÉPRÉCIÉE** dans le docstring du modèle (table conservée en BDD, plus lue côté application). Backend uniquement, pas de migration. 7 tests dédiés.
-- **B3b convergence machines — drop colonne et table MachineImprimerie** (à venir, après validation prod B3a) :
+- **B3b convergence machines — drop colonne `vitesse_pratique_m_min` + cleanup `MachineImprimerie`** (à venir, après vérification prod de l'étape 2 « Candidats viables » sur B3a) :
   - Migration alembic réversible : `DROP COLUMN machine.vitesse_pratique_m_min` (colonne DB inutilisée depuis B2, dérivée à la volée depuis B3a).
   - Évaluer le drop de la table `machine_imprimerie` (vérifier l'absence de FK orphelines depuis `lot_production`, `porte_cliche` ; data migration éventuelle).
+  - Cleanup imports `MachineImprimerie` du code mort restant (`crud/devis.py` garde encore des références pour le chiffrage multi-lots — à auditer).
   - Critère succès : `MachineImprimerie` retirée du code applicatif + des modèles, baseline EXACT.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
