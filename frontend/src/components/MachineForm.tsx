@@ -33,8 +33,14 @@ const EMPTY: MachineCreate = {
   vitesse_max_m_min: null,
   vitesse_moyenne_m_h: null,
   duree_calage_h: DEFAULT_DUREE_CALAGE_H,
-  nb_couleurs: null,
+  nb_groupes_couleurs: null,
   cout_horaire_eur: null,
+  // B1 (convergence option B) — champs optim absorbes depuis MachineImprimerie.
+  // L'imprimeur les ajustera via UI B2 ; pour l'instant defaults neutres.
+  laize_utile_mm: null,
+  nb_postes_decoupe: 1,
+  vitesse_pratique_m_min: null,
+  options: [],
   actif: true,
   commentaire: null,
 };
@@ -208,16 +214,16 @@ export function MachineForm({
           {/* 6 + 7. Nb couleurs et coût horaire en grille */}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="nb_couleurs">Nb couleurs</Label>
+              <Label htmlFor="nb_groupes_couleurs">Nb couleurs</Label>
               <Input
-                id="nb_couleurs"
+                id="nb_groupes_couleurs"
                 type="number"
                 min={1}
                 max={12}
-                value={data.nb_couleurs ?? ""}
+                value={data.nb_groupes_couleurs ?? ""}
                 onChange={(e) =>
                   setField(
-                    "nb_couleurs",
+                    "nb_groupes_couleurs",
                     e.target.value === "" ? null : Number(e.target.value)
                   )
                 }
