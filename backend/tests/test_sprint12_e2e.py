@@ -127,7 +127,7 @@ def test_e2e_signup_flow_imprimeur_complet():
         "vitesse_max_m_min": 200,
         "vitesse_moyenne_m_h": 6000,
         "duree_calage_h": 1.0,
-        "nb_couleurs": 6,
+        "nb_groupes_couleurs": 6,
         "cout_horaire_eur": 70,
         "actif": True,
     }

@@ -200,7 +200,7 @@ export function PorteClichesOnglet() {
             {(machines ?? []).map((m) => (
               <option key={m.id} value={m.id}>
                 {m.nom}
-                {m.nb_couleurs ? ` (${m.nb_couleurs} couleurs)` : ""}
+                {m.nb_groupes_couleurs ? ` (${m.nb_groupes_couleurs} couleurs)` : ""}
               </option>
             ))}
           </select>
@@ -396,7 +396,7 @@ function PorteClicheDialog({
     [machines, machineId, machinePreselectionnee]
   );
   const quantiteDefault =
-    machineSelectionnee?.nb_couleurs ?? FALLBACK_NB_COULEURS;
+    machineSelectionnee?.nb_groupes_couleurs ?? FALLBACK_NB_COULEURS;
 
   useEffect(() => {
     if (!ouvert) return;
@@ -488,7 +488,7 @@ function PorteClicheDialog({
                   {machines.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.nom}
-                      {m.nb_couleurs ? ` (${m.nb_couleurs} couleurs)` : ""}
+                      {m.nb_groupes_couleurs ? ` (${m.nb_groupes_couleurs} couleurs)` : ""}
                     </option>
                   ))}
                 </select>

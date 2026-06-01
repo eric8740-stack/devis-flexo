@@ -95,7 +95,7 @@ export default function MachinesPage() {
           </span>
         ),
     },
-    { key: "nb_couleurs", label: "Nb couleurs" },
+    { key: "nb_groupes_couleurs", label: "Nb couleurs" },
     {
       // Mini-fix vitesse-machine 05/05/2026 : on affiche la VRAIE vitesse
       // utilisée par le moteur (vitesse_moyenne_m_h ÷ 60), pas la valeur

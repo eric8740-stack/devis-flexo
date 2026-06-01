@@ -24,7 +24,7 @@ def test_create_machine_returns_201():
         "largeur_max_mm": 330,
         "laize_max_mm": _DEFAULT_LAIZE,
         "vitesse_max_m_min": 200,
-        "nb_couleurs": 8,
+        "nb_groupes_couleurs": 8,
         "cout_horaire_eur": 60.0,
         "actif": True,
     }
@@ -33,7 +33,7 @@ def test_create_machine_returns_201():
     data = response.json()
     assert data["id"] > 3
     assert data["nom"] == "TEST Press Unique"
-    assert data["nb_couleurs"] == 8
+    assert data["nb_groupes_couleurs"] == 8
     assert data["actif"] is True
     assert float(data["laize_max_mm"]) == 330
     assert "date_creation" in data
@@ -73,15 +73,15 @@ def test_get_machine_missing_returns_404():
 def test_update_machine_modifies_field():
     created = client.post(
         "/api/machines",
-        json={"nom": "Test Press", "nb_couleurs": 4, "laize_max_mm": _DEFAULT_LAIZE},
+        json={"nom": "Test Press", "nb_groupes_couleurs": 4, "laize_max_mm": _DEFAULT_LAIZE},
     ).json()
     response = client.put(
         f"/api/machines/{created['id']}",
-        json={"nb_couleurs": 6, "actif": False},
+        json={"nb_groupes_couleurs": 6, "actif": False},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["nb_couleurs"] == 6
+    assert data["nb_groupes_couleurs"] == 6
     assert data["actif"] is False
     assert data["nom"] == "Test Press"  # non touché
 

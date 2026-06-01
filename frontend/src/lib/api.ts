@@ -258,8 +258,17 @@ export interface Machine {
   vitesse_moyenne_m_h: number | null;
   // Durée calage en h (Numeric(4,2)). Pilote l'heures_calage de P7 MO.
   duree_calage_h: number | null;
-  nb_couleurs: number | null;
+  // B1 (convergence option B) — renomme depuis `nb_couleurs`. Capacite
+  // groupes couleurs de la presse (filtre dur optim, cf MachineImprimerie).
+  nb_groupes_couleurs: number | null;
   cout_horaire_eur: number | null;
+  // B1 — champs optim absorbes depuis MachineImprimerie. Tenant demo seede
+  // par data migration (laize_utile := laize_max, vitesse_pratique :=
+  // vitesse_max). Nouveaux tenants : nullable -> a completer via UI B2.
+  laize_utile_mm: number | null;
+  nb_postes_decoupe: number;
+  vitesse_pratique_m_min: number | null;
+  options: string[];
   actif: boolean;
   commentaire: string | null;
   date_creation: string;
