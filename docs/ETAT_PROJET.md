@@ -10,13 +10,15 @@
 ## En-tête
 
 - **Date** : 2026-06-02
-- **Branche active** : `main` (après merge #84)
-- **Sprint en cours** : Phase 2 — refactor `cost_engine` config-driven (lots successifs sur `ConfigCouts` scopée tenant)
+- **Branche active** : `main` (après merges #86 puis hotfix #87)
+- **Sprint en cours** : Aucun. Dette archi « unifier `Machine` ↔ `MachineImprimerie` » **FERMÉE**. Prochain : suivre les follow-ups (cf. « En cours / à venir » + `docs/BACKLOG_BUGS_session_2026-06-02.md`).
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- **#87** — fix(machine): cast `options` en JSON dans INSERT migration P1+P2 (hotfix `DatatypeMismatch` prod) + test PG enrichi seeds options non-vides
+- **#86** — feat(machine): unify `Machine` ↔ `MachineImprimerie` (P1+P2) — migration `b2c3d4e5f6g7` insère 3 presses catalogue + remappe FK `lot_production`/`porte_cliche` + drop `machine_imprimerie` + `configuration_pose`. Code lit `Machine` partout.
 - #84 — test(devis): figer benchmark sacré multi-lots pré-repoint (P0b) — tripwire `704,07 €`
 - #83 — chore(machine): drop colonne morte `vitesse_pratique_m_min` (B3b)
 - #82 — feat(optim): B3a repoint moteur sur `Machine` + vitesse réelle dérivée (`vitesse_moyenne_m_h ÷ 60`)
@@ -25,8 +27,6 @@
 - #79 — docs(etat-projet): cleanup branches + PRs fermées + sacred fix #77/#78
 - #78 — fix(devis): update_devis préserve payload_output recalculé (pop conditionnel)
 - #77 — fix(devis): UNIQUE(devis.numero) scopée tenant + MAX+1 + retry loop (résout 409 sur hard-delete)
-- #75 — refactor(cost_engine): P1/P3/P4/P6 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 4a)
-- #74 — docs: ajout/maj `ETAT_PROJET.md` (source de vérité état d'avancement)
 
 ## PRs ouvertes
 
@@ -42,10 +42,13 @@ Aucune.
 
 ## Baseline tests
 
-- **pytest** : `1099 passed`, 5 skipped, 21 warnings — main post-merge #84. +1 tripwire sacré multi-lots P0b (`test_benchmark_multilots_sacred_p0b.py`) vs baseline B3b 1098/5. **Benchmark V1a 1 449,09 € + 5 cas + V8 : 13/13 EXACT**.
-- **vitest** : `172/172 tests passed` (23/23 fichiers) — main post-merge #84 (inchangé vs B3b, P0b est 100 % backend).
-- **next build** : ✓ compiled successfully (vérifié hors cache `.next` + gate Vercel preview vert avant merge #84).
-- **alembic** : HEAD = `a1b2c3d4e5f6` (B3b DROP `machine.vitesse_pratique_m_min`). Application prod auto via `CMD` Dockerfile.
+- **pytest local** (SQLite, `PG_TEST_URL` absent) : `1098 passed, 10 skipped, 0 failed` — main post-merges #86 + #87. Skips : 2 tests subprocess SQLite migration P1+P2 (limitation FK enforcement vs alembic transaction, documentée), 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
+- **pytest CI** (service `postgres:16`) : `1104 passed, 4 skipped, 0 failed` — inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod). Seuls les 4 skips inévitables restent (2 SQLite subprocess + 2 modèles obsolètes).
+- **Benchmark V1a 1 449,09 € + 5 cas (V1b/V2/V3/V4) + V8 : 13/13 EXACT** post-merge.
+- **Tripwire multi-lots P0b (`704,07 €`) : EXACT** post-merge — value-neutral confirmé (la migration `b2c3d4e5f6g7` n'a pas bougé la `laize_utile_mm = 320` pour Mark Andy 2200, principe sacré préservé).
+- **vitest** : `172/172 tests passed` (23/23 fichiers) — inchangé (P1+P2 est 100 % backend + 1 helper test PG).
+- **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
+- **alembic** : HEAD = **`b2c3d4e5f6g7`** (P1+P2 unify `Machine` ↔ `MachineImprimerie`). **Migration appliquée en prod Railway** post-merge #87. Application prod auto via `CMD` Dockerfile.
 
 ---
 
@@ -57,22 +60,46 @@ Aucune.
 - Planificateur — modes IMPOSE étendus : `nb_etiq` (historique), `nb_bobines`, `packaging` (N × X), mutuellement exclusifs. Gestion du surplus avec 3 décisions Q : facturer / stock / réduire (#73).
 - Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72), **Lot 4a 7 tarifs P1/P3/P4/P6 scopés tenant via `ConfigCouts` (#75)**. **Dette config-driven Phase 2 identifiée 28/05 → résolue par Lots 1/2/3/4a (marge, P5/P7, P1/P3/P4/P6).**
 - Numérotation devis robuste (#77, 29/05) — `UNIQUE(devis.numero)` scopée tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` en `MAX(seq)+1` scope tenant + retry loop borné (5). Résout 409 sur hard-delete (count+1 rebouchait les trous) et autorise deux tenants à avoir chacun `DEV-YYYY-0001` sans collision.
-- **Convergence machines B1/B2/B3a/B3b (#80 + #81 + #82 + #83, 29/05-01/06)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). **Moteur d'optim repointé sur `Machine` (B3a #82)** : `optimisation_loader.charger_machines_actives` lit le parc réel (P5/Daco/Atelier 2) au lieu du catalogue `MachineImprimerie` (Mark Andy 2200) → étape 2 « Candidats viables » affiche le vrai parc utilisateur. **B3b #83** : colonne morte `machine.vitesse_pratique_m_min` droppée (migration `a1b2c3d4e5f6` réversible). `MachineImprimerie` reste **déprécié** (table conservée en BDD pour FK historiques `lot_production`/`porte_cliche`, plus lue côté application).
-- **P0b tripwire sacré multi-lots (#84, 02/06)** — `test_benchmark_multilots_sacred_p0b.py` fige `prix_vente_ht_eur = 704,07 €` sur scénario déterministe `POST /api/devis` multi-lots (1 lot, 100×80mm, 2×3 poses, qté 10 000, MachineImprimerie `laize_utile=320`). Sert de tripwire AVANT le repoint P1 (`MachineImprimerie` → `Machine`) : toute dérive du `laize_utile_mm` effectivement passé au moteur casse ce test, validation Eric requise avant re-baselining. Garde anti-drift fixture : assertion explicite `machine.laize_utile_mm == 320` sur la 1re MachineImprimerie source (échoue FORT si l'ordre/le catalogue d'onboarding change).
+- **Convergence machines B1/B2/B3a/B3b (#80 + #81 + #82 + #83, 29/05-01/06)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). **Moteur d'optim repointé sur `Machine` (B3a #82)** : `optimisation_loader.charger_machines_actives` lit le parc réel (P5/Daco/Atelier 2) au lieu du catalogue `MachineImprimerie` (Mark Andy 2200) → étape 2 « Candidats viables » affiche le vrai parc utilisateur. **B3b #83** : colonne morte `machine.vitesse_pratique_m_min` droppée (migration `a1b2c3d4e5f6` réversible).
+- **P0b tripwire sacré multi-lots (#84, 02/06)** — `test_benchmark_multilots_sacred_p0b.py` fige `prix_vente_ht_eur = 704,07 €` sur scénario déterministe `POST /api/devis` multi-lots (1 lot, 100×80mm, 2×3 poses, qté 10 000, `laize_utile=320`). Garde anti-drift fixture : assertion explicite `machine.laize_utile_mm == 320` sur la machine source (échoue FORT si l'ordre/le catalogue change). Maintenu EXACT post-P1+P2.
+- **Unify `Machine` ↔ `MachineImprimerie` — P1+P2 (#86 + hotfix #87, 02/06)** — fin de la convergence. Migration `b2c3d4e5f6g7` (RÉVERSIBLE, dialect-aware) : (1) bump `machine_id_seq` Postgres défensif AVANT INSERT presses ; (2) INSERT 3 presses catalogue (Mark Andy 2200 / OMET XFlex 330 / Nilpeter FA-22) depuis `MachineImprimerie` dans `Machine`, idempotent par `(nom, entreprise_id)` ; (3) **UPDATE atomique CASE WHEN** des FK `lot_production.machine_id` + `porte_cliche.machine_id` (`machine_imprimerie.id` → `machine.id`) — anti-cascade bug ; (4) DROP `machine_imprimerie` + DROP `configuration_pose` (table jamais peuplée). Code repointé sur `Machine` (`crud/devis`, `services/onboarding_service`, `routers/porte_cliche`, `scripts/seed`). Modèles `machine_imprimerie.py` + `configuration_pose.py` supprimés. **Test PG sous FK strictes** (`test_migration_p1p2_sous_fk_strictes_postgres`) en CI via service `postgres:16` du workflow `backend.yml` — sentinelle scénario réel boot Railway prod. **Parc démo (`entreprise_id=1`) post-migration : 6 machines actives** — Mark Andy P5 + Daco D250 finition + Atelier 2 (parc utilisateur existant) + Mark Andy 2200 + OMET XFlex 330 + Nilpeter FA-22 (catalogue MI réinsérées). **Aucune fiche `Machine` existante touchée** (Daco / Atelier conservés). Principe VALUE-NEUTRAL respecté : tripwire `704,07 €` resté EXACT.
 - Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
 ## En cours / à venir
 
-- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** (sprint à planifier — P0c puis P1) :
-  - **P0a** ✅ audit READ-ONLY livré en session 02/06 (cartographie + verdict « 2 prérequis bloquants »).
-  - **P0b** ✅ mergé #84 — tripwire sacré multi-lots `704,07 €` figé (`test_benchmark_multilots_sacred_p0b.py`).
-  - **P0c** 🔜 audit data prod : combien de `lot_production` historiques, combien de `machine_imprimerie.id` distincts référencés, plan de migration FK `lot_production.machine_id` (`machine_imprimerie.id` → `machine.id`). Mapping non trivial — les noms diffèrent côté tenant démo (`Mark Andy P5` côté Machine vs `Mark Andy 2200` côté MachineImprimerie issu du catalogue onboarding).
-  - **P1** 🔜 repoint code `crud.devis._construire_devis_input_pour_lot:593-623` → `db.get(Machine, lot.machine_id)` + fallback `laize_utile_mm or laize_max_mm` (pattern B3a). **Décision (a) actée** : source de vérité `laize` = `Machine` (paramètre fiche utilisateur), `MachineImprimerie.laize_utile_mm = 320` = doublon legacy à retirer. Conséquence anticipée : le tripwire P0b va bouger volontairement au repoint (`Machine.laize_utile_mm` pour P5 démo = 330, vs 320 MachineImprimerie) → re-baselining `_EXPECTED_PRIX_VENTE_HT` après validation Eric de la nouvelle valeur observée.
+- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** — ✅ **FERMÉE** post-merge #86 + hotfix #87 (02/06). Récap des étapes : P0a (audit) → P0b (tripwire `704,07 €` #84) → **P1+P2 (#86) + hotfix #87** : migration `b2c3d4e5f6g7` + repoint code + suppression `MachineImprimerie` + `ConfigurationPose`. Tripwire EXACT, V1a 13/13 EXACT.
+- **🔴 NOUVEAU follow-up critique** (cf. [`docs/BACKLOG_BUGS_session_2026-06-02.md`](BACKLOG_BUGS_session_2026-06-02.md)) — **les 3 presses migrées (Mark Andy 2200 / OMET / Nilpeter) sont `actif=true` mais n'apparaissent PAS comme candidates dans l'optim** sur le compte démo. Seuls P5 et Atelier 2 ressortent → 0 config viable pour les 3. Pas le flag `actif` (vérifié post-migration). Investiguer `charger_machines_actives` + la génération de candidats : champ NULL requis (`vitesse_max_m_min` / `largeur_max_mm` / `duree_calage_h` défaultés à NULL par la migration ?) ou appariement cylindre ↔ machine. Sprint dédié à planifier prochaine session.
+- **Pattern migrations data à auditer** (leçons P1+P2) :
+  - (a) Remap d'ids en boucle = **cascade UPDATE** quand `new_id` coïncide avec un `old_id` futur → toujours faire un **UPDATE atomique CASE WHEN** ou table de mapping temporaire.
+  - (b) INSERT de colonnes JSON depuis une `list[str]` Python via `text(":x")` → SQLAlchemy sérialise en `ARRAY[...]` côté Postgres → `DatatypeMismatch`. Toujours `json.dumps` côté Python + `CAST(:x AS json)` côté SQL dialect-aware.
+- **Ménage « 4 presses »** (toujours reporté — Daco D250 finition + Atelier 2 ne devraient PAS apparaître dans les sélecteurs presse / optim) — à arbitrer **après** vérif du couplage rebobineuse (cf. BACKLOG_BUGS § 1 sécurisé).
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).
 - **Phase 2 / `matiere_prix_kg_defaut`** (à arbitrer) — fallback P1 conservé sur `TarifPoste` (Q1 audit Lot 4a) ; migrer vers `ConfigCouts` ou supprimer le fallback.
 - **Dette `payload_output` = donnée serveur** (PR séparé à prévoir) — durcissement intégral : recalcul serveur mono-config OU purge `DevisSaveBar` si `/devis/nouveau` abandonné. Le pop conditionnel actuel (#78) suffit à éteindre la régression sans casser le flux legacy.
+
+---
+
+## Incident prod — 02/06/2026 (boot Railway crash post-merge #86, résolu #87)
+
+- **Symptôme** : post-merge #86 (P1+P2), Railway prod en boot loop, HTTP 502 sur `devis-flexo-production.up.railway.app/`. Logs Railway : `psycopg2.errors.DatatypeMismatch: column "options" of relation "machine" is of type json but expression is of type text[]` au moment du `alembic upgrade head` lancé par le `CMD` du Dockerfile.
+- **Cause racine** : dans la migration `b2c3d4e5f6g7`, l'INSERT machine passait `mi.options` directement (lu comme `list[str]` Python par SQLAlchemy depuis la colonne JSON de `machine_imprimerie`). En binding `text(":options")`, SQLAlchemy sérialisait en `ARRAY[...]` côté Postgres, alors que `machine.options` est typée `JSON` → mismatch.
+- **Pourquoi le test PG ne l'a pas chopé avant merge** : le seed de `test_migration_p1p2_sous_fk_strictes_postgres` initialisait les MI avec `options='[]'::json` (liste vide). La valeur lue était `[]`, le code path ne tombait pas sur le mismatch. **Sentinelle aveugle** sur l'angle « options non-vides ».
+- **État DB prod pendant l'incident** : migration alembic atomique → `ROLLBACK` Postgres automatique → révision maintenue sur `a1b2c3d4e5f6` (B3b). **Aucune corruption** (FK ni data).
+- **Fix (PR #87)** :
+  1. Migration : `json.dumps(options_list)` côté Python + `CAST(:options AS json)` côté SQL Postgres (dialect-aware ; SQLite reste sur `:options` natif → TEXT). Appliqué à upgrade ET downgrade.
+  2. Sentinelle anti-régression : le test PG seede désormais avec options non-vides explicites (Mark Andy 2200 = `["UV","dorure_froid"]`, OMET = `["UV","hot_stamping","laminage"]`, Nilpeter = `[]` pour préserver le cas vide) + assert que `options` post-migration matche la valeur seedée.
+- **Résolution** : merge #87 → redéploiement Railway → `alembic upgrade head` re-tente → migration appliquée (révision **`b2c3d4e5f6g7`**) → `/` répond 200 (`{"status":"ok","app":"devis-flexo"}`) en < 30 s.
+- **Bonus du même test PG sous FK strictes** : il avait déjà attrapé **AVANT merge #86** un autre bug latent — **cascade UPDATE** dans le remap FK quand `new_machine_id` d'une itération coïncidait avec un `old_mi.id` futur (séquence machine basse → ids contigus). Corrigé par **UPDATE atomique CASE WHEN** (upgrade + downgrade). Railway preview de la PR avait passé par chance (ids prod hauts et disjoints). Sans le test PG FK strictes, le bug aurait silencieusement corrompu les FK `lot_production.machine_id` + `porte_cliche.machine_id` au déploiement prod.
+
+→ Leçons reportées dans « En cours / à venir » §  Pattern migrations data à auditer.
+
+---
+
+## Carte multi-instances
+
+RAZ — aucun lot en cours côté Claude. La PR P1+P2 + hotfix sont mergés et en prod. Prochaine session démarre sur la **bug optim 3 machines non-candidates** (cf. BACKLOG_BUGS).
 
 ---
 
