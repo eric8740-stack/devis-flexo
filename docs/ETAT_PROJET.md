@@ -9,14 +9,15 @@
 
 ## En-tête
 
-- **Date** : 2026-06-01
-- **Branche active** : `main` (après merge #83)
+- **Date** : 2026-06-02
+- **Branche active** : `main` (après merge #84)
 - **Sprint en cours** : Phase 2 — refactor `cost_engine` config-driven (lots successifs sur `ConfigCouts` scopée tenant)
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- #84 — test(devis): figer benchmark sacré multi-lots pré-repoint (P0b) — tripwire `704,07 €`
 - #83 — chore(machine): drop colonne morte `vitesse_pratique_m_min` (B3b)
 - #82 — feat(optim): B3a repoint moteur sur `Machine` + vitesse réelle dérivée (`vitesse_moyenne_m_h ÷ 60`)
 - #81 — feat(machine): B2 exposer champs optim Machine + harmoniser vitesse réelle (chiffrage ET optim)
@@ -26,7 +27,6 @@
 - #77 — fix(devis): UNIQUE(devis.numero) scopée tenant + MAX+1 + retry loop (résout 409 sur hard-delete)
 - #75 — refactor(cost_engine): P1/P3/P4/P6 depuis `ConfigCouts` scopée tenant (Phase 2 / Lot 4a)
 - #74 — docs: ajout/maj `ETAT_PROJET.md` (source de vérité état d'avancement)
-- #73 — feat(devis): planificateur imposer nb de bobines + gestion du surplus (facture/stock/réduire)
 
 ## PRs ouvertes
 
@@ -42,10 +42,10 @@ Aucune.
 
 ## Baseline tests
 
-- **pytest** : `1098 passed`, 5 skipped, 21 warnings — main post-merge #83. Tests B3a (`test_optim_loader_repoint_machine_b3a.py`), B2, B1 (avec assertions `vitesse_pratique_m_min` retirées en B3b), fix update_devis, fix 409, Lot 4a. **Benchmark V1a 1 449,09 € + 5 cas + V8 : 13/13 EXACT**.
-- **vitest** : `172/172 tests passed` (23/23 fichiers) — main post-merge #83 (inchangé vs B3a, B3b est 100 % backend).
-- **next build** : ✓ compiled successfully (vérifié hors cache `.next` + gate Vercel preview vert avant merge #83).
-- **alembic** : HEAD = `a1b2c3d4e5f6` (B3b DROP `machine.vitesse_pratique_m_min`). Cycle up/down/up validé en local. **Application prod auto** via `CMD` Dockerfile (`alembic upgrade head && uvicorn ...`) — la check `charismatic-bravery - devis-flexo` verte sur PR #83 confirme que la migration tourne sans erreur côté Railway (preview DB partie de `z0p4n6r8s1t3`, arrivée à `a1b2c3d4e5f6`).
+- **pytest** : `1099 passed`, 5 skipped, 21 warnings — main post-merge #84. +1 tripwire sacré multi-lots P0b (`test_benchmark_multilots_sacred_p0b.py`) vs baseline B3b 1098/5. **Benchmark V1a 1 449,09 € + 5 cas + V8 : 13/13 EXACT**.
+- **vitest** : `172/172 tests passed` (23/23 fichiers) — main post-merge #84 (inchangé vs B3b, P0b est 100 % backend).
+- **next build** : ✓ compiled successfully (vérifié hors cache `.next` + gate Vercel preview vert avant merge #84).
+- **alembic** : HEAD = `a1b2c3d4e5f6` (B3b DROP `machine.vitesse_pratique_m_min`). Application prod auto via `CMD` Dockerfile.
 
 ---
 
@@ -58,11 +58,16 @@ Aucune.
 - Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72), **Lot 4a 7 tarifs P1/P3/P4/P6 scopés tenant via `ConfigCouts` (#75)**. **Dette config-driven Phase 2 identifiée 28/05 → résolue par Lots 1/2/3/4a (marge, P5/P7, P1/P3/P4/P6).**
 - Numérotation devis robuste (#77, 29/05) — `UNIQUE(devis.numero)` scopée tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` en `MAX(seq)+1` scope tenant + retry loop borné (5). Résout 409 sur hard-delete (count+1 rebouchait les trous) et autorise deux tenants à avoir chacun `DEV-YYYY-0001` sans collision.
 - **Convergence machines B1/B2/B3a/B3b (#80 + #81 + #82 + #83, 29/05-01/06)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). **Moteur d'optim repointé sur `Machine` (B3a #82)** : `optimisation_loader.charger_machines_actives` lit le parc réel (P5/Daco/Atelier 2) au lieu du catalogue `MachineImprimerie` (Mark Andy 2200) → étape 2 « Candidats viables » affiche le vrai parc utilisateur. **B3b #83** : colonne morte `machine.vitesse_pratique_m_min` droppée (migration `a1b2c3d4e5f6` réversible). `MachineImprimerie` reste **déprécié** (table conservée en BDD pour FK historiques `lot_production`/`porte_cliche`, plus lue côté application).
+- **P0b tripwire sacré multi-lots (#84, 02/06)** — `test_benchmark_multilots_sacred_p0b.py` fige `prix_vente_ht_eur = 704,07 €` sur scénario déterministe `POST /api/devis` multi-lots (1 lot, 100×80mm, 2×3 poses, qté 10 000, MachineImprimerie `laize_utile=320`). Sert de tripwire AVANT le repoint P1 (`MachineImprimerie` → `Machine`) : toute dérive du `laize_utile_mm` effectivement passé au moteur casse ce test, validation Eric requise avant re-baselining. Garde anti-drift fixture : assertion explicite `machine.laize_utile_mm == 320` sur la 1re MachineImprimerie source (échoue FORT si l'ordre/le catalogue d'onboarding change).
 - Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
 ## En cours / à venir
 
-- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** (sprint dédié à planifier — **HORS B3b**) — repoint du chiffrage multi-lots `crud.devis._construire_devis_input_pour_lot:593-623` qui lit encore `MachineImprimerie.laize_utile_mm` (touche `cost_engine` SACRED) + data migration `lot_production.machine_id` (FK historique vers `machine_imprimerie.id`). Cleanup imports `MachineImprimerie` + drop éventuel de la table dépendent de ce repoint. **Brief séparé requis** (impact benchmark sacré V1a/V1b/V2/V3/V4 à valider).
+- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** (sprint à planifier — P0c puis P1) :
+  - **P0a** ✅ audit READ-ONLY livré en session 02/06 (cartographie + verdict « 2 prérequis bloquants »).
+  - **P0b** ✅ mergé #84 — tripwire sacré multi-lots `704,07 €` figé (`test_benchmark_multilots_sacred_p0b.py`).
+  - **P0c** 🔜 audit data prod : combien de `lot_production` historiques, combien de `machine_imprimerie.id` distincts référencés, plan de migration FK `lot_production.machine_id` (`machine_imprimerie.id` → `machine.id`). Mapping non trivial — les noms diffèrent côté tenant démo (`Mark Andy P5` côté Machine vs `Mark Andy 2200` côté MachineImprimerie issu du catalogue onboarding).
+  - **P1** 🔜 repoint code `crud.devis._construire_devis_input_pour_lot:593-623` → `db.get(Machine, lot.machine_id)` + fallback `laize_utile_mm or laize_max_mm` (pattern B3a). **Décision (a) actée** : source de vérité `laize` = `Machine` (paramètre fiche utilisateur), `MachineImprimerie.laize_utile_mm = 320` = doublon legacy à retirer. Conséquence anticipée : le tripwire P0b va bouger volontairement au repoint (`Machine.laize_utile_mm` pour P5 démo = 330, vs 320 MachineImprimerie) → re-baselining `_EXPECTED_PRIX_VENTE_HT` après validation Eric de la nouvelle valeur observée.
 - **Phase 2 / Lot 4b** (à venir) — UI Stratégique pour les 7 nouveaux champs Lot 4a (`marge_confort_roulage_mm`, `cliche_prix_couleur_eur`, `outil_base_eur`, `outil_par_trace_eur`, `surcout_forme_speciale_facteur`, `calage_forfait_eur`, `finitions_prix_m2_eur`).
 - **Phase 2 / cleanup `TarifPoste`** (à venir) — suppression des colonnes dépréciées P1/P3/P4/P5/P6/P7 quand toutes les configs sont stables en prod.
 - **Phase 2 / `Machine` override** (à venir) — `Machine.cout_horaire_eur` comme override optionnel sur `ConfigCouts.cout_exploitation_machine_eur_h` (P5 par machine).
