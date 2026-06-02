@@ -144,9 +144,9 @@ def _seed_etat_avant_p1p2(db_url: str) -> dict[str, int]:
             ent_id = conn.execute(
                 text(
                     "INSERT INTO entreprise "
-                    "(raison_sociale, siret, email, is_demo, date_creation) "
+                    "(raison_sociale, siret, email, is_demo) "
                     "VALUES ('Demo P1P2', '00000000000001', 'demo-p1p2@test.fr', "
-                    "true, CURRENT_TIMESTAMP) RETURNING id"
+                    "true) RETURNING id"
                 )
             ).scalar()
 
@@ -220,47 +220,49 @@ def _seed_etat_avant_p1p2(db_url: str) -> dict[str, int]:
                 {"eid": ent_id},
             ).scalar()
 
-            # 1 devis (pour FK lot_production).
+            # 1 devis (pour FK lot_production). date_creation server_default.
             devis_id = conn.execute(
                 text(
                     "INSERT INTO devis "
                     "(entreprise_id, numero, statut, payload_input, "
                     " payload_output, mode_calcul, format_h_mm, format_l_mm, "
-                    " machine_id, type_entree_fichier, date_creation) "
+                    " machine_id, type_entree_fichier) "
                     "VALUES (:eid, 'DEV-2026-9999', 'brouillon', "
                     " '{\"placeholder\": true}'::json, "
                     " '{\"placeholder\": true}'::json, "
-                    " 'cas1', 50, 100, :mid, 'a_designer', CURRENT_TIMESTAMP) "
+                    " 'cas1', 50, 100, :mid, 'a_designer') "
                     "RETURNING id"
                 ),
                 {"eid": ent_id, "mid": machine_p5_id},
             ).scalar()
 
-            # lot_production qui pointe sur MI 2200 (FK vers machine_imprimerie.id)
+            # lot_production : entreprise_id NOT NULL + colonne 'ordre' (pas
+            # ordre_lot). machine_id pointe sur MI 2200 -> FK machine_imprimerie.id.
             lot_id = conn.execute(
                 text(
                     "INSERT INTO lot_production "
-                    "(devis_id, machine_id, cylindre_id, matiere_id, "
-                    " nb_poses_dev, nb_poses_laize, sens_enroulement, "
-                    " quantite, ordre_lot) "
-                    "VALUES (:did, :mid, :cid, :matid, 2, 3, 1, 10000, 1) "
+                    "(devis_id, entreprise_id, machine_id, cylindre_id, "
+                    " matiere_id, nb_poses_dev, nb_poses_laize, "
+                    " sens_enroulement, quantite, ordre) "
+                    "VALUES (:did, :eid, :mid, :cid, :matid, 2, 3, 1, 10000, 1) "
                     "RETURNING id"
                 ),
                 {
                     "did": devis_id,
+                    "eid": ent_id,
                     "mid": mi_2200_id,
                     "cid": cyl_id,
                     "matid": mat_id,
                 },
             ).scalar()
 
-            # porte_cliche qui pointe sur MI OMET
+            # porte_cliche : colonne 'quantite' (pas nb_couleurs).
+            # machine_id pointe sur MI OMET.
             pc_id = conn.execute(
                 text(
                     "INSERT INTO porte_cliche "
-                    "(entreprise_id, cylindre_id, machine_id, "
-                    " nb_couleurs, date_creation) "
-                    "VALUES (:eid, :cid, :mid, 4, CURRENT_TIMESTAMP) "
+                    "(entreprise_id, cylindre_id, machine_id, quantite) "
+                    "VALUES (:eid, :cid, :mid, 4) "
                     "RETURNING id"
                 ),
                 {"eid": ent_id, "cid": cyl_id, "mid": mi_omet_id},
