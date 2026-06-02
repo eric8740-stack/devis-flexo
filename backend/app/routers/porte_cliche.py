@@ -19,7 +19,7 @@ from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import (
     CylindreMagnetique,
-    MachineImprimerie,
+    Machine,
     PorteCliche,
     User,
 )
@@ -40,7 +40,7 @@ DENTS_TO_MM = Decimal("3.175")
 
 def _enrichir_pour_read(pc: PorteCliche, db: Session) -> PorteClicheRead:
     """Compose la sortie API en joignant machine.nom + cylindre.nb_dents."""
-    machine = db.get(MachineImprimerie, pc.machine_id)
+    machine = db.get(Machine, pc.machine_id)
     cyl = db.get(CylindreMagnetique, pc.cylindre_id)
     nb_dents = int(round(float(cyl.developpe_mm) / float(DENTS_TO_MM))) if cyl else 0
     return PorteClicheRead(
@@ -61,13 +61,13 @@ def _enrichir_pour_read(pc: PorteCliche, db: Session) -> PorteClicheRead:
 
 def _verifier_fks_tenant(
     db: Session, user: User, machine_id: int, cylindre_id: int
-) -> MachineImprimerie:
+) -> Machine:
     """Vérifie que machine et cylindre appartiennent au tenant courant.
 
     Retourne la machine résolue pour permettre au caller de lire son
     nb_groupes_couleurs. 404 si scope mismatch (anti-énumération).
     """
-    machine = get_or_404_scoped(db, MachineImprimerie, machine_id, user)
+    machine = get_or_404_scoped(db, Machine, machine_id, user)
     get_or_404_scoped(db, CylindreMagnetique, cylindre_id, user)
     return machine
 

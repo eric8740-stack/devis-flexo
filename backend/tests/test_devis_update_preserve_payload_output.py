@@ -40,10 +40,10 @@ DEMO_ENTREPRISE_ID = 1
 
 def _fks_tenant_demo() -> tuple[int, int, int]:
     _onboard_if_needed()
-    from app.models import CylindreMagnetique, MachineImprimerie, Matiere
+    from app.models import CylindreMagnetique, Machine, Matiere
 
     with SessionLocal() as db:
-        machine = db.query(MachineImprimerie).filter_by(
+        machine = db.query(Machine).filter_by(
             entreprise_id=DEMO_ENTREPRISE_ID, actif=True
         ).first()
         cyl = db.query(CylindreMagnetique).filter_by(

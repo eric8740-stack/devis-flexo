@@ -1,18 +1,18 @@
 """Tests Machine.nb_groupes_couleurs (Brief #30 commit 2)."""
 from app.db import SessionLocal
-from app.models import MachineImprimerie
+from app.models import Machine
 
 
 def test_champ_nb_groupes_couleurs_existe_sur_machine_imprimerie():
-    """Le champ `nb_groupes_couleurs` existe sur MachineImprimerie
+    """Le champ `nb_groupes_couleurs` existe sur Machine
     (sémantique brief #30 'nb couleurs imprimables = PC montés')."""
     with SessionLocal() as db:
-        m = db.query(MachineImprimerie).first()
+        m = db.query(Machine).first()
     if m is None:
         # Cas test isolé sans seed : on vérifie juste le mapping ORM.
         from sqlalchemy import inspect
 
-        insp = inspect(MachineImprimerie)
+        insp = inspect(Machine)
         cols = {c.key for c in insp.columns}
         assert "nb_groupes_couleurs" in cols
         return
@@ -25,7 +25,7 @@ def test_seed_compte_demo_machines_nb_groupes_couleurs_renseigne():
     Nilpeter FA-22=8)."""
     with SessionLocal() as db:
         machines = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=1)
             .all()
         )

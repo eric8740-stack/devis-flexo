@@ -12,6 +12,29 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # P1+P2 : service Postgres pour le test FK strictes
+    # (test_migration_unify_machine_p1p2_postgres.py). Sans ce service,
+    # le test est skip et la migration P1+P2 n'est pas validee sous FK
+    # strictes (scenario reel du boot Railway prod).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Le test postgres FK strictes le lit pour cibler le service ci-dessus.
+      # Le reste des tests continue d'utiliser SQLite (DATABASE_URL non set
+      # -> fallback sqlite:///./devis_flexo.db de app/db.py).
+      PG_TEST_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
 

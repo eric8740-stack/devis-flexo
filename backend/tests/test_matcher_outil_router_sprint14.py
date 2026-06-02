@@ -28,7 +28,7 @@ def _machine_demo_id() -> int:
 
     Le seed Sprint 2 alimente la table `machine` avec 3 machines pour le
     compte demo (Mark Andy P5, Daco D250, Atelier 2). Sprint 14 matcher-outil
-    consomme `Machine.laize_max_mm` côté router (pas MachineImprimerie).
+    consomme `Machine.laize_max_mm` côté router (pas Machine).
     """
     db: Session = SessionLocal()
     try:

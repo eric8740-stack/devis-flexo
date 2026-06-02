@@ -23,7 +23,6 @@ from app.models import (
     Devis,
     LotProduction,
     Machine,
-    MachineImprimerie,
 )
 from app.schemas.devis import DevisInput
 from app.schemas.devis_persist import DevisCreate, DevisUpdate, NbCouleursIn
@@ -180,11 +179,12 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
         get_rotation_vue_c,
     )
 
-    machine_imp = db.get(MachineImprimerie, lot.machine_id)
+    # P1+P2 : repoint sur Machine (parc unique). Voir migration b2c3d4e5f6g7.
+    machine = db.get(Machine, lot.machine_id)
     setattr(
         lot,
         "machine_nom",
-        machine_imp.nom if machine_imp else f"Machine #{lot.machine_id}",
+        machine.nom if machine else f"Machine #{lot.machine_id}",
     )
     cyl = db.get(CylindreMagnetique, lot.cylindre_id)
     if cyl is not None:
@@ -588,12 +588,13 @@ def _construire_devis_input_pour_lot(
         )
 
     # Données depuis le cylindre magnétique du lot (développé) + machine
-    # d'impression (laize utile) — modèles Sprint 13.
+    # d'impression (laize utile). P1+P2 : repoint sur Machine (parc unique
+    # post-fusion MI -> Machine, cf migration b2c3d4e5f6g7).
     cyl = db.get(CylindreMagnetique, lot.cylindre_id)
-    machine_imp = db.get(MachineImprimerie, lot.machine_id)
-    if cyl is None or machine_imp is None:
+    machine = db.get(Machine, lot.machine_id)
+    if cyl is None or machine is None:
         raise ValueError(
-            f"Cyl ({lot.cylindre_id}) ou machine imprimerie ({lot.machine_id}) "
+            f"Cyl ({lot.cylindre_id}) ou machine ({lot.machine_id}) "
             "introuvable — FK cassée."
         )
 
@@ -618,9 +619,18 @@ def _construire_devis_input_pour_lot(
         else None
     )
 
+    # P1+P2 : fallback laize_utile_mm -> laize_max_mm si NULL (pattern B3a
+    # deja eprouve dans optimisation_loader). Garantit qu'un nouveau tenant
+    # qui n'a pas encore configure laize_utile via UI B2 utilise la
+    # laize_max comme valeur par defaut raisonnable.
+    laize_utile_val = (
+        machine.laize_utile_mm
+        if machine.laize_utile_mm is not None
+        else machine.laize_max_mm
+    )
     return DevisInput(
         complexe_id=complexe.id,
-        laize_utile_mm=int(machine_imp.laize_utile_mm or 320),
+        laize_utile_mm=int(laize_utile_val),
         ml_total=ml_total,
         # Sprint 16 fix chiffrage : nb_couleurs propagé depuis le payload
         # (mappé en amont). {} si non fourni → P2 Encres = 0 (antérieur).

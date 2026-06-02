@@ -19,8 +19,9 @@ Historique :
   Fast, PC-410 Flint) et recrée le bon schéma + reseed 21 cyl × 3
   machines actives en compte demo.
 
-Convention FK (cohérente avec LotProduction Sprint 13) :
-  - `machine_id` → `machine_imprimerie.id` (table d'optim Sprint 13)
+Convention FK (cohérente avec LotProduction Sprint 13 ; P1+P2 unify) :
+  - `machine_id` → `machine.id` (parc unique post-fusion MI -> Machine,
+    cf migration b2c3d4e5f6g7).
   - `cylindre_id` → `cylindre_magnetique.id`
 """
 from datetime import datetime
@@ -67,7 +68,7 @@ class PorteCliche(Base):
         nullable=False,
     )
     machine_id: Mapped[int] = mapped_column(
-        ForeignKey("machine_imprimerie.id"), nullable=False
+        ForeignKey("machine.id"), nullable=False
     )
     cylindre_id: Mapped[int] = mapped_column(
         ForeignKey("cylindre_magnetique.id"), nullable=False

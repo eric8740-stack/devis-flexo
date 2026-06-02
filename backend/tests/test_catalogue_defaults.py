@@ -59,7 +59,7 @@ def test_machines_unique_codes_and_required_fields():
     assert len(set(codes)) == 3, f"Codes machine doivent être uniques : {codes}"
     expected_codes = {"mark_andy_2200", "omet_xflex_330", "nilpeter_fa_22"}
     assert set(codes) == expected_codes
-    # Champs NOT NULL côté model MachineImprimerie
+    # Champs NOT NULL côté model Machine
     for m in MACHINES_DEFAULT:
         assert m["nom"]
         assert m["laize_totale_mm"] > 0

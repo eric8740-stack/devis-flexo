@@ -9,7 +9,6 @@ from app.models.complexe import Complexe
 from app.models.config_changements import ConfigChangements
 from app.models.config_couts import ConfigCouts
 from app.models.config_roulage import MODES_ROULAGE, ConfigRoulage
-from app.models.configuration_pose import ConfigurationPose
 from app.models.controle_bat import (
     ACTIONS_CORRECTION_SENS,
     DECISIONS_FINALES,
@@ -24,7 +23,6 @@ from app.models.entreprise import Entreprise
 from app.models.lot_production import LotProduction
 from app.models.fournisseur import Fournisseur
 from app.models.machine import Machine
-from app.models.machine_imprimerie import MachineImprimerie
 from app.models.machine_rebobineuse import MachineRebobineuse
 from app.models.matiere import Matiere
 from app.models.parametre_mandrin import MODES_PAR_DEFAUT, ParametreMandrin
@@ -44,11 +42,11 @@ __all__ = [
     # Sprint 13 Lot S13.E — POC IA analyse photo étiquette (FlexoCheck)
     "AnalysePhotoEtiquette",
     # Sprint 13 Lot S13.B — 6 modèles métier pour le moteur d'optimisation
+    # (post P1+P2 : ConfigurationPose + MachineImprimerie supprimés,
+    # cf migration b2c3d4e5f6g7).
     "BAREME_TYPES",
     "Bareme",
-    "ConfigurationPose",
     "CylindreMagnetique",
-    "MachineImprimerie",
     "Matiere",
     "OptionFabrication",
     # Sprint 13 Lot S13.F — 2 tables traçabilité (fondations FlexoCheck)

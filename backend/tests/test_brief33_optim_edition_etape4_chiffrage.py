@@ -21,7 +21,7 @@ from app.models import (
     CylindreMagnetique,
     Devis,
     LotProduction,
-    MachineImprimerie,
+    Machine,
     Matiere,
 )
 from tests.test_lot_production_model import _onboard_if_needed
@@ -57,7 +57,7 @@ def _fks_tenant1() -> tuple[int, int, int]:
     _onboard_if_needed()
     with SessionLocal() as db:
         machine = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=1, actif=True)
             .first()
         )

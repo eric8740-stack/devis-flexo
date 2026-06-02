@@ -18,7 +18,7 @@ from app.main import app
 from app.models import (
     Bareme,
     CylindreMagnetique,
-    MachineImprimerie,
+    Machine,
     Matiere,
     OptionFabrication,
 )
@@ -36,7 +36,7 @@ def cleanup_tenant_rows():
     try:
         for ent_id in (1, 2):
             db.query(CylindreMagnetique).filter_by(entreprise_id=ent_id).delete()
-            db.query(MachineImprimerie).filter_by(entreprise_id=ent_id).delete()
+            db.query(Machine).filter_by(entreprise_id=ent_id).delete()
             db.query(Matiere).filter_by(entreprise_id=ent_id).delete()
             db.query(OptionFabrication).filter_by(entreprise_id=ent_id).delete()
             db.query(Bareme).filter_by(entreprise_id=ent_id).delete()
@@ -45,7 +45,7 @@ def cleanup_tenant_rows():
         # Teardown idem pour ne pas polluer les tests suivants
         for ent_id in (1, 2):
             db.query(CylindreMagnetique).filter_by(entreprise_id=ent_id).delete()
-            db.query(MachineImprimerie).filter_by(entreprise_id=ent_id).delete()
+            db.query(Machine).filter_by(entreprise_id=ent_id).delete()
             db.query(Matiere).filter_by(entreprise_id=ent_id).delete()
             db.query(OptionFabrication).filter_by(entreprise_id=ent_id).delete()
             db.query(Bareme).filter_by(entreprise_id=ent_id).delete()
@@ -131,7 +131,7 @@ def test_post_initialiser_catalogues_happy_path(cleanup_tenant_rows):
     db: Session = SessionLocal()
     try:
         assert db.query(CylindreMagnetique).filter_by(entreprise_id=1).count() == 4
-        assert db.query(MachineImprimerie).filter_by(entreprise_id=1).count() == 2
+        assert db.query(Machine).filter_by(entreprise_id=1).count() == 2
         assert db.query(Matiere).filter_by(entreprise_id=1).count() == 2
         assert db.query(OptionFabrication).filter_by(entreprise_id=1).count() == 3
         assert db.query(Bareme).filter_by(entreprise_id=1).count() == 4
@@ -249,11 +249,11 @@ def test_isolation_tenant_onboarding_independants(
         assert db.query(CylindreMagnetique).filter_by(entreprise_id=1).count() == 1
         assert db.query(CylindreMagnetique).filter_by(entreprise_id=2).count() == 1
         assert (
-            db.query(MachineImprimerie).filter_by(entreprise_id=1).first().nom
+            db.query(Machine).filter_by(entreprise_id=1).first().nom
             == "Mark Andy 2200"
         )
         assert (
-            db.query(MachineImprimerie).filter_by(entreprise_id=2).first().nom
+            db.query(Machine).filter_by(entreprise_id=2).first().nom
             == "Nilpeter FA-22"
         )
     finally:

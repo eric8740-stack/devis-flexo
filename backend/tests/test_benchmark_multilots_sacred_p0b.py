@@ -75,19 +75,25 @@ _PAYLOAD_INPUT_FIGE = {
 
 
 def _fks_demo_premiere_combo() -> tuple[int, int, int]:
-    """Recupere les premiers ids actifs du tenant demo (deterministes apres
-    `_onboard_if_needed`). Verifie au passage que la MachineImprimerie
-    source a bien la `laize_utile_mm` attendue (anti-drift fixture).
+    """Recupere les ids deterministes du tenant demo apres
+    `_onboard_if_needed`. P1+P2 : selection PAR NOM sur `Machine` (post
+    fusion MI -> Machine via migration b2c3d4e5f6g7) -- la regle
+    historique "1ere MachineImprimerie ORDER BY id" n'existe plus.
     """
     _onboard_if_needed()
-    from app.models import CylindreMagnetique, MachineImprimerie, Matiere
+    from app.models import CylindreMagnetique, Machine, Matiere
 
     with SessionLocal() as db:
-        # IDs deterministes : ORDER BY id (= ordre d'INSERT onboarding).
+        # P1+P2 : selection par NOM (deterministe et explicite). L'onboarding
+        # INSERT Mark Andy 2200 dans `machine` (au lieu de machine_imprimerie
+        # pre-P1+P2).
         machine = (
-            db.query(MachineImprimerie)
-            .filter_by(entreprise_id=DEMO_ENTREPRISE_ID, actif=True)
-            .order_by(MachineImprimerie.id)
+            db.query(Machine)
+            .filter_by(
+                entreprise_id=DEMO_ENTREPRISE_ID,
+                nom="Mark Andy 2200",
+                actif=True,
+            )
             .first()
         )
         cyl = (
@@ -102,16 +108,19 @@ def _fks_demo_premiere_combo() -> tuple[int, int, int]:
             .order_by(Matiere.id)
             .first()
         )
-        assert machine and cyl and mat, "seed/onboarding tenant demo incomplet"
+        assert machine and cyl and mat, (
+            "seed/onboarding tenant demo incomplet (Mark Andy 2200 attendue "
+            "dans `machine` apres P1+P2)"
+        )
 
-        # Anti-drift : si la 1re MachineImprimerie n'est plus Mark Andy 2200
-        # ou si MACHINES_DEFAULT change sa laize, on echoue FORT ici plutot
-        # que de figer silencieusement un autre scenario sur le sacred.
+        # Anti-drift : Mark Andy 2200 doit avoir laize_utile=320 (catalogue
+        # MACHINES_DEFAULT). Si la laize change cote catalogue, le sacred
+        # multi-lots serait fige sur un autre scenario -- echec FORT ici.
         assert machine.laize_utile_mm == _EXPECTED_LAIZE_UTILE_MACHINE_SOURCE, (
-            f"DRIFT fixture : 1re MachineImprimerie source attendue avec "
+            f"DRIFT fixture : Mark Andy 2200 attendue avec "
             f"laize_utile_mm={_EXPECTED_LAIZE_UTILE_MACHINE_SOURCE}, "
             f"obtenu laize_utile_mm={machine.laize_utile_mm} "
-            f"(machine.nom={machine.nom!r}, id={machine.id}). "
+            f"(machine.id={machine.id}). "
             "Le sacred multi-lots ci-dessous serait fige sur un autre "
             "scenario que celui valide -- INVESTIGUER avant de toucher "
             "a `_EXPECTED_PRIX_VENTE_HT`."

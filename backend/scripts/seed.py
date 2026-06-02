@@ -680,6 +680,13 @@ def run_seed() -> dict[str, int]:
     with SessionLocal() as session:
         # Phase 1 — DELETE descendant des tables enfants
         # Sprint 4 (devis) en TÊTE car FK NOT NULL vers machine (Note 15)
+        # P1+P2 : LotProduction + PorteCliche aussi en TÊTE car post-fusion
+        # MI -> Machine, leurs FK machine_id pointent vers machine.id
+        # (cf migration b2c3d4e5f6g7). Sans ce DELETE, DELETE FROM machine
+        # echoue avec FOREIGN KEY constraint failed des qu'un lot/PC existe.
+        from app.models import LotProduction, PorteCliche
+        session.query(LotProduction).delete()
+        session.query(PorteCliche).delete()
         session.query(Devis).delete()
         session.query(Catalogue).delete()
         session.query(Complexe).delete()

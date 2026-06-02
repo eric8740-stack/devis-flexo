@@ -17,7 +17,7 @@ from app.models import (
     CylindreMagnetique,
     Devis,
     LotProduction,
-    MachineImprimerie,
+    Machine,
     Matiere,
     OptionFabrication,
 )
@@ -29,6 +29,11 @@ def _onboard_if_needed():
     """Onboarde le tenant 1 si nécessaire pour avoir cyl/mach/mat seedés.
 
     Idempotent : si déjà onboardé, l'endpoint renvoie 409 et on l'ignore.
+
+    P1+P2 : `MachineImprimerie` retiré (fusion vers `Machine`). Le purge
+    ne touche plus à MI mais on ne purge PAS Machine (seed Sprint 2 du
+    tenant demo doit rester intact -- P5/Daco/Atelier 2). L'onboarding
+    ajoute Mark Andy 2200 a cote (cf catalogue_defaults).
     """
     db: Session = SessionLocal()
     try:
@@ -36,8 +41,9 @@ def _onboard_if_needed():
         if existant:
             return
         # Sinon purge éventuels résidus et onboard via API.
+        # Machine NON purgee : Mark Andy P5/Daco/Atelier 2 (seed Sprint 2)
+        # restent. L'onboarding INSERT Mark Andy 2200 a cote.
         for ent_id in (1,):
-            db.query(MachineImprimerie).filter_by(entreprise_id=ent_id).delete()
             db.query(Matiere).filter_by(entreprise_id=ent_id).delete()
             db.query(OptionFabrication).filter_by(entreprise_id=ent_id).delete()
             db.query(Bareme).filter_by(entreprise_id=ent_id).delete()
@@ -95,10 +101,15 @@ def _create_devis_minimal(db: Session, numero: str = "TEST-LOT-001") -> Devis:
 
 
 def _get_fk_ids(db: Session) -> tuple[int, int, int]:
-    """Retourne (cylindre_id, machine_imprimerie_id, matiere_id) seedés
-    pour l'entreprise 1. Assume que `_onboard_if_needed()` a été appelé."""
+    """Retourne (cylindre_id, machine_id, matiere_id) seedés pour
+    l'entreprise 1. Assume que `_onboard_if_needed()` a été appelé.
+
+    P1+P2 : machine_id pointe désormais vers Machine (au lieu de
+    MachineImprimerie fusionné/droppé), cohérent avec la nouvelle FK
+    lot_production.machine_id -> machine.id.
+    """
     cyl = db.query(CylindreMagnetique).filter_by(entreprise_id=1).first()
-    mach = db.query(MachineImprimerie).filter_by(entreprise_id=1).first()
+    mach = db.query(Machine).filter_by(entreprise_id=1).first()
     mat = db.query(Matiere).filter_by(entreprise_id=1).first()
     assert cyl and mach and mat, "_onboard_if_needed() doit être appelé avant"
     return cyl.id, mach.id, mat.id

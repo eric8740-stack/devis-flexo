@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import (
     CylindreMagnetique,
-    MachineImprimerie,
+    Machine,
     PorteCliche,
 )
 from tests.test_lot_production_model import _onboard_if_needed
@@ -16,7 +16,7 @@ def _get_fks_tenant1(db: Session) -> tuple[int, int]:
     """Retourne (machine_id, cylindre_id) pour tenant 1, onboarde si besoin."""
     _onboard_if_needed()
     machine = (
-        db.query(MachineImprimerie)
+        db.query(Machine)
         .filter_by(entreprise_id=1, actif=True)
         .first()
     )

@@ -5,7 +5,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import (
     CylindreMagnetique,
-    MachineImprimerie,
+    Machine,
     PorteCliche,
 )
 from tests.test_lot_production_model import _onboard_if_needed
@@ -23,7 +23,7 @@ def _get_fks_tenant1() -> tuple[int, int]:
     _onboard_if_needed()
     with SessionLocal() as db:
         m = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=1, actif=True)
             .first()
         )
@@ -96,9 +96,9 @@ def test_quantite_default_egale_nb_couleurs_machine():
     _onboard_if_needed()
     with SessionLocal() as db:
         machine = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=1, actif=True)
-            .filter(MachineImprimerie.nb_groupes_couleurs.isnot(None))
+            .filter(Machine.nb_groupes_couleurs.isnot(None))
             .first()
         )
         cyl = (
@@ -112,7 +112,7 @@ def test_quantite_default_egale_nb_couleurs_machine():
         # la migration g8a4f9c2e5b1 garantit les valeurs en compte demo).
         if machine is None:
             machine = (
-                db.query(MachineImprimerie)
+                db.query(Machine)
                 .filter_by(entreprise_id=1, actif=True)
                 .first()
             )
