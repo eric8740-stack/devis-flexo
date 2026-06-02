@@ -110,18 +110,19 @@ def _resync_pg_sequences(db_url: str) -> None:
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
+            # Tables PUBLIQUES qui ont effectivement une colonne 'id'
+            # (filtrer alembic_version etc. qui n'ont pas d'id et feraient
+            # planter pg_get_serial_sequence avec UndefinedColumn).
             rows = conn.execute(
                 text(
-                    "SELECT tablename FROM pg_tables "
-                    "WHERE schemaname = 'public'"
+                    "SELECT table_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND column_name = 'id'"
                 )
             ).fetchall()
             for row in rows:
-                table = row.tablename
+                table = row.table_name
                 seq = conn.execute(
-                    text(
-                        "SELECT pg_get_serial_sequence(:t, 'id')"
-                    ),
+                    text("SELECT pg_get_serial_sequence(:t, 'id')"),
                     {"t": table},
                 ).scalar()
                 if seq is None:
