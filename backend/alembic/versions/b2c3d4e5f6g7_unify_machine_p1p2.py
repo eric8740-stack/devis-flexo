@@ -59,6 +59,7 @@ Revision ID: b2c3d4e5f6g7
 Revises: a1b2c3d4e5f6
 Create Date: 2026-06-02
 """
+import json
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -129,7 +130,16 @@ def upgrade() -> None:
             if mi.vitesse_pratique_m_min is not None
             else None
         )
-        options_value = mi.options if mi.options is not None else "[]"
+        # machine.options est typee JSON cote modele. Si on passe une list[str]
+        # Python directement, SQLAlchemy serialise en ARRAY[...] cote Postgres
+        # et leve DatatypeMismatch : "column options is of type json but
+        # expression is of type text[]" (incident prod constate au merge PR #86).
+        # Fix : json.dumps cote Python + CAST(:options AS json) cote SQL pour
+        # Postgres. SQLite stocke le JSON comme TEXT (no-op pour le cast donc
+        # juste :options direct).
+        options_raw = mi.options if isinstance(mi.options, list) else []
+        options_value = json.dumps(options_raw)
+        options_sql = "CAST(:options AS json)" if is_pg else ":options"
 
         bind.execute(
             text(
@@ -142,7 +152,7 @@ def upgrade() -> None:
                 ":entreprise_id, :nom, :laize_max_mm, :laize_utile_mm, "
                 ":vitesse_max_m_min, :vitesse_moyenne_m_h, "
                 ":nb_groupes_couleurs, :nb_postes_decoupe, :cout_horaire_eur, "
-                ":options, :actif"
+                f"{options_sql}, :actif"
                 ")"
             ),
             {
@@ -495,6 +505,7 @@ def downgrade() -> None:
         {"noms": list(_NOMS_CATALOGUE_MI)},
     ).fetchall()
 
+    is_pg_dn = bind.dialect.name == "postgresql"
     machine_to_mi_id: dict[int, int] = {}
     for m in machines_cat:
         vitesse_pratique_m_min = (
@@ -502,6 +513,11 @@ def downgrade() -> None:
             if m.vitesse_moyenne_m_h is not None and m.vitesse_moyenne_m_h > 0
             else 60  # NOT NULL default minimal sur MI legacy
         )
+        # Meme bug JSON vs ARRAY qu'upgrade : machine_imprimerie.options est
+        # typee JSON -> cast explicite cote Postgres.
+        options_raw_dn = m.options if isinstance(m.options, list) else []
+        options_value_dn = json.dumps(options_raw_dn)
+        options_sql_dn = "CAST(:options AS json)" if is_pg_dn else ":options"
         bind.execute(
             text(
                 "INSERT INTO machine_imprimerie ("
@@ -513,7 +529,7 @@ def downgrade() -> None:
                 ":entreprise_id, :nom, :laize_totale_mm, :laize_utile_mm, "
                 ":vit_nom, :vit_prat, "
                 ":nb_groupes_couleurs, :nb_postes_decoupe, :cout_horaire_eur, "
-                ":options, :actif, CURRENT_TIMESTAMP"
+                f"{options_sql_dn}, :actif, CURRENT_TIMESTAMP"
                 ")"
             ),
             {
@@ -530,7 +546,7 @@ def downgrade() -> None:
                     if m.cout_horaire_eur is not None
                     else None
                 ),
-                "options": m.options if m.options is not None else "[]",
+                "options": options_value_dn,
                 "actif": bool(m.actif),
             },
         )

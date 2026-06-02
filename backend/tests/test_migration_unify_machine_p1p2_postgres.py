@@ -209,7 +209,12 @@ def _seed_etat_avant_p1p2(db_url: str) -> dict[str, int]:
                 {"eid": ent_id},
             ).scalar()
 
-            # 3 machine_imprimerie catalogue (laizes specifiques par presse).
+            # 3 machine_imprimerie catalogue. ATTENTION : options non-vides
+            # explicitement (reproduit bug prod merge PR #86 : la list[str]
+            # Python lue depuis mi.options etait re-passee directement au
+            # INSERT, ce qui faisait Postgres recevoir un ARRAY[...] sur une
+            # colonne JSON -> DatatypeMismatch). Une regression future remettant
+            # une list nue dans le INSERT migration sera chopee par ce seed.
             mi_2200_id = conn.execute(
                 text(
                     "INSERT INTO machine_imprimerie "
@@ -218,7 +223,8 @@ def _seed_etat_avant_p1p2(db_url: str) -> dict[str, int]:
                     " vitesse_pratique_m_min, cout_horaire_eur, "
                     " options, actif, date_creation) "
                     "VALUES (:eid, 'Mark Andy 2200', 330, 320, 8, 1, 70, "
-                    " 70.00, '[]'::json, true, CURRENT_TIMESTAMP) RETURNING id"
+                    " 70.00, '[\"UV\", \"dorure_froid\"]'::json, "
+                    " true, CURRENT_TIMESTAMP) RETURNING id"
                 ),
                 {"eid": ent_id},
             ).scalar()
@@ -230,7 +236,8 @@ def _seed_etat_avant_p1p2(db_url: str) -> dict[str, int]:
                     " vitesse_pratique_m_min, cout_horaire_eur, "
                     " options, actif, date_creation) "
                     "VALUES (:eid, 'OMET XFlex 330', 340, 330, 10, 2, 80, "
-                    " 95.00, '[]'::json, true, CURRENT_TIMESTAMP) RETURNING id"
+                    " 95.00, '[\"UV\", \"hot_stamping\", \"laminage\"]'::json,"
+                    " true, CURRENT_TIMESTAMP) RETURNING id"
                 ),
                 {"eid": ent_id},
             ).scalar()
@@ -242,7 +249,8 @@ def _seed_etat_avant_p1p2(db_url: str) -> dict[str, int]:
                     " vitesse_pratique_m_min, cout_horaire_eur, "
                     " options, actif, date_creation) "
                     "VALUES (:eid, 'Nilpeter FA-22', 340, 330, 8, 2, 75, "
-                    " 90.00, '[]'::json, true, CURRENT_TIMESTAMP) RETURNING id"
+                    " 90.00, '[]'::json, "
+                    " true, CURRENT_TIMESTAMP) RETURNING id"
                 ),
                 {"eid": ent_id},
             ).scalar()
@@ -393,6 +401,28 @@ def test_migration_p1p2_sous_fk_strictes_postgres(fresh_pg_db):
             )
             assert laizes["OMET XFlex 330"] == 330.0
             assert laizes["Nilpeter FA-22"] == 330.0
+
+            # options preservees ET typees JSON (pas ARRAY). Cible directe du
+            # fix DatatypeMismatch prod : si la migration repassait une list
+            # Python nue au INSERT, ce SELECT echouerait sur le INSERT amont
+            # avec "column options is of type json but expression is of type
+            # text[]". Le seed plus haut a injecte des options non-vides
+            # explicitement pour declencher ce code path.
+            options_par_nom = {
+                m.nom: m.options
+                for m in conn.execute(
+                    text(
+                        "SELECT nom, options FROM machine "
+                        "WHERE entreprise_id = :eid"
+                    ),
+                    {"eid": ids["ent_id"]},
+                ).fetchall()
+            }
+            assert options_par_nom["Mark Andy 2200"] == ["UV", "dorure_froid"]
+            assert options_par_nom["OMET XFlex 330"] == [
+                "UV", "hot_stamping", "laminage"
+            ]
+            assert options_par_nom["Nilpeter FA-22"] == []
 
             # FK lot_production remappee : on verifie l'INVARIANT plutot que
             # l'id exact -- les ids dansent avec la resync de sequences, et
