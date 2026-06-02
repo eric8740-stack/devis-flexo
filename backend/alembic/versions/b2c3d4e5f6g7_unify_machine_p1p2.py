@@ -81,6 +81,21 @@ _NOMS_CATALOGUE_MI = ("Mark Andy 2200", "OMET XFlex 330", "Nilpeter FA-22")
 
 def upgrade() -> None:
     bind = op.get_bind()
+    is_pg = bind.dialect.name == "postgresql"
+
+    # === 0. Resync machine_id_seq sur MAX(id) (Postgres uniquement) ==========
+    # Garde-fou : si une migration data anterieure (Sprint 12+) a INSERT
+    # entreprise/machine avec id explicite sans bumper sa sequence, la seq
+    # peut etre restee a 1 -> les INSERT auto-increment qui suivent collisionnent
+    # (UniqueViolation 'machine_pkey'). On force la seq a MAX(id) actuel ; les
+    # INSERT ci-dessous prennent alors des ids libres garantis.
+    # No-op sur SQLite (pas de sequence).
+    if is_pg:
+        op.execute(
+            "SELECT setval(pg_get_serial_sequence('machine', 'id'), "
+            "COALESCE((SELECT MAX(id) FROM machine), 1), "
+            "(SELECT MAX(id) FROM machine) IS NOT NULL)"
+        )
 
     # === 1. INSERT machines depuis machine_imprimerie ========================
     # Idempotent : si une Machine du meme nom + tenant existe deja, on la
