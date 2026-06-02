@@ -394,32 +394,51 @@ def test_migration_p1p2_sous_fk_strictes_postgres(fresh_pg_db):
             assert laizes["OMET XFlex 330"] == 330.0
             assert laizes["Nilpeter FA-22"] == 330.0
 
-            # FK lot_production remappee vers machine.id (Mark Andy 2200)
-            new_machine_2200_id = next(
-                m.id for m in machines if m.nom == "Mark Andy 2200"
+            # FK lot_production remappee : on verifie l'INVARIANT plutot que
+            # l'id exact -- les ids dansent avec la resync de sequences, et
+            # ce qui compte c'est que lot_production pointe maintenant sur
+            # une Machine du bon nom ET du bon tenant.
+            lot_join = conn.execute(
+                text(
+                    "SELECT m.nom, m.entreprise_id FROM lot_production lp "
+                    "JOIN machine m ON lp.machine_id = m.id "
+                    "WHERE lp.id = :lid"
+                ),
+                {"lid": ids["lot_id"]},
+            ).first()
+            assert lot_join is not None, (
+                "lot_production.machine_id ne joint plus sur aucune Machine "
+                "(FK orpheline ?)"
             )
-            lot_machine_id = conn.execute(
-                text("SELECT machine_id FROM lot_production WHERE id = :id"),
-                {"id": ids["lot_id"]},
-            ).scalar()
-            assert lot_machine_id == new_machine_2200_id, (
-                f"lot_production.machine_id devrait pointer sur la nouvelle "
-                f"Machine 'Mark Andy 2200' (id={new_machine_2200_id}), "
-                f"recu {lot_machine_id} (= ancien mi_2200_id={ids['mi_2200_id']} ?)"
+            assert lot_join.nom == "Mark Andy 2200", (
+                f"lot_production pointe sur Machine '{lot_join.nom}', "
+                f"attendu 'Mark Andy 2200'"
+            )
+            assert lot_join.entreprise_id == ids["ent_id"], (
+                f"lot_production pointe sur Machine du tenant "
+                f"{lot_join.entreprise_id}, attendu {ids['ent_id']}"
             )
 
-            # FK porte_cliche remappee vers machine.id (OMET)
-            new_machine_omet_id = next(
-                m.id for m in machines if m.nom == "OMET XFlex 330"
+            # FK porte_cliche idem : invariant sur (nom, entreprise_id)
+            pc_join = conn.execute(
+                text(
+                    "SELECT m.nom, m.entreprise_id FROM porte_cliche pc "
+                    "JOIN machine m ON pc.machine_id = m.id "
+                    "WHERE pc.id = :pid"
+                ),
+                {"pid": ids["pc_id"]},
+            ).first()
+            assert pc_join is not None, (
+                "porte_cliche.machine_id ne joint plus sur aucune Machine "
+                "(FK orpheline ?)"
             )
-            pc_machine_id = conn.execute(
-                text("SELECT machine_id FROM porte_cliche WHERE id = :id"),
-                {"id": ids["pc_id"]},
-            ).scalar()
-            assert pc_machine_id == new_machine_omet_id, (
-                f"porte_cliche.machine_id devrait pointer sur la nouvelle "
-                f"Machine 'OMET XFlex 330' (id={new_machine_omet_id}), "
-                f"recu {pc_machine_id}"
+            assert pc_join.nom == "OMET XFlex 330", (
+                f"porte_cliche pointe sur Machine '{pc_join.nom}', "
+                f"attendu 'OMET XFlex 330'"
+            )
+            assert pc_join.entreprise_id == ids["ent_id"], (
+                f"porte_cliche pointe sur Machine du tenant "
+                f"{pc_join.entreprise_id}, attendu {ids['ent_id']}"
             )
 
             # Tables MI + configuration_pose DROPPEES
