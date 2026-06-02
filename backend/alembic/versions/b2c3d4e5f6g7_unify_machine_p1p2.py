@@ -195,20 +195,160 @@ def upgrade() -> None:
 
     # Re-create FK vers machine.id
     if is_sqlite:
-        with op.batch_alter_table("lot_production", schema=None) as batch:
-            batch.create_foreign_key(
-                "lot_production_machine_id_fkey",
-                "machine",
-                ["machine_id"],
-                ["id"],
-            )
-        with op.batch_alter_table("porte_cliche", schema=None) as batch:
-            batch.create_foreign_key(
-                "porte_cliche_machine_id_fkey",
-                "machine",
-                ["machine_id"],
-                ["id"],
-            )
+        # Bug constate en CI : sur SQLite, batch.create_foreign_key AJOUTE
+        # une FK mais l'ancienne (-> machine_imprimerie.id) reste presente
+        # dans la table reconstruite par batch (qui reflete les FK existantes).
+        # Quand machine_imprimerie est droppee juste apres, la FK orpheline
+        # rend toute operation SQL sur lot_production impossible :
+        # OperationalError "no such table: main.machine_imprimerie".
+        # Fix : `copy_from=Table_cible` pour forcer la reconstruction avec
+        # uniquement la nouvelle FK -> machine.id (l'ancienne disparait).
+        # Postgres : `op.drop_constraint` natif au-dessus a deja vire la FK.
+        target_meta = sa.MetaData()
+        lot_target = sa.Table(
+            "lot_production",
+            target_meta,
+            sa.Column(
+                "id", sa.Integer, primary_key=True, autoincrement=True
+            ),
+            sa.Column(
+                "devis_id",
+                sa.Integer,
+                sa.ForeignKey("devis.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            sa.Column(
+                "entreprise_id",
+                sa.Integer,
+                sa.ForeignKey("entreprise.id", ondelete="CASCADE"),
+                nullable=False,
+                index=True,
+            ),
+            sa.Column("ordre", sa.Integer, nullable=False),
+            sa.Column(
+                "cylindre_id",
+                sa.Integer,
+                sa.ForeignKey("cylindre_magnetique.id"),
+                nullable=False,
+            ),
+            sa.Column(
+                "machine_id",
+                sa.Integer,
+                sa.ForeignKey(
+                    "machine.id", name="lot_production_machine_id_fkey"
+                ),
+                nullable=False,
+            ),
+            sa.Column("nb_poses_dev", sa.Integer, nullable=False),
+            sa.Column("nb_poses_laize", sa.Integer, nullable=False),
+            sa.Column("sens_enroulement", sa.Integer, nullable=False),
+            sa.Column("quantite", sa.Integer, nullable=False),
+            sa.Column(
+                "matiere_id",
+                sa.Integer,
+                sa.ForeignKey("matiere.id"),
+                nullable=False,
+            ),
+            sa.Column(
+                "intervalle_dev_reel_mm", sa.Numeric(5, 2), nullable=True
+            ),
+            sa.Column(
+                "intervalle_laize_reel_mm", sa.Numeric(5, 2), nullable=True
+            ),
+            sa.Column("largeur_plaque_mm", sa.Numeric(6, 2), nullable=True),
+            sa.Column("score_optim", sa.Float, nullable=True),
+            sa.Column("cout_lot_ht_eur", sa.Numeric(10, 2), nullable=True),
+            sa.Column("payload_visuel", sa.JSON, nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                onupdate=sa.func.now(),
+                nullable=False,
+            ),
+            sa.UniqueConstraint(
+                "devis_id", "ordre", name="uq_lot_production_devis_ordre"
+            ),
+        )
+        pc_target = sa.Table(
+            "porte_cliche",
+            target_meta,
+            sa.Column(
+                "id", sa.Integer, primary_key=True, autoincrement=True
+            ),
+            sa.Column(
+                "entreprise_id",
+                sa.Integer,
+                sa.ForeignKey("entreprise.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            sa.Column(
+                "machine_id",
+                sa.Integer,
+                sa.ForeignKey(
+                    "machine.id", name="porte_cliche_machine_id_fkey"
+                ),
+                nullable=False,
+            ),
+            sa.Column(
+                "cylindre_id",
+                sa.Integer,
+                sa.ForeignKey("cylindre_magnetique.id"),
+                nullable=False,
+            ),
+            sa.Column("quantite", sa.Integer, nullable=False),
+            sa.Column("notes", sa.Text, nullable=True),
+            sa.Column(
+                "actif",
+                sa.Boolean,
+                nullable=False,
+                server_default=sa.true(),
+            ),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                onupdate=sa.func.now(),
+                nullable=False,
+            ),
+            sa.UniqueConstraint(
+                "entreprise_id",
+                "machine_id",
+                "cylindre_id",
+                name="uq_porte_cliche_entreprise_machine_cyl",
+            ),
+            sa.CheckConstraint(
+                "quantite >= 0", name="ck_porte_cliche_quantite_positive"
+            ),
+        )
+        # recreate="always" force la reconstruction meme sans op destructive
+        # dans le batch (sinon copy_from est ignore et la FK orpheline reste).
+        with op.batch_alter_table(
+            "lot_production",
+            schema=None,
+            copy_from=lot_target,
+            recreate="always",
+        ):
+            pass
+        with op.batch_alter_table(
+            "porte_cliche",
+            schema=None,
+            copy_from=pc_target,
+            recreate="always",
+        ):
+            pass
         bind.execute(text("PRAGMA foreign_keys = ON"))
     else:
         op.create_foreign_key(
