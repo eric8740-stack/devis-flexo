@@ -107,20 +107,25 @@ def _resync_pg_sequences(db_url: str) -> None:
     resync toutes les sequences avec MAX(id) post-upgrade. No-op si la table
     n'a pas de serial sequence sur 'id'.
     """
+    # Whitelist explicite des tables touchees par le seed test. information_
+    # schema.columns peut retourner des objets non-table (views) ou des tables
+    # dont 'pg_get_serial_sequence' echoue avec UndefinedColumn meme si la
+    # colonne id existe en theorie -> on prefere la liste blanche, defendable
+    # et sans surprise.
+    tables = (
+        "entreprise",
+        "machine",
+        "machine_imprimerie",
+        "cylindre_magnetique",
+        "matiere",
+        "devis",
+        "lot_production",
+        "porte_cliche",
+    )
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
-            # Tables PUBLIQUES qui ont effectivement une colonne 'id'
-            # (filtrer alembic_version etc. qui n'ont pas d'id et feraient
-            # planter pg_get_serial_sequence avec UndefinedColumn).
-            rows = conn.execute(
-                text(
-                    "SELECT table_name FROM information_schema.columns "
-                    "WHERE table_schema = 'public' AND column_name = 'id'"
-                )
-            ).fetchall()
-            for row in rows:
-                table = row.table_name
+            for table in tables:
                 seq = conn.execute(
                     text("SELECT pg_get_serial_sequence(:t, 'id')"),
                     {"t": table},
