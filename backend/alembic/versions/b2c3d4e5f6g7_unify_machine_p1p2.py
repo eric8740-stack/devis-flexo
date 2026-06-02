@@ -191,21 +191,33 @@ def upgrade() -> None:
             type_="foreignkey",
         )
 
-    # Remap data (FK temporairement absente / desactivee).
-    for mi_id, new_machine_id in mi_to_machine_id.items():
+    # Remap data en UNE SEULE PASSE atomique via CASE WHEN. Une boucle
+    # UPDATE-par-UPDATE est BUGGEE : si un new_machine_id d'une iteration
+    # coincide avec un old mi.id d'une iteration suivante, le UPDATE
+    # suivant re-touche les lignes deja migrees -> cascade pourrie. Le
+    # test PG c91e8e0 a chope ce bug (lot pointait sur Nilpeter au lieu
+    # de Mark Andy 2200 sur DB fresh).
+    if mi_to_machine_id:
+        when_clauses = " ".join(
+            f"WHEN {old} THEN {new}"
+            for old, new in mi_to_machine_id.items()
+        )
+        old_ids_csv = ",".join(str(old) for old in mi_to_machine_id.keys())
         bind.execute(
             text(
-                "UPDATE lot_production SET machine_id = :new "
-                "WHERE machine_id = :old"
-            ),
-            {"new": new_machine_id, "old": mi_id},
+                f"UPDATE lot_production "
+                f"SET machine_id = CASE machine_id {when_clauses} "
+                f"ELSE machine_id END "
+                f"WHERE machine_id IN ({old_ids_csv})"
+            )
         )
         bind.execute(
             text(
-                "UPDATE porte_cliche SET machine_id = :new "
-                "WHERE machine_id = :old"
-            ),
-            {"new": new_machine_id, "old": mi_id},
+                f"UPDATE porte_cliche "
+                f"SET machine_id = CASE machine_id {when_clauses} "
+                f"ELSE machine_id END "
+                f"WHERE machine_id IN ({old_ids_csv})"
+            )
         )
 
     # Re-create FK vers machine.id
@@ -549,20 +561,30 @@ def downgrade() -> None:
             type_="foreignkey",
         )
 
-    for machine_id, new_mi_id in machine_to_mi_id.items():
-        bind.execute(
-            text(
-                "UPDATE lot_production SET machine_id = :new "
-                "WHERE machine_id = :old"
-            ),
-            {"new": new_mi_id, "old": machine_id},
+    # Meme fix cascade qu'upgrade : UPDATE atomique CASE WHEN
+    if machine_to_mi_id:
+        when_clauses_dn = " ".join(
+            f"WHEN {old} THEN {new}"
+            for old, new in machine_to_mi_id.items()
+        )
+        old_ids_csv_dn = ",".join(
+            str(old) for old in machine_to_mi_id.keys()
         )
         bind.execute(
             text(
-                "UPDATE porte_cliche SET machine_id = :new "
-                "WHERE machine_id = :old"
-            ),
-            {"new": new_mi_id, "old": machine_id},
+                f"UPDATE lot_production "
+                f"SET machine_id = CASE machine_id {when_clauses_dn} "
+                f"ELSE machine_id END "
+                f"WHERE machine_id IN ({old_ids_csv_dn})"
+            )
+        )
+        bind.execute(
+            text(
+                f"UPDATE porte_cliche "
+                f"SET machine_id = CASE machine_id {when_clauses_dn} "
+                f"ELSE machine_id END "
+                f"WHERE machine_id IN ({old_ids_csv_dn})"
+            )
         )
 
     if is_sqlite:
