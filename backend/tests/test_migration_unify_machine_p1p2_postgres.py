@@ -99,6 +99,45 @@ def _drop_temp_db(server_url: str, dbname: str) -> None:
         engine.dispose()
 
 
+def _resync_pg_sequences(db_url: str) -> None:
+    """Bug Postgres classique : les migrations alembic data (Sprint 12+) font
+    des `INSERT entreprise (id, ...) VALUES (1, ...)` sans bumper la sequence
+    `entreprise_id_seq`. Resultat : la sequence reste a 1, et le prochain
+    auto-increment du seed test collisionne avec 'entreprise_pkey'. Fix : on
+    resync toutes les sequences avec MAX(id) post-upgrade. No-op si la table
+    n'a pas de serial sequence sur 'id'.
+    """
+    engine = create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT tablename FROM pg_tables "
+                    "WHERE schemaname = 'public'"
+                )
+            ).fetchall()
+            for row in rows:
+                table = row.tablename
+                seq = conn.execute(
+                    text(
+                        "SELECT pg_get_serial_sequence(:t, 'id')"
+                    ),
+                    {"t": table},
+                ).scalar()
+                if seq is None:
+                    continue
+                conn.execute(
+                    text(
+                        f"SELECT setval(:seq, "
+                        f"COALESCE((SELECT MAX(id) FROM {table}), 1), "
+                        f"(SELECT MAX(id) FROM {table}) IS NOT NULL)"
+                    ),
+                    {"seq": seq},
+                )
+    finally:
+        engine.dispose()
+
+
 def _run_alembic(db_url: str, *args: str) -> None:
     """Lance alembic en subprocess avec DATABASE_URL ecrasee. Subprocess pour
     isoler `app.db` qui resout DATABASE_URL au moment de l'import."""
@@ -306,23 +345,34 @@ def test_migration_p1p2_sous_fk_strictes_postgres(fresh_pg_db):
     # 1. Migrate to rev AVANT P1+P2
     _run_alembic(db_url, "upgrade", REVISION_AVANT_P1P2)
 
+    # 1bis. Resync sequences Postgres : les migrations data Sprint 12+ INSERT
+    # avec id explicite sans bump de seq -> sinon UniqueViolation au seed.
+    _resync_pg_sequences(db_url)
+
     # 2. Seed etat legacy avec FK strictes (Postgres natif)
     ids = _seed_etat_avant_p1p2(db_url)
 
     # 3. Apply P1+P2 (en CE TEST, on observe d'eventuelles violations FK)
     _run_alembic(db_url, "upgrade", "head")
 
-    # 4. Asserts post-migration
+    # 4. Asserts post-migration (FILTRES SUR MON tenant test : les migrations
+    # data Sprint 12+ peuvent avoir seede d'autres entreprises avec leurs
+    # propres machines -- on isole MON entreprise test pour la verification).
     engine = create_engine(db_url)
     try:
         with engine.connect() as conn:
-            # 4 Machine au total (P5 + Mark Andy 2200 + OMET + Nilpeter)
+            # 4 Machine pour mon tenant (P5 + Mark Andy 2200 + OMET + Nilpeter)
             machines = conn.execute(
-                text("SELECT id, nom, laize_utile_mm FROM machine ORDER BY id")
+                text(
+                    "SELECT id, nom, laize_utile_mm FROM machine "
+                    "WHERE entreprise_id = :eid ORDER BY id"
+                ),
+                {"eid": ids["ent_id"]},
             ).fetchall()
             noms = [m.nom for m in machines]
             assert len(machines) == 4, (
-                f"Attendu 4 Machine post-migration, recu {len(machines)} : {noms}"
+                f"Attendu 4 Machine post-migration pour tenant test "
+                f"(entreprise_id={ids['ent_id']}), recu {len(machines)} : {noms}"
             )
             assert "Mark Andy P5" in noms, "Machine seedee P5 perdue"
             assert "Mark Andy 2200" in noms, "MI 2200 non re-insere en Machine"
