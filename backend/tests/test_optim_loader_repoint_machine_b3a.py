@@ -1,11 +1,11 @@
 """B3a (convergence option B) — tests du repointage du loader optimisation
-sur le modèle `Machine` (au lieu de `MachineImprimerie`).
+sur le modèle `Machine` (au lieu de `Machine`).
 
 Couvre :
   - `charger_machines_actives(entreprise_id=1)` retourne le parc reel du
     tenant demo (3 machines : Mark Andy P5, Daco D250, Atelier 2).
-  - Ne retourne PAS "Mark Andy 2200" (le catalogue MachineImprimerie issu
-    de l'onboarding) -- meme si MachineImprimerie est seede dans la base.
+  - Ne retourne PAS "Mark Andy 2200" (le catalogue Machine issu
+    de l'onboarding) -- meme si Machine est seede dans la base.
   - `vitesse_pratique_m_min` est derivee de `vitesse_moyenne_m_h / 60` :
     P5=6000 m/h -> 100 m/min, Daco=3500 m/h -> 58 m/min, Atelier2=4500 m/h
     -> 75 m/min. Une seule vitesse reelle (B2 decision).
@@ -48,7 +48,7 @@ def _ensure_tenant(db, entreprise_id: int, raison: str) -> Entreprise:
 
 def test_charger_machines_actives_retourne_parc_reel_pas_mark_andy_2200():
     """Le tenant demo a 3 machines reelles (P5, Daco, Atelier 2). On NE
-    DOIT PAS voir "Mark Andy 2200" (catalogue MachineImprimerie)."""
+    DOIT PAS voir "Mark Andy 2200" (catalogue Machine)."""
     with SessionLocal() as db:
         machines = charger_machines_actives(db, DEMO_ENTREPRISE_ID)
     noms = sorted(m.nom for m in machines)
@@ -58,7 +58,7 @@ def test_charger_machines_actives_retourne_parc_reel_pas_mark_andy_2200():
         "Mark Andy P5",
     ], f"Parc demo attendu (P5/Daco/Atelier 2), obtenu : {noms}"
     # Anti-regression explicite vs le bug B3a corrige : pas de catalogue
-    # MachineImprimerie.
+    # Machine.
     assert "Mark Andy 2200" not in noms
 
 

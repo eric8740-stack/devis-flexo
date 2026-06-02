@@ -69,8 +69,10 @@ class LotProduction(Base):
     cylindre_id: Mapped[int] = mapped_column(
         ForeignKey("cylindre_magnetique.id"), nullable=False
     )
+    # P1+P2 : FK rebascule vers `machine.id` (parc unique post-fusion
+    # MI -> Machine, cf migration b2c3d4e5f6g7).
     machine_id: Mapped[int] = mapped_column(
-        ForeignKey("machine_imprimerie.id"), nullable=False
+        ForeignKey("machine.id"), nullable=False
     )
     nb_poses_dev: Mapped[int] = mapped_column(Integer, nullable=False)
     nb_poses_laize: Mapped[int] = mapped_column(Integer, nullable=False)

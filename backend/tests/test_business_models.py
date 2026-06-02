@@ -16,13 +16,15 @@ from app.db import SessionLocal
 from app.models import (
     BAREME_TYPES,
     Bareme,
-    ConfigurationPose,
     CylindreMagnetique,
     Entreprise,
-    MachineImprimerie,
+    Machine,
     Matiere,
     OptionFabrication,
 )
+# ConfigurationPose retire en P1+P2 (table droppee, cf migration b2c3d4e5f6g7).
+# Les tests qui creaient des ConfigurationPose sont desormais skippes.
+import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -81,11 +83,18 @@ def test_cylindre_magnetique_create_and_read():
         db.close()
 
 
+@pytest.mark.skip(
+    reason=(
+        "P1+P2 : MachineImprimerie fusionnée dans Machine (kwargs "
+        "marque/modele/laize_totale_mm/vitesse_pratique_m_min "
+        "MI-specific n'existent plus). Test obsolète."
+    )
+)
 def test_machine_imprimerie_vitesse_pratique_required():
     ent_id = _ensure_entreprise_for_test(101, "machine_imp")
     db = SessionLocal()
     try:
-        mach = MachineImprimerie(
+        mach = Machine(
             entreprise_id=ent_id,
             nom="Mark Andy 2200 test",
             marque="Mark Andy",
@@ -186,6 +195,12 @@ def test_bareme_type_field_and_json_data():
         db.close()
 
 
+@pytest.mark.skip(
+    reason=(
+        "P1+P2 : ConfigurationPose table droppée (jamais peuplée en prod). "
+        "Cf migration b2c3d4e5f6g7."
+    )
+)
 def test_configuration_pose_minimal_fields():
     ent_id = _ensure_entreprise_for_test(104, "config_pose")
     db = SessionLocal()
@@ -194,7 +209,7 @@ def test_configuration_pose_minimal_fields():
         cyl = CylindreMagnetique(
             entreprise_id=ent_id, developpe_mm=Decimal("104.00")
         )
-        mach = MachineImprimerie(
+        mach = Machine(
             entreprise_id=ent_id,
             nom="Test machine config_pose",
             laize_totale_mm=Decimal("330.00"),
@@ -271,12 +286,15 @@ def test_cascade_delete_entreprise_removes_business_rows():
         # 1 row dans chacune des 5 tables business + 1 option globale qui doit survivre
         db.add_all([
             CylindreMagnetique(entreprise_id=ent_id, developpe_mm=Decimal("90")),
-            MachineImprimerie(
+            # P1+P2 : Machine (post-fusion MI). Kwargs MI-specific
+            # (laize_totale_mm, vitesse_pratique_m_min) remplaces par
+            # equivalents Machine (laize_max_mm + vitesse_moyenne_m_h).
+            Machine(
                 entreprise_id=ent_id,
                 nom="cascade-machine",
-                laize_totale_mm=Decimal("330"),
+                laize_max_mm=Decimal("330"),
                 laize_utile_mm=Decimal("320"),
-                vitesse_pratique_m_min=60,
+                vitesse_moyenne_m_h=60 * 60,  # m/min -> m/h
             ),
             Matiere(entreprise_id=ent_id, code="cascade", libelle="cascade test"),
             OptionFabrication(
@@ -305,7 +323,7 @@ def test_cascade_delete_entreprise_removes_business_rows():
             db.query(CylindreMagnetique).filter_by(entreprise_id=ent_id).count() == 0
         )
         assert (
-            db.query(MachineImprimerie).filter_by(entreprise_id=ent_id).count() == 0
+            db.query(Machine).filter_by(entreprise_id=ent_id).count() == 0
         )
         assert db.query(Matiere).filter_by(entreprise_id=ent_id).count() == 0
         assert (

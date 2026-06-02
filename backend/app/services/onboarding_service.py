@@ -36,7 +36,7 @@ from app.data.catalogue_defaults import (
 from app.models import (
     Bareme,
     CylindreMagnetique,
-    MachineImprimerie,
+    Machine,
     Matiere,
     OptionFabrication,
 )
@@ -47,12 +47,17 @@ class OnboardingError(Exception):
 
 
 def has_existing_catalogue(db: Session, entreprise_id: int) -> bool:
-    """Vrai si le tenant a déjà au moins une row dans l'une des 5 tables
-    S13.B (autres que option_fabrication globale qui ne nous concerne pas).
+    """Vrai si le tenant a déjà au moins une row dans l'une des 4 tables
+    d'onboarding S13.B (CylindreMagnetique / Matiere / OptionFabrication
+    tenant-scope / Bareme).
+
+    P1+P2 : on N'inclut PAS `Machine` -- elle est seedee par defaut Sprint 2
+    (P5/Daco/Atelier 2 du tenant demo) AVANT l'onboarding, donc sa presence
+    ne signale PAS un onboarding deja fait. L'onboarding INSERT les
+    Machines catalogue (Mark Andy 2200 / OMET / Nilpeter) a cote du seed
+    Sprint 2 sans conflit (unique par `nom`).
     """
     if db.query(CylindreMagnetique).filter_by(entreprise_id=entreprise_id).first():
-        return True
-    if db.query(MachineImprimerie).filter_by(entreprise_id=entreprise_id).first():
         return True
     if db.query(Matiere).filter_by(entreprise_id=entreprise_id).first():
         return True
@@ -134,33 +139,42 @@ def initialiser_catalogues(
         counts["cylindres"] += 1
 
     # --- Machines ---------------------------------------------------------
+    # P1+P2 : seed sur `Machine` (parc unique post-fusion MI -> Machine, cf
+    # migration b2c3d4e5f6g7). Mapping des champs catalogue :
+    #   laize_max_mm        <- spec["laize_totale_mm"]
+    #   laize_utile_mm      <- spec["laize_utile_mm"]
+    #   vitesse_max_m_min   <- spec["vitesse_nominale_constructeur_m_min"]
+    #   vitesse_moyenne_m_h <- spec["vitesse_pratique_m_min"] * 60
+    # `marque`/`modele`/`repere_court`/`type_encre_supportee`/`notes` :
+    # champs MI sans equivalent Machine -> ignores (data perdue, acceptable
+    # car non lue par cost_engine ni par l'optim post-B3a).
     for code in machines_codes:
         spec = get_machine_by_code(code)
         if spec is None:  # déjà validé mais ceinture+bretelles
             continue
+        vitesse_moyenne_m_h = (
+            spec["vitesse_pratique_m_min"] * 60
+            if spec.get("vitesse_pratique_m_min") is not None
+            else None
+        )
         db.add(
-            MachineImprimerie(
+            Machine(
                 entreprise_id=entreprise_id,
                 nom=spec["nom"],
-                marque=spec.get("marque"),
-                modele=spec.get("modele"),
-                repere_court=spec.get("repere_court"),
-                laize_totale_mm=Decimal(str(spec["laize_totale_mm"])),
+                laize_max_mm=Decimal(str(spec["laize_totale_mm"])),
                 laize_utile_mm=Decimal(str(spec["laize_utile_mm"])),
-                nb_groupes_couleurs=spec.get("nb_groupes_couleurs"),
-                nb_postes_decoupe=spec.get("nb_postes_decoupe", 1),
-                vitesse_nominale_constructeur_m_min=spec.get(
+                vitesse_max_m_min=spec.get(
                     "vitesse_nominale_constructeur_m_min"
                 ),
-                vitesse_pratique_m_min=spec["vitesse_pratique_m_min"],
+                vitesse_moyenne_m_h=vitesse_moyenne_m_h,
+                nb_groupes_couleurs=spec.get("nb_groupes_couleurs"),
+                nb_postes_decoupe=spec.get("nb_postes_decoupe", 1),
                 cout_horaire_eur=(
                     Decimal(str(spec["cout_horaire_eur"]))
                     if spec.get("cout_horaire_eur") is not None
                     else None
                 ),
-                options=spec.get("options"),
-                type_encre_supportee=spec.get("type_encre_supportee"),
-                notes=spec.get("notes"),
+                options=spec.get("options") or [],
             )
         )
         counts["machines"] += 1

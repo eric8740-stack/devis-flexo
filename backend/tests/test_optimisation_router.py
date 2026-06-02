@@ -21,7 +21,7 @@ from app.main import app
 from app.models import (
     Bareme,
     CylindreMagnetique,
-    MachineImprimerie,
+    Machine,
     Matiere,
     OptionFabrication,
 )
@@ -38,7 +38,7 @@ def cleanup_and_onboard():
     try:
         for ent_id in (1, 2, 3, 4):
             db.query(CylindreMagnetique).filter_by(entreprise_id=ent_id).delete()
-            db.query(MachineImprimerie).filter_by(entreprise_id=ent_id).delete()
+            db.query(Machine).filter_by(entreprise_id=ent_id).delete()
             db.query(Matiere).filter_by(entreprise_id=ent_id).delete()
             db.query(OptionFabrication).filter_by(entreprise_id=ent_id).delete()
             db.query(Bareme).filter_by(entreprise_id=ent_id).delete()
@@ -46,7 +46,7 @@ def cleanup_and_onboard():
         yield
         for ent_id in (1, 2, 3, 4):
             db.query(CylindreMagnetique).filter_by(entreprise_id=ent_id).delete()
-            db.query(MachineImprimerie).filter_by(entreprise_id=ent_id).delete()
+            db.query(Machine).filter_by(entreprise_id=ent_id).delete()
             db.query(Matiere).filter_by(entreprise_id=ent_id).delete()
             db.query(OptionFabrication).filter_by(entreprise_id=ent_id).delete()
             db.query(Bareme).filter_by(entreprise_id=ent_id).delete()

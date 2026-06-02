@@ -20,11 +20,11 @@ client = TestClient(app)
 
 def _fks_tenant1() -> tuple[int, int, int]:
     _onboard_if_needed()
-    from app.models import CylindreMagnetique, MachineImprimerie, Matiere
+    from app.models import CylindreMagnetique, Machine, Matiere
 
     with SessionLocal() as db:
         machine = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=1, actif=True)
             .first()
         )

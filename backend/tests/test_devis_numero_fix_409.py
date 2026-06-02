@@ -40,11 +40,11 @@ def _purge_devis_tenant(entreprise_id: int) -> None:
 def _fks_tenant_demo() -> tuple[int, int, int]:
     """Recupere machine/cylindre/matiere actifs pour le tenant demo."""
     _onboard_if_needed()
-    from app.models import CylindreMagnetique, MachineImprimerie, Matiere
+    from app.models import CylindreMagnetique, Machine, Matiere
 
     with SessionLocal() as db:
         machine = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=DEMO_ENTREPRISE_ID, actif=True)
             .first()
         )
@@ -261,13 +261,13 @@ def test_two_tenants_can_both_have_dev_yyyy_0001(switch_to_user_b):
     # Le test couvre uniquement la contrainte UNIQUE -- on insere
     # directement via SQLAlchemy pour ne pas dependre du seed B.
     with SessionLocal() as db:
-        from app.models import MachineImprimerie
+        from app.models import Machine
 
         # On reutilise la machine demo (FK lache cote SQLite ; en prod
         # Postgres ce test n'a pas vocation a tourner -- il valide juste
         # la levee de la contrainte UNIQUE globale).
         mach = (
-            db.query(MachineImprimerie)
+            db.query(Machine)
             .filter_by(entreprise_id=DEMO_ENTREPRISE_ID, actif=True)
             .first()
         )
