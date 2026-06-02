@@ -102,6 +102,18 @@ Ne JAMAIS modifier sans validation explicite. Tests verrouillés en CI.
 
 ---
 
+## Invariants métier (convention flexographique standard)
+
+**Calage / mise en route (poste P4) = lié à l'OUTIL (plaque de découpe + clichés), PAS à la bobine.**
+
+- Changer **uniquement la bobine mère** (autre matière, OU même matière en laize différente) sur le **même montage** → **AUCUN nouveau calage**. Un seul calage par montage/outil.
+- Recompter un calage **UNIQUEMENT** s'il y a un vrai changement d'outil/cliché (ex. 2 jeux de clichés pour 2 laizes) → via une case dédiée « changement d'outil/cliché » par lot.
+- **Bug connu (à corriger en sprint dédié)** : calage compté par lot → sur-facturation.
+
+→ Toute modification du moteur de coût multi-lots doit être vérifiée contre cette règle. Si un calcul facture un calage **par lot** sur un même montage = **anomalie à signaler**.
+
+---
+
 ## Procédures (rappel court)
 
 - Avant tout push impactant le frontend : `cd frontend && rm -rf .next && npx tsc --noEmit && npx next lint && npm run build && npx vitest run`. Vercel preview est plus strict que le `npm run build` local non-nettoyé (cf. hotfix #69).
