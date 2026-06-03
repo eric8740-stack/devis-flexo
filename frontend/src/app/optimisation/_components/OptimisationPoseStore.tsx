@@ -28,6 +28,7 @@ import {
   type LotProductionRead,
   type OptimisationConfigOut,
   type RebobinageCalculerRequest,
+  type RebobinageMultilotsRequest,
   type RebobinageResultat,
   type SensEnroulement,
 } from "@/lib/api";
@@ -205,6 +206,15 @@ interface OptimisationPoseContextValue {
   ) => void;
   clearRebobinage: () => void;
 
+  // Bug #6 (6.2e) — request multi-lots du dernier calcul rebobinage, persisté
+  // pour qu'OptimisationChiffrage applique le coût PAR LOT (épaisseur réelle +
+  // paroi) via `POST /api/devis/{id}/rebobinage-multilots` au lieu du mono-lot.
+  // null tant qu'aucun calcul multi-lots n'a abouti → fallback mono-lot.
+  rebobinageMultilotsRequest: RebobinageMultilotsRequest | null;
+  setRebobinageMultilotsRequest: (
+    req: RebobinageMultilotsRequest | null,
+  ) => void;
+
   // Sprint 16 — client du devis sélectionné dans le workflow optimisation.
   // Source de vérité unique pour l'auto-remplissage de l'étape rebobinage
   // (depuis les 9 champs profil) ET pour le client_id envoyé au POST/PUT
@@ -362,6 +372,9 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     useState<RebobinageCalculerRequest | null>(null);
   const [rebobinageResult, setRebobinageResult] =
     useState<RebobinageResultat | null>(null);
+  // Bug #6 (6.2e) — request multi-lots du dernier calcul rebobinage.
+  const [rebobinageMultilotsRequest, setRebobinageMultilotsRequestState] =
+    useState<RebobinageMultilotsRequest | null>(null);
 
   const setRebobinage = useCallback(
     (req: RebobinageCalculerRequest, result: RebobinageResultat) => {
@@ -371,9 +384,17 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     [],
   );
 
+  const setRebobinageMultilotsRequest = useCallback(
+    (req: RebobinageMultilotsRequest | null) => {
+      setRebobinageMultilotsRequestState(req);
+    },
+    [],
+  );
+
   const clearRebobinage = useCallback(() => {
     setRebobinageRequest(null);
     setRebobinageResult(null);
+    setRebobinageMultilotsRequestState(null);
   }, []);
 
   // Sprint 16 — client sélectionné + sens enroulement profil.
@@ -662,6 +683,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       rebobinageResult,
       setRebobinage,
       clearRebobinage,
+      rebobinageMultilotsRequest,
+      setRebobinageMultilotsRequest,
       clientSelectionne,
       setClientSelectionne,
       sensEnroulementClient,
@@ -706,6 +729,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       rebobinageResult,
       setRebobinage,
       clearRebobinage,
+      rebobinageMultilotsRequest,
+      setRebobinageMultilotsRequest,
       clientSelectionne,
       setClientSelectionne,
       sensEnroulementClient,

@@ -112,6 +112,7 @@ export function OptimisationRebobinage() {
     sensEnroulementClient,
     setSensEnroulementClient,
     setDiametreEchoesParLot,
+    setRebobinageMultilotsRequest,
   } = useOptimisationPose();
 
   // ──────────────────────────────────────────────────────────────────
@@ -421,6 +422,9 @@ export function OptimisationRebobinage() {
     const req = buildMultilotsRequest();
     if (req === null) {
       setMultilotsResult(null);
+      // Plus de request multi-lots valide → on efface pour que l'apply
+      // retombe sur le mono-lot (non-régressif), jamais un payload périmé.
+      setRebobinageMultilotsRequest(null);
       return;
     }
     setMultilotsLoading(true);
@@ -446,6 +450,10 @@ export function OptimisationRebobinage() {
         }
       });
       setDiametreEchoesParLot(echoes);
+      // Bug #6 (6.2e) — mémorise le request exact (matiere_id, épaisseur
+      // saisie, paroi override, nb étiq, tarifs, mode…) pour que l'apply
+      // persiste le coût PAR LOT via l'endpoint multi-lots au chiffrage.
+      setRebobinageMultilotsRequest(req);
     } catch (err) {
       setMultilotsResult(null);
       setMultilotsError(
@@ -454,7 +462,12 @@ export function OptimisationRebobinage() {
     } finally {
       setMultilotsLoading(false);
     }
-  }, [buildMultilotsRequest, lotsAffiches, setDiametreEchoesParLot]);
+  }, [
+    buildMultilotsRequest,
+    lotsAffiches,
+    setDiametreEchoesParLot,
+    setRebobinageMultilotsRequest,
+  ]);
 
   // Calcul auto déclenché par l'arrivée d'une rebobineuse sélectionnée
   // (auto-sélection initiale OU changement utilisateur dans le select).
