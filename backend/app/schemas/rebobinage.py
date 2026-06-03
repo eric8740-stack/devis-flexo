@@ -209,6 +209,22 @@ class RebobinageMultilotsResponse(BaseModel):
     lots: list[LotRebobinageOut]
 
 
+class RebobinageMultilotsApplyResponse(BaseModel):
+    """Réponse POST /api/devis/{id}/rebobinage-multilots (apply persisté).
+
+    Coût PAR LOT (`lots[].rebobinage.cout_total_rebobinage_eur`) + agrégat
+    devis (`cout_total_rebobinage_eur` = somme des lots). Ligne additive :
+    n'altère JAMAIS `ht_total_eur` (cost_engine sacré)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    machine_rebobineuse_id: int
+    nb_lots: int
+    cout_total_rebobinage_eur: Decimal
+    cout_mandrins_eur: Decimal
+    lots: list[LotRebobinageOut]
+
+
 # ---------------------------------------------------------------------------
 # Liste des rebobineuses du tenant (sélecteur UI)
 # ---------------------------------------------------------------------------
