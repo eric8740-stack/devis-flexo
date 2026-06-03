@@ -80,6 +80,7 @@ export function OptimisationChiffrage() {
     clientSelectionne,
     setClientSelectionne,
     sensEnroulementClient,
+    diametreEchoesParLot,
   } = useOptimisationPose();
   const { toast } = useToast();
   const router = useRouter();
@@ -171,23 +172,43 @@ export function OptimisationChiffrage() {
 
   const lotsPayload = useMemo<LotProductionCreatePayload[]>(
     () =>
-      selection.map((s) => ({
-        cylindre_id: s.candidat.cylindre_id,
-        machine_id: s.candidat.machine_id,
-        nb_poses_dev: s.candidat.nb_poses_dev,
-        nb_poses_laize: s.candidat.nb_poses_laize,
-        sens_enroulement: sensEnroulementToInt(s.candidat.sens_enroulement),
-        quantite: s.quantite,
-        matiere_id: s.matiere_id as number,
-        intervalle_dev_reel_mm: String(s.candidat.intervalle_dev_reel_mm),
-        intervalle_laize_reel_mm: String(s.candidat.intervalle_laize_reel_mm),
-        largeur_plaque_mm: String(s.candidat.largeur_plaque_mm),
-        score_optim: s.candidat.score,
-        // Brief #33 commit 5 — snapshot complet du candidat pour rejouer
-        // SchemaImplantation côté UI sans recalcul moteur.
-        payload_visuel: s.candidat as unknown as Record<string, unknown>,
-      })),
-    [selection]
+      selection.map((s) => {
+        // Bug #6 (6.2c) — si l'étape Rebobinage a produit un écho multi-lots
+        // pour ce lot, on enrichit le snapshot candidat avec le Ø RÉEL
+        // (épaisseur matière du lot + paroi). `diametre_bobine_mm` est écrasé
+        // → la VUE B/C + le plan bobines du rapport refléteront ce Ø. Sinon,
+        // candidat brut (fallback non-régressif : devis hors flux rebobinage).
+        const echo = diametreEchoesParLot[s.id_candidat];
+        const payloadVisuel = echo
+          ? {
+              ...s.candidat,
+              diametre_bobine_mm: echo.diametre_bobine_mm,
+              diametre_depart_mm: echo.diametre_depart_mm,
+              epaisseur_effective_um: echo.epaisseur_effective_um,
+              epaisseur_source: echo.epaisseur_source,
+              paroi_mm: echo.paroi_mm,
+              nb_bobines_rebobinage: echo.nb_bobines,
+            }
+          : s.candidat;
+        return {
+          cylindre_id: s.candidat.cylindre_id,
+          machine_id: s.candidat.machine_id,
+          nb_poses_dev: s.candidat.nb_poses_dev,
+          nb_poses_laize: s.candidat.nb_poses_laize,
+          sens_enroulement: sensEnroulementToInt(s.candidat.sens_enroulement),
+          quantite: s.quantite,
+          matiere_id: s.matiere_id as number,
+          intervalle_dev_reel_mm: String(s.candidat.intervalle_dev_reel_mm),
+          intervalle_laize_reel_mm: String(s.candidat.intervalle_laize_reel_mm),
+          largeur_plaque_mm: String(s.candidat.largeur_plaque_mm),
+          score_optim: s.candidat.score,
+          // Brief #33 commit 5 — snapshot complet du candidat pour rejouer
+          // SchemaImplantation côté UI sans recalcul moteur. Enrichi du Ø réel
+          // par lot quand un écho rebobinage existe (bug #6 6.2c).
+          payload_visuel: payloadVisuel as unknown as Record<string, unknown>,
+        };
+      }),
+    [selection, diametreEchoesParLot]
   );
 
   // Debounced preview-couts à chaque changement options/marge/réduction.

@@ -29,6 +29,7 @@ import { PlanificateurBobines } from "./PlanificateurBobines";
 
 import type {
   DevisDetail,
+  EpaisseurSource,
   LotProductionRead,
   OptimisationConfigOut,
   PosteResult,
@@ -37,6 +38,20 @@ import type {
 const STATUT_COLORS: Record<string, string> = {
   brouillon: "bg-amber-100 text-amber-900 border-amber-300",
   valide: "bg-emerald-100 text-emerald-900 border-emerald-300",
+};
+
+// Bug #6 (6.2c) — transparence sur l'origine de l'épaisseur du Ø, cohérent
+// avec l'étape Rebobinage.
+const SOURCE_EPAISSEUR_LABEL: Record<EpaisseurSource, string> = {
+  matiere: "matière",
+  saisie: "saisie opérateur",
+  fallback: "fallback 150 µm",
+};
+
+const SOURCE_EPAISSEUR_CLASS: Record<EpaisseurSource, string> = {
+  matiere: "bg-emerald-100 text-emerald-800",
+  saisie: "bg-blue-100 text-blue-800",
+  fallback: "bg-amber-100 text-amber-900",
 };
 
 const STATUT_LABEL: Record<string, string> = {
@@ -528,6 +543,34 @@ function LotCard({
         </div>
       )}
 
+      {/* Bug #6 (6.2c) — quand le devis porte le Ø réel du rebobinage
+          (échos injectés dans payload_visuel au chiffrage), on affiche la
+          provenance de l'épaisseur + le Ø départ (mandrin + 2×paroi), cohérent
+          avec l'étape Rebobinage. Absent pour les devis hors flux rebobinage
+          ou legacy → on ne montre rien (le Ø candidat reste dans la VUE). */}
+      {candidatVisuel?.epaisseur_source && (
+        <div
+          data-testid={`lot-diametre-echo-${lot.ordre}`}
+          className="flex flex-wrap items-center gap-2 border-t border-border px-4 pb-3 pt-3 text-xs sm:px-6"
+        >
+          <span
+            data-testid={`lot-diametre-source-${lot.ordre}`}
+            className={
+              "rounded px-2 py-0.5 font-medium " +
+              SOURCE_EPAISSEUR_CLASS[candidatVisuel.epaisseur_source]
+            }
+          >
+            épaisseur {candidatVisuel.epaisseur_effective_um} µm ·{" "}
+            {SOURCE_EPAISSEUR_LABEL[candidatVisuel.epaisseur_source]}
+          </span>
+          <span className="text-muted-foreground">
+            Ø bobine <strong>{candidatVisuel.diametre_bobine_mm} mm</strong> · Ø
+            départ {candidatVisuel.diametre_depart_mm} mm (paroi{" "}
+            {candidatVisuel.paroi_mm} mm)
+          </span>
+        </div>
+      )}
+
       {chiffrage && (
         <div
           data-testid={`rapport-fabrication-lot-${lot.ordre}`}
@@ -560,7 +603,12 @@ function LotCard({
               mandrinMm={mandrinMm}
               diametreMaxBobineMm={diametreMaxBobineMm}
               epaisseurMatiereUm={
-                candidatVisuel?.epaisseur_appliquee_um ?? null
+                // Bug #6 (6.2c) — l'épaisseur effective du rebobinage (matière
+                // du lot + saisie) prime sur l'épaisseur candidat figée ; le
+                // plan bobines part ainsi du même papier que le Ø affiché.
+                candidatVisuel?.epaisseur_effective_um ??
+                candidatVisuel?.epaisseur_appliquee_um ??
+                null
               }
               initialSelection={initialPlanBobines}
             />

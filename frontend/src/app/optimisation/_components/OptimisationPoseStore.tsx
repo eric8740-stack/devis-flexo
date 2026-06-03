@@ -31,6 +31,7 @@ import {
   type RebobinageResultat,
   type SensEnroulement,
 } from "@/lib/api";
+import type { EpaisseurSource } from "@/lib/api";
 import type { MatcherOutilMatch } from "@/lib/api/matcherOutil";
 
 import {
@@ -100,6 +101,18 @@ export interface SelectionLot {
   epaisseur_saisie_um: number | null;
 }
 
+// Bug #6 (6.2c) — écho du calcul rebobinage multi-lots pour UN lot, capturé
+// à l'étape Rebobinage et injecté dans `payload_visuel` à la sauvegarde pour
+// que le rapport /devis/[id] reflète le Ø réel (épaisseur lot + paroi).
+export interface LotDiametreEcho {
+  diametre_bobine_mm: number;
+  diametre_depart_mm: number;
+  epaisseur_effective_um: number;
+  epaisseur_source: EpaisseurSource;
+  paroi_mm: number;
+  nb_bobines: number;
+}
+
 interface OptimisationPoseContextValue {
   etape: EtapeOptim;
   goSaisie: () => void;
@@ -144,6 +157,13 @@ interface OptimisationPoseContextValue {
   setMatiereLot: (id_candidat: string, matiere_id: number) => void;
   // Bug #6 (6.2) — saisie opérateur d'épaisseur (µm) pour un lot ; null efface.
   setEpaisseurSaisieLot: (id_candidat: string, epaisseur_um: number | null) => void;
+
+  // Bug #6 (6.2c) — échos du dernier calcul rebobinage multi-lots, indexés
+  // par `id_candidat`. Alimentés à l'étape Rebobinage, consommés à l'étape
+  // chiffrage pour enrichir `payload_visuel` (Ø réel par lot). Vide = pas
+  // encore calculé → le chiffrage garde le candidat figé (non-régressif).
+  diametreEchoesParLot: Record<string, LotDiametreEcho>;
+  setDiametreEchoesParLot: (echoes: Record<string, LotDiametreEcho>) => void;
 
   sommeQuantitesLots: number;
 
@@ -397,6 +417,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     ) => {
       setCandidats(c);
       setSelection([]);
+      // Bug #6 (6.2c) — nouvelle liste de candidats → échos rebobinage périmés.
+      setDiametreEchoesParLotState({});
       setQuantiteTotale(qte);
       setLaizeEtiqMm(laize);
       setDevEtiqMm(dev);
@@ -582,6 +604,17 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
     []
   );
 
+  // Bug #6 (6.2c) — échos rebobinage multi-lots par lot.
+  const [diametreEchoesParLot, setDiametreEchoesParLotState] = useState<
+    Record<string, LotDiametreEcho>
+  >({});
+  const setDiametreEchoesParLot = useCallback(
+    (echoes: Record<string, LotDiametreEcho>) => {
+      setDiametreEchoesParLotState(echoes);
+    },
+    []
+  );
+
   const sommeQuantitesLots = useMemo(
     () => selection.reduce((sum, s) => sum + (s.quantite || 0), 0),
     [selection]
@@ -609,6 +642,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setQuantiteLot,
       setMatiereLot,
       setEpaisseurSaisieLot,
+      diametreEchoesParLot,
+      setDiametreEchoesParLot,
       sommeQuantitesLots,
       optionsCodes,
       toggleOption,
@@ -654,6 +689,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setQuantiteLot,
       setMatiereLot,
       setEpaisseurSaisieLot,
+      diametreEchoesParLot,
+      setDiametreEchoesParLot,
       sommeQuantitesLots,
       optionsCodes,
       toggleOption,

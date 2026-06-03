@@ -1237,6 +1237,17 @@ export interface OptimisationConfigOut {
   epaisseur_appliquee_um: number;
   forcage_epaisseur: boolean;
   motif_forcage_epaisseur: string | null;
+  // Bug #6 (6.2c) — échos du calcul rebobinage multi-lots, injectés dans
+  // `payload_visuel` à la sauvegarde du devis (étape chiffrage) pour que le
+  // rapport /devis/[id] (VUE B/C + plan bobines) reflète le Ø RÉEL par lot
+  // (épaisseur de la matière du lot + override paroi) au lieu du Ø candidat
+  // figé. Absents pour les candidats bruts /calculer et les devis legacy →
+  // le rapport retombe sur `diametre_bobine_mm` / `epaisseur_appliquee_um`.
+  diametre_depart_mm?: number;
+  epaisseur_effective_um?: number;
+  epaisseur_source?: EpaisseurSource;
+  paroi_mm?: number;
+  nb_bobines_rebobinage?: number;
 }
 
 export interface OptimisationCalculerResponse {

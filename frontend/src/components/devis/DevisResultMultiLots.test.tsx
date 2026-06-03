@@ -12,6 +12,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+// Bug #6 (6.2c) — SchemaImplantation (SACRED, SVG) réduit à un placeholder
+// pour tester l'affichage du Ø/badge réel sans le rendu SVG. Les tests
+// existants utilisent `payload_visuel: null` → non impactés.
+vi.mock("@/components/SchemaImplantation", () => ({
+  SchemaImplantation: () => <div data-testid="schema-implantation" />,
+}));
+
 // Fix bandeau erreur chiffrage — on vérifie que :
 //   - chiffrage OK (ht_total_eur renseigné)        → prix affiché, pas de bandeau
 //   - chiffrage incomplet (ht_total_eur NULL)      → bandeau d'erreur, JAMAIS « 0,00 € »
@@ -366,6 +373,96 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
     expect(bandeau).toHaveTextContent(/Erreur stockée dans payload_output/);
     expect(
       screen.queryByText((content) => content.includes("0,00")),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("DevisResultMultiLots — Ø multilots réel (bug #6 6.2c)", () => {
+  function lotAvecVisuel(
+    payload_visuel: Record<string, unknown> | null,
+  ): LotProductionRead {
+    return {
+      id: 1,
+      ordre: 1,
+      cylindre_id: 1,
+      machine_id: 1,
+      nb_poses_dev: 2,
+      nb_poses_laize: 5,
+      sens_enroulement: 1,
+      quantite: 12000,
+      matiere_id: 1,
+      intervalle_dev_reel_mm: "2",
+      intervalle_laize_reel_mm: "2",
+      largeur_plaque_mm: "200",
+      score_optim: 100,
+      cout_lot_ht_eur: "100.00",
+      created_at: "2026-05-27T10:00:00Z",
+      updated_at: "2026-05-27T10:00:00Z",
+      machine_nom: "MA-1",
+      cylindre_nb_dents: 104,
+      cylindre_developpe_mm: "330",
+      matiere_libelle: "PET blanc 50µ",
+      sens_enroulement_libelle: "Sens 1",
+      rotation_vue_a_deg: 0,
+      rotation_vue_c_deg: 0,
+      payload_visuel,
+    };
+  }
+
+  it("payload_visuel enrichi → badge source + Ø bobine/départ affichés", () => {
+    render(
+      <DevisResultMultiLots
+        devis={buildDevis({
+          ht_total_eur: "100.00",
+          lots_production: [
+            lotAvecVisuel({
+              diametre_bobine_mm: 305,
+              diametre_depart_mm: 82,
+              epaisseur_effective_um: 90,
+              epaisseur_source: "matiere",
+              paroi_mm: 3,
+              epaisseur_appliquee_um: 150,
+            }),
+          ],
+        })}
+        pdfUrl="http://x/pdf"
+        onDupliquer={noop}
+        onSupprimer={noop}
+      />,
+    );
+
+    const badge = screen.getByTestId("lot-diametre-source-1");
+    expect(badge).toHaveTextContent(/matière/i);
+    expect(badge).toHaveTextContent(/90 µm/);
+    const echo = screen.getByTestId("lot-diametre-echo-1");
+    expect(echo).toHaveTextContent("305 mm"); // Ø bobine réel (≠ candidat)
+    expect(echo).toHaveTextContent(/82 mm/); // Ø départ (mandrin + 2×paroi)
+    expect(echo).toHaveTextContent(/paroi 3 mm/);
+  });
+
+  it("payload_visuel candidat figé (sans écho) → pas de badge source", () => {
+    render(
+      <DevisResultMultiLots
+        devis={buildDevis({
+          ht_total_eur: "100.00",
+          lots_production: [
+            lotAvecVisuel({
+              diametre_bobine_mm: 300,
+              epaisseur_appliquee_um: 150,
+            }),
+          ],
+        })}
+        pdfUrl="http://x/pdf"
+        onDupliquer={noop}
+        onSupprimer={noop}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("lot-diametre-source-1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("lot-diametre-echo-1"),
     ).not.toBeInTheDocument();
   });
 });
