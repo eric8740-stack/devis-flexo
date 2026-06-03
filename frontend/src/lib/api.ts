@@ -1951,6 +1951,31 @@ export const postRebobinageCalculerMultilots = (
     },
   );
 
+// Bug #6 (6.2e) — apply persisté du coût rebobinage PAR LOT (épaisseur réelle
+// + paroi) sur le devis. Ligne ADDITIVE dans `payload_output.rebobinage_
+// multilots` ; `ht_total_eur` (cost_engine sacré) INCHANGÉ. Remplace le
+// chemin mono-lot `applyRebobinageDevis` (épaisseur saisie/150 figée).
+export interface RebobinageMultilotsApplyResponse {
+  machine_rebobineuse_id: number;
+  nb_lots: number;
+  // Decimals sérialisés string (pattern projet).
+  cout_total_rebobinage_eur: string;
+  cout_mandrins_eur: string;
+  lots: LotRebobinageOut[];
+}
+
+export const applyRebobinageMultilotsDevis = (
+  devisId: number,
+  payload: RebobinageMultilotsRequest,
+) =>
+  apiFetch<RebobinageMultilotsApplyResponse>(
+    `/api/devis/${devisId}/rebobinage-multilots`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
 // ---------------------------------------------------------------------------
 // Brief stratégique v2 — onglet Stratégique (config par entreprise)
 //   /api/strategique/couts        (singleton : GET + PUT)

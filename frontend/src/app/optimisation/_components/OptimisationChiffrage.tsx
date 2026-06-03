@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   applyRebobinageDevis,
+  applyRebobinageMultilotsDevis,
   createDevis,
   getOptionsDisponibles,
   previewCoutsDevis,
@@ -81,6 +82,7 @@ export function OptimisationChiffrage() {
     setClientSelectionne,
     sensEnroulementClient,
     diametreEchoesParLot,
+    rebobinageMultilotsRequest,
   } = useOptimisationPose();
   const { toast } = useToast();
   const router = useRouter();
@@ -310,9 +312,23 @@ export function OptimisationChiffrage() {
       // l'étape rebobinage a propagé un request au store. Échec ici ≠
       // échec du devis : on log un warning sans bloquer la navigation,
       // l'opérateur pourra ré-appliquer plus tard depuis la fiche devis.
-      if (rebobinageRequest !== null) {
+      //
+      // Bug #6 (6.2e) — on privilégie l'apply MULTI-LOTS (coût par lot sur
+      // l'épaisseur réelle + paroi) quand l'étape rebobinage a produit un
+      // request multi-lots. Fallback mono-lot (legacy, épaisseur figée) si
+      // absent — non-régressif (devis hors flux rebobinage multi-lots).
+      const rebobinageAEnvoyer =
+        rebobinageMultilotsRequest !== null || rebobinageRequest !== null;
+      if (rebobinageAEnvoyer) {
         try {
-          await applyRebobinageDevis(devisId, rebobinageRequest);
+          if (rebobinageMultilotsRequest !== null) {
+            await applyRebobinageMultilotsDevis(
+              devisId,
+              rebobinageMultilotsRequest,
+            );
+          } else if (rebobinageRequest !== null) {
+            await applyRebobinageDevis(devisId, rebobinageRequest);
+          }
         } catch (rebobErr) {
           toast({
             title: "Rebobinage non appliqué",

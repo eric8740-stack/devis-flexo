@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
 
-import type { Client, OptimisationConfigOut } from "@/lib/api";
+import type {
+  Client,
+  OptimisationConfigOut,
+  RebobinageCalculerRequest,
+  RebobinageMultilotsRequest,
+  RebobinageResultat,
+} from "@/lib/api";
 
 import { OptimisationChiffrage } from "./OptimisationChiffrage";
 import {
@@ -93,6 +99,25 @@ function installFetchMock(previewErreur?: string) {
           id: 999,
           numero: "DEV-2026-0999",
           // …champs minimaux — le composant n'utilise que id + numero.
+        }),
+      } as Response;
+    }
+    // applyRebobinageMultilotsDevis (POST /api/devis/{id}/rebobinage-multilots).
+    if (
+      url.includes("/api/devis/") &&
+      url.endsWith("/rebobinage-multilots") &&
+      (init?.method ?? "GET").toUpperCase() === "POST"
+    ) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          machine_rebobineuse_id: 1,
+          nb_lots: 1,
+          cout_total_rebobinage_eur: "10.00",
+          cout_mandrins_eur: "1.00",
+          lots: [],
         }),
       } as Response;
     }
@@ -212,6 +237,9 @@ function setupChiffrage(opts: {
   nbCouleursImpression?: number;
   // Bug #6 (6.2c) — écho rebobinage multi-lots à injecter pour le lot unique.
   echo?: LotDiametreEcho;
+  // Bug #6 (6.2e) — requests rebobinage à propager au store (apply au submit).
+  rebobinageMultilots?: RebobinageMultilotsRequest;
+  rebobinageMono?: { req: RebobinageCalculerRequest; result: RebobinageResultat };
 }) {
   function Inner() {
     const {
@@ -224,6 +252,8 @@ function setupChiffrage(opts: {
       setSensEnroulementClient,
       setNbCouleursImpression,
       setDiametreEchoesParLot,
+      setRebobinage,
+      setRebobinageMultilotsRequest,
     } = useOptimisationPose();
     useEffect(() => {
       const candidat = buildFakeCandidat();
@@ -234,6 +264,12 @@ function setupChiffrage(opts: {
       setMatiereLot(idCandidat, 1);
       if (opts.echo) {
         setDiametreEchoesParLot({ [idCandidat]: opts.echo });
+      }
+      if (opts.rebobinageMono) {
+        setRebobinage(opts.rebobinageMono.req, opts.rebobinageMono.result);
+      }
+      if (opts.rebobinageMultilots) {
+        setRebobinageMultilotsRequest(opts.rebobinageMultilots);
       }
       setClientSelectionne(opts.client);
       if (opts.sensEnroulementOverride !== undefined) {
@@ -484,5 +520,144 @@ describe("OptimisationChiffrage — Sprint 16 propagation auto-fill", () => {
     expect(pv.diametre_bobine_mm).toBe(300); // candidat figé inchangé
     expect(pv.epaisseur_source).toBeUndefined();
     expect(pv.diametre_depart_mm).toBeUndefined();
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Bug #6 (6.2e) — apply rebobinage via l'endpoint MULTI-LOTS
+  // ──────────────────────────────────────────────────────────────────
+
+  const TARIFS = {
+    prix_pre_coupe_par_mandrin_eur: "0.50",
+    cout_decoupe_interne_par_mandrin_eur: "0.15",
+    cout_fixe_decoupe_interne_eur: "5.00",
+  };
+
+  function buildMultilotsReq(): RebobinageMultilotsRequest {
+    return {
+      lots: [
+        {
+          nb_etiquettes_total: 12000,
+          intervalle_developpe_mm: "2",
+          diametre_mandrin_mm: 76,
+          diametre_max_bobine_mm: 300,
+          nb_etiq_par_bobine_fixe: null,
+          matiere_id: 1,
+          epaisseur_saisie_um: null,
+          paroi_override_mm: 5,
+        },
+      ],
+      machine_rebobineuse_id: 1,
+      tarifs_mandrins: TARIFS,
+      mode: "auto",
+      motif_force: null,
+    };
+  }
+
+  function buildMonoReq(): {
+    req: RebobinageCalculerRequest;
+    result: RebobinageResultat;
+  } {
+    return {
+      req: {
+        spec_lot: {
+          nb_etiquettes_total: 12000,
+          intervalle_developpe_mm: "2",
+          epaisseur_matiere_mm: "0.15",
+        },
+        profil_client: {
+          diametre_mandrin_mm: 76,
+          diametre_max_bobine_mm: 300,
+          nb_etiq_par_bobine_fixe: null,
+        },
+        machine_rebobineuse_id: 1,
+        tarifs_mandrins: TARIFS,
+        mode: "auto",
+        motif_force: null,
+      },
+      result: {
+        bobines: {
+          nb_etiq_par_bobine: 1500,
+          nb_bobines: 8,
+          bobine_partielle: false,
+          nb_etiq_derniere_bobine: 1500,
+          longueur_totale_m: "960.00",
+        },
+        temps: {
+          temps_roulage_min: "12.50",
+          temps_changements_min: "12.00",
+          temps_total_min: "24.50",
+          cout_machine_eur: "18.38",
+        },
+        arbitrage: {
+          mode_optimal: "decoupe_interne",
+          cout_pre_coupe_total_eur: "22.38",
+          cout_decoupe_interne_total_eur: "20.18",
+          ecart_pct: "10.9",
+          mode_applique: "decoupe_interne",
+          motif_force: null,
+        },
+        cout_mandrins_eur: "1.80",
+        cout_total_rebobinage_eur: "20.18",
+        machine_rebobineuse_id: 1,
+      },
+    };
+  }
+
+  const isPost = (c: unknown[]) =>
+    (c[1] as RequestInit)?.method === "POST";
+
+  it("request multi-lots présent → apply via POST /api/devis/{id}/rebobinage-multilots", async () => {
+    setupChiffrage({ client: null, rebobinageMultilots: buildMultilotsReq() });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/rebobinage-multilots") && isPost(c),
+        ),
+      ).toBe(true),
+    );
+    const call = fetchSpy.mock.calls.find(
+      (c) => String(c[0]).endsWith("/rebobinage-multilots") && isPost(c),
+    );
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.lots[0].paroi_override_mm).toBe(5);
+    expect(body.lots[0].matiere_id).toBe(1);
+    // Le chemin mono-lot ne doit PAS être appelé.
+    expect(
+      fetchSpy.mock.calls.some(
+        (c) => String(c[0]).endsWith("/rebobinage") && isPost(c),
+      ),
+    ).toBe(false);
+  });
+
+  it("pas de multi-lots, mono présent → fallback POST /api/devis/{id}/rebobinage (non-régressif)", async () => {
+    setupChiffrage({ client: null, rebobinageMono: buildMonoReq() });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) => String(c[0]).endsWith("/rebobinage") && isPost(c),
+        ),
+      ).toBe(true),
+    );
+    // L'endpoint multi-lots ne doit PAS être appelé en fallback.
+    expect(
+      fetchSpy.mock.calls.some(
+        (c) => String(c[0]).endsWith("/rebobinage-multilots") && isPost(c),
+      ),
+    ).toBe(false);
   });
 });
