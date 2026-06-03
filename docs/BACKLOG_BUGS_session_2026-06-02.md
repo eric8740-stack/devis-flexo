@@ -49,13 +49,25 @@ La migration unify supprimait Daco/Atelier → risque de casser le rebobinage.
 - Trancher : compter un mini-coût « montée bande » au changement de bobine, ou rien.
 **Scope/risque** : change la logique du moteur → **bouge les prix + le benchmark**. Sprint dédié, nouveau benchmark, validation explicite.
 
-### 6. Flux matière ↔ bobinage incohérent + ordre des étapes
-**Observé** : le calcul bobinage utilise **épaisseur 150 µm par défaut** au lieu de l'épaisseur de la matière sélectionnée → le Ø bobine ne coïncide pas avec le vrai papier. La matière est demandée à plusieurs endroits déconnectés.
-**Cible (chaîne logique A → B)** : Format (laize × dev) → Outil (cylindre/plaque) → Matière (papier) → Bobinage qui **finalise le Ø en fonction de l'épaisseur réelle du papier choisi**.
-**À faire** :
-- Propager la matière sélectionnée jusqu'au bobinage ; le Ø se calcule sur **son épaisseur réelle**, pas 150 µm.
-- Revoir l'ordre des étapes pour suivre la chaîne ci-dessus.
-**Scope/risque** : touche `bat_calculs` (géométrie Ø = SACRED-géométrie) + redesign de flux → **mini-cadrage design avant code** (ordre exact, où vit chaque champ).
+### 6. Flux matière ↔ bobinage incohérent — Ø calculé sur défauts (épaisseur matière + paroi mandrin) — **CADRÉ**
+**Observé** : le Ø bobine ne coïncide pas avec le vrai papier. Deux causes de « valeur de départ fausse » fournie au calcul du Ø :
+- **Épaisseur matière** : le Ø lit `candidat.epaisseur_appliquee_um` **figé à la saisie** (étape 1), pas la matière choisie à l'étape **Matière** (`detail`, par lot, dont l'épaisseur est affichée mais jamais propagée). Fallback **150 µm** injecté à 3 endroits (front saisie `useState("150")`, schéma `epaisseur_matiere_um=Field(150.0)`, rebobinage `?? 150`). `matiere.epaisseur_microns` est **NULLABLE** → NULL traité en 150.
+- **Paroi mandrin** : le Ø de départ de l'enroulement = `mandrin_mm` **brut** (Ø intérieur nominal), sans paroi → léger sous-estimé. Aucun champ d'épaisseur de paroi n'existe nulle part.
+
+**Principe directeur (3 facettes, MÊME nature)** : fournir la **bonne valeur de départ** au calcul du Ø. **ZÉRO formule SACRED touchée** — `bat_calculs` (`calcul_diametre_bobine` + inverses) et `calcul_bobines` prennent épaisseur et Ø mandrin en **paramètres** ; on ne change que ce qu'on leur passe.
+
+**Décisions tranchées :**
+1. **Épaisseur matière** — source = l'étape **Matière (PAR LOT)**, plus la saisie. Matière à `epaisseur_microns` **NULL → saisie opérateur** (champ éditable à l'étape Bobinage). **150 µm = ultime fallback seulement** (ni matière, ni saisie).
+2. **Paroi mandrin** — nouveau champ **`epaisseur_paroi_mm` sur `parametre_mandrin`** (par Ø mandrin), **pré-rempli + override** à l'étape Bobinage. **Ø de départ = Ø intérieur + 2×paroi**, **pré-composé en amont** et passé à `bat_calculs` (formule **intacte**). `epaisseur_paroi_mm` **NULL → comportement actuel** (Ø brut, pas de correction).
+3. **Cohérence** — la **vérité du Ø est finalisée à l'étape Bobinage** ; le Ø candidat (étape 2) devient une **estimation ré-alignée**. **Un seul point de calcul** du Ø → pas de divergence d'affichage entre étape 2 et étape Bobinage.
+
+**Granularité** : **1 Ø PAR LOT**. Le rebobinage actuel ne lit que `selection[0]` (mono-lot) → **à étendre** au multi-lots.
+
+**SACRED** : `bat_calculs` / `rotation_se` **non modifiés**. Re-valider les **fixtures Ø** (242 mm `CoherenceBobineAlerte`, benchmarks) **uniquement si** la valeur effective de départ change.
+
+**Plan en lots** :
+- **6.1** — champ `epaisseur_paroi_mm` sur `parametre_mandrin` (migration + modèle + expo). *(en cours)*
+- **6.2** — propagation matière + paroi → **Ø par lot** + cohérence (front + orchestration), **après** validation du cadrage et **merge de 6.1**.
 
 ---
 
