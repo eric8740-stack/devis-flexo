@@ -38,14 +38,22 @@ from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import (
     Devis,
+    Matiere,
     MachineRebobineuse,
     ParametreMandrin,
     User,
 )
 from app.schemas.rebobinage import (
+    LotRebobinageOut,
     MachineRebobineuseListItem,
     RebobinageCalculerRequest,
+    RebobinageMultilotsRequest,
+    RebobinageMultilotsResponse,
     ResultatRebobinageOut,
+)
+from app.services.diametre_resolver import (
+    resoudre_diametre_depart_mm,
+    resoudre_epaisseur_um,
 )
 from app.services.rebobinage import (
     ChoixOperateur,
@@ -284,6 +292,145 @@ def calculer_rebobinage_preview(
     """
     result, machine = _executer_moteur(payload, db, user)
     return _resultat_to_out(result, machine.id)
+
+
+@router.post(
+    "/api/rebobinage/calculer-multilots",
+    response_model=RebobinageMultilotsResponse,
+)
+def calculer_rebobinage_multilots(
+    payload: RebobinageMultilotsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RebobinageMultilotsResponse:
+    """Calcul rebobinage **1 Ø par lot** — preview, aucune persistance (bug #6).
+
+    Pour chaque lot, le backend résout les BONNES valeurs avant le calcul :
+      - épaisseur effective = `matiere.epaisseur_microns` du lot > saisie
+        opérateur > fallback 150 µm (cf. `resoudre_epaisseur_um`) ;
+      - Ø de départ = Ø mandrin + 2 × paroi (`parametre_mandrin.
+        epaisseur_paroi_mm` ou override lot ; NULL → 0, non-régressif).
+    Ces valeurs alimentent `calcul_bobines` via le MÊME résolveur que le Ø
+    candidat (étape 2 optimisation) → pas de divergence (point de calcul
+    unique). Aucune formule géométrique n'est modifiée.
+
+    Machine / tarifs / mode sont communs aux lots. Codes erreur :
+      - 404 : machine_rebobineuse_id ou matiere_id hors scope tenant
+      - 422 : input invalide / mode forcé sans motif / scie indispo
+    """
+    machine = _load_machine_or_404(db, payload.machine_rebobineuse_id, user)
+
+    # Singleton parametre_mandrin du tenant : runtime (scie/mode) + paroi.
+    pm_row = (
+        db.query(ParametreMandrin)
+        .filter_by(entreprise_id=user.entreprise_id)
+        .first()
+    )
+    if pm_row is None:
+        parametres = ParametresMandrinRuntime(
+            scie_disponible=False, mode_par_defaut="auto"
+        )
+        paroi_tenant_mm: int | None = None
+    else:
+        parametres = ParametresMandrinRuntime(
+            scie_disponible=pm_row.scie_disponible,
+            mode_par_defaut=pm_row.mode_par_defaut,  # type: ignore[arg-type]
+        )
+        paroi_tenant_mm = pm_row.epaisseur_paroi_mm
+
+    mach_params = MachineRebobinageParams(
+        vitesse_pratique_m_min=machine.vitesse_pratique_m_min,
+        cout_horaire_eur=Decimal(machine.cout_horaire_eur),
+        temps_changement_bobine_min=Decimal(machine.temps_changement_bobine_min),
+    )
+    tarifs = TarifsMandrins(
+        prix_pre_coupe_par_mandrin_eur=payload.tarifs_mandrins.prix_pre_coupe_par_mandrin_eur,
+        cout_decoupe_interne_par_mandrin_eur=payload.tarifs_mandrins.cout_decoupe_interne_par_mandrin_eur,
+        cout_fixe_decoupe_interne_eur=payload.tarifs_mandrins.cout_fixe_decoupe_interne_eur,
+    )
+    choix = ChoixOperateur(mode=payload.mode, motif_force=payload.motif_force)
+
+    lots_out: list[LotRebobinageOut] = []
+    for lot in payload.lots:
+        # 1. Épaisseur effective du lot : matière > saisie > fallback 150.
+        matiere_epaisseur_um: int | None = None
+        if lot.matiere_id is not None:
+            matiere = (
+                db.query(Matiere)
+                .filter(
+                    Matiere.id == lot.matiere_id,
+                    Matiere.entreprise_id == user.entreprise_id,
+                )
+                .first()
+            )
+            if matiere is None:
+                # Anti-énumération multi-tenant : 404 si hors scope.
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Matière {lot.matiere_id} introuvable",
+                )
+            matiere_epaisseur_um = matiere.epaisseur_microns
+        epaisseur_um, epaisseur_source = resoudre_epaisseur_um(
+            matiere_epaisseur_um=matiere_epaisseur_um,
+            saisie_um=(
+                float(lot.epaisseur_saisie_um)
+                if lot.epaisseur_saisie_um is not None
+                else None
+            ),
+        )
+
+        # 2. Ø de départ = mandrin + 2 × paroi (override lot > tenant > 0).
+        diametre_depart_mm, paroi_mm = resoudre_diametre_depart_mm(
+            mandrin_mm=lot.diametre_mandrin_mm,
+            paroi_mm=paroi_tenant_mm,
+            paroi_override_mm=lot.paroi_override_mm,
+        )
+
+        # 3. Calcul rebobinage avec les valeurs résolues (formule intouchée).
+        spec = SpecLot(
+            nb_etiquettes_total=lot.nb_etiquettes_total,
+            intervalle_developpe_mm=lot.intervalle_developpe_mm,
+            epaisseur_matiere_mm=Decimal(str(epaisseur_um)) / Decimal(1000),
+        )
+        profil = ProfilClient(
+            diametre_mandrin_mm=diametre_depart_mm,
+            diametre_max_bobine_mm=lot.diametre_max_bobine_mm,
+            nb_etiq_par_bobine_fixe=lot.nb_etiq_par_bobine_fixe,
+        )
+        try:
+            result = calculer_rebobinage(
+                spec=spec,
+                profil_client=profil,
+                machine=mach_params,
+                tarifs=tarifs,
+                parametres=parametres,
+                choix=choix,
+            )
+        except RebobinageError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Calcul rebobinage refusé : {exc}",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Input rebobinage invalide : {exc}",
+            ) from exc
+
+        lots_out.append(
+            LotRebobinageOut(
+                epaisseur_effective_um=epaisseur_um,
+                epaisseur_source=epaisseur_source,
+                mandrin_mm=lot.diametre_mandrin_mm,
+                paroi_mm=paroi_mm,
+                diametre_depart_mm=diametre_depart_mm,
+                # Ø atteint = Ø max bobine (bobine pleine, contrainte client).
+                diametre_bobine_mm=lot.diametre_max_bobine_mm,
+                rebobinage=_resultat_to_out(result, machine.id),
+            )
+        )
+
+    return RebobinageMultilotsResponse(lots=lots_out)
 
 
 @router.post(
