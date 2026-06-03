@@ -47,6 +47,7 @@ from app.schemas.rebobinage import (
     LotRebobinageOut,
     MachineRebobineuseListItem,
     RebobinageCalculerRequest,
+    RebobinageMultilotsApplyResponse,
     RebobinageMultilotsRequest,
     RebobinageMultilotsResponse,
     ResultatRebobinageOut,
@@ -294,16 +295,10 @@ def calculer_rebobinage_preview(
     return _resultat_to_out(result, machine.id)
 
 
-@router.post(
-    "/api/rebobinage/calculer-multilots",
-    response_model=RebobinageMultilotsResponse,
-)
-def calculer_rebobinage_multilots(
-    payload: RebobinageMultilotsRequest,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> RebobinageMultilotsResponse:
-    """Calcul rebobinage **1 Ø par lot** — preview, aucune persistance (bug #6).
+def _calculer_lots_multilots(
+    payload: RebobinageMultilotsRequest, db: Session, user: User
+) -> tuple[list[LotRebobinageOut], MachineRebobineuse]:
+    """Cœur PARTAGÉ : calcule 1 `LotRebobinageOut` par lot.
 
     Pour chaque lot, le backend résout les BONNES valeurs avant le calcul :
       - épaisseur effective = `matiere.epaisseur_microns` du lot > saisie
@@ -314,7 +309,10 @@ def calculer_rebobinage_multilots(
     candidat (étape 2 optimisation) → pas de divergence (point de calcul
     unique). Aucune formule géométrique n'est modifiée.
 
-    Machine / tarifs / mode sont communs aux lots. Codes erreur :
+    Utilisé par le preview multi-lots (`calculer-multilots`) ET l'apply
+    multi-lots (`{id}/rebobinage-multilots`, persistance du coût par lot).
+
+    Machine / tarifs / mode sont communs aux lots. Lève :
       - 404 : machine_rebobineuse_id ou matiere_id hors scope tenant
       - 422 : input invalide / mode forcé sans motif / scie indispo
     """
@@ -430,7 +428,145 @@ def calculer_rebobinage_multilots(
             )
         )
 
+    return lots_out, machine
+
+
+@router.post(
+    "/api/rebobinage/calculer-multilots",
+    response_model=RebobinageMultilotsResponse,
+)
+def calculer_rebobinage_multilots(
+    payload: RebobinageMultilotsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RebobinageMultilotsResponse:
+    """Calcul rebobinage **1 Ø par lot** — preview, aucune persistance (bug #6).
+
+    Délègue le calcul par lot à `_calculer_lots_multilots` (résolveur partagé
+    épaisseur réelle + paroi). Codes erreur : 404 (machine/matière hors
+    scope), 422 (input invalide / mode forcé sans motif / scie indispo).
+    """
+    lots_out, _machine = _calculer_lots_multilots(payload, db, user)
     return RebobinageMultilotsResponse(lots=lots_out)
+
+
+def _lot_out_to_payload_dict(lot: LotRebobinageOut) -> dict[str, Any]:
+    """Sérialise un `LotRebobinageOut` pour stockage JSON dans
+    `devis.payload_output["rebobinage_multilots"]["lots"]`. Decimal → str
+    pour préserver la précision (cf. `_resultat_to_payload_dict`)."""
+    r = lot.rebobinage
+    return {
+        "epaisseur_effective_um": lot.epaisseur_effective_um,
+        "epaisseur_source": lot.epaisseur_source,
+        "mandrin_mm": lot.mandrin_mm,
+        "paroi_mm": lot.paroi_mm,
+        "diametre_depart_mm": lot.diametre_depart_mm,
+        "diametre_bobine_mm": lot.diametre_bobine_mm,
+        "nb_bobines": r.bobines.nb_bobines,
+        "nb_etiq_par_bobine": r.bobines.nb_etiq_par_bobine,
+        "mode_applique": r.arbitrage.mode_applique,
+        "cout_mandrins_eur": str(r.cout_mandrins_eur),
+        "cout_machine_eur": str(r.temps.cout_machine_eur),
+        "cout_total_rebobinage_eur": str(r.cout_total_rebobinage_eur),
+    }
+
+
+def _multilots_to_payload_dict(
+    machine_id: int, lots_out: list[LotRebobinageOut]
+) -> tuple[dict[str, Any], Decimal, Decimal]:
+    """Construit le dict persistable + l'agrégat (coût total, coût mandrins).
+
+    L'agrégat = somme des coûts par lot. Ligne ADDITIVE : `ht_total_eur`
+    (denorm cost_engine) reste inchangé — le rebobinage est un coût SÉPARÉ
+    des 7 postes, jamais fusionné au benchmark sacré.
+    """
+    cout_total = sum(
+        (lot.rebobinage.cout_total_rebobinage_eur for lot in lots_out),
+        Decimal("0"),
+    )
+    cout_mandrins = sum(
+        (lot.rebobinage.cout_mandrins_eur for lot in lots_out),
+        Decimal("0"),
+    )
+    payload = {
+        "applique": True,
+        "machine_rebobineuse_id": machine_id,
+        "nb_lots": len(lots_out),
+        "cout_total_rebobinage_eur": str(cout_total),
+        "cout_mandrins_eur": str(cout_mandrins),
+        "lots": [_lot_out_to_payload_dict(lot) for lot in lots_out],
+    }
+    return payload, cout_total, cout_mandrins
+
+
+@router.post(
+    "/api/devis/{devis_id}/rebobinage-multilots",
+    response_model=RebobinageMultilotsApplyResponse,
+)
+def appliquer_rebobinage_multilots_au_devis(
+    devis_id: int,
+    payload: RebobinageMultilotsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RebobinageMultilotsApplyResponse:
+    """Calcule + persiste le coût rebobinage **par lot** sur le devis (bug #6
+    étape 6.2e-back).
+
+    Corrige le coût HT rebobinage faux : le coût de chaque lot est calculé
+    avec son épaisseur RÉELLE (matière du lot / saisie) + paroi mandrin, via
+    le résolveur partagé — au lieu de l'épaisseur de saisie figée (150 µm) du
+    chemin mono-lot, faux dès ≥ 2 lots de matières différentes.
+
+    Stocke le résultat agrégé par lot dans
+    `devis.payload_output["rebobinage_multilots"]` (ligne ADDITIVE — `ht_
+    total_eur` denorm INCHANGÉ, cost_engine sacré). Idempotent : un 2e POST
+    remplace la ligne. Le chemin mono-lot `{id}/rebobinage` reste intact
+    (legacy, non-régressif).
+
+    Codes erreur :
+      - 404 : devis_id / machine_rebobineuse_id / matiere_id hors scope tenant
+      - 422 : input invalide / mode forcé sans motif / scie indispo
+    """
+    devis = get_or_404_scoped(db, Devis, devis_id, user)
+    lots_out, machine = _calculer_lots_multilots(payload, db, user)
+    ligne, cout_total, cout_mandrins = _multilots_to_payload_dict(
+        machine.id, lots_out
+    )
+
+    # SQLAlchemy ne flag pas un dict mutable comme "dirty" → réassignation.
+    payload_output = dict(devis.payload_output) if devis.payload_output else {}
+    payload_output["rebobinage_multilots"] = ligne
+    devis.payload_output = payload_output
+
+    db.commit()
+    db.refresh(devis)
+
+    return RebobinageMultilotsApplyResponse(
+        machine_rebobineuse_id=machine.id,
+        nb_lots=len(lots_out),
+        cout_total_rebobinage_eur=cout_total,
+        cout_mandrins_eur=cout_mandrins,
+        lots=lots_out,
+    )
+
+
+@router.delete(
+    "/api/devis/{devis_id}/rebobinage-multilots",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def retirer_rebobinage_multilots_du_devis(
+    devis_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Retire la ligne rebobinage multi-lots du devis. Idempotent (204 même
+    si absente). Symétrique du DELETE mono-lot."""
+    devis = get_or_404_scoped(db, Devis, devis_id, user)
+    payload_output = dict(devis.payload_output) if devis.payload_output else {}
+    if "rebobinage_multilots" in payload_output:
+        payload_output.pop("rebobinage_multilots")
+        devis.payload_output = payload_output
+        db.commit()
 
 
 @router.post(
