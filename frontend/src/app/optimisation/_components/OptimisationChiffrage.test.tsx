@@ -9,6 +9,7 @@ import { OptimisationChiffrage } from "./OptimisationChiffrage";
 import {
   OptimisationPoseProvider,
   useOptimisationPose,
+  type LotDiametreEcho,
 } from "./OptimisationPoseStore";
 
 // Sprint 16 auto-fill — test ciblé : on vérifie que
@@ -209,6 +210,8 @@ function setupChiffrage(opts: {
   client: Client | null;
   sensEnroulementOverride?: number | null;
   nbCouleursImpression?: number;
+  // Bug #6 (6.2c) — écho rebobinage multi-lots à injecter pour le lot unique.
+  echo?: LotDiametreEcho;
 }) {
   function Inner() {
     const {
@@ -220,6 +223,7 @@ function setupChiffrage(opts: {
       setClientSelectionne,
       setSensEnroulementClient,
       setNbCouleursImpression,
+      setDiametreEchoesParLot,
     } = useOptimisationPose();
     useEffect(() => {
       const candidat = buildFakeCandidat();
@@ -228,6 +232,9 @@ function setupChiffrage(opts: {
       const idCandidat = `${candidat.cylindre_id}-${candidat.machine_id}-${candidat.nb_poses_dev}x${candidat.nb_poses_laize}-${candidat.sens_enroulement}`;
       setQuantiteLot(idCandidat, 12000);
       setMatiereLot(idCandidat, 1);
+      if (opts.echo) {
+        setDiametreEchoesParLot({ [idCandidat]: opts.echo });
+      }
       setClientSelectionne(opts.client);
       if (opts.sensEnroulementOverride !== undefined) {
         setSensEnroulementClient(opts.sensEnroulementOverride);
@@ -403,5 +410,79 @@ describe("OptimisationChiffrage — Sprint 16 propagation auto-fill", () => {
     expect(screen.queryByText(/0,00\s*€/)).not.toBeInTheDocument();
     // Les libellés du récap chiffré ne sont pas montés.
     expect(screen.queryByText(/Coût net HT/i)).not.toBeInTheDocument();
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Bug #6 (6.2c) — enrichissement de payload_visuel par les échos rebobinage
+  // ──────────────────────────────────────────────────────────────────
+
+  function findPostDevisBody() {
+    const call = fetchSpy.mock.calls.find(
+      (c) =>
+        String(c[0]).endsWith("/api/devis") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    return JSON.parse((call?.[1] as RequestInit).body as string);
+  }
+
+  it("écho rebobinage présent → payload_visuel enrichi du Ø réel par lot au POST devis", async () => {
+    setupChiffrage({
+      client: null,
+      echo: {
+        diametre_bobine_mm: 305,
+        diametre_depart_mm: 82,
+        epaisseur_effective_um: 90,
+        epaisseur_source: "matiere",
+        paroi_mm: 3,
+        nb_bobines: 7,
+      },
+    });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/api/devis") &&
+            (c[1] as RequestInit)?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const pv = findPostDevisBody().lots[0].payload_visuel;
+    expect(pv.diametre_bobine_mm).toBe(305); // écrasé par l'écho (était 300)
+    expect(pv.diametre_depart_mm).toBe(82);
+    expect(pv.epaisseur_effective_um).toBe(90);
+    expect(pv.epaisseur_source).toBe("matiere");
+    expect(pv.paroi_mm).toBe(3);
+    expect(pv.nb_bobines_rebobinage).toBe(7);
+  });
+
+  it("pas d'écho rebobinage → payload_visuel = candidat figé (fallback non-régressif)", async () => {
+    setupChiffrage({ client: null });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/api/devis") &&
+            (c[1] as RequestInit)?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const pv = findPostDevisBody().lots[0].payload_visuel;
+    expect(pv.diametre_bobine_mm).toBe(300); // candidat figé inchangé
+    expect(pv.epaisseur_source).toBeUndefined();
+    expect(pv.diametre_depart_mm).toBeUndefined();
   });
 });

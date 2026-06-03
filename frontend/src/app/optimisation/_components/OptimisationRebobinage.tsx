@@ -50,7 +50,10 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useClientsListe } from "./useClientsListe";
-import { useOptimisationPose } from "./OptimisationPoseStore";
+import {
+  useOptimisationPose,
+  type LotDiametreEcho,
+} from "./OptimisationPoseStore";
 import { useRebobineusesDuTenant } from "./useRebobineusesDuTenant";
 
 const MODE_LABEL: Record<ModeRebobinageApplique, string> = {
@@ -108,6 +111,7 @@ export function OptimisationRebobinage() {
     setClientSelectionne,
     sensEnroulementClient,
     setSensEnroulementClient,
+    setDiametreEchoesParLot,
   } = useOptimisationPose();
 
   // ──────────────────────────────────────────────────────────────────
@@ -424,6 +428,24 @@ export function OptimisationRebobinage() {
     try {
       const res = await postRebobinageCalculerMultilots(req);
       setMultilotsResult(res);
+      // Bug #6 (6.2c) — propage les échos par lot au store (indexés par
+      // id_candidat) pour enrichir `payload_visuel` au chiffrage. L'ordre de
+      // `res.lots` suit `lotsAffiches` (même liste envoyée au backend).
+      const echoes: Record<string, LotDiametreEcho> = {};
+      res.lots.forEach((lo, idx) => {
+        const id = lotsAffiches[idx]?.id_candidat;
+        if (id) {
+          echoes[id] = {
+            diametre_bobine_mm: lo.diametre_bobine_mm,
+            diametre_depart_mm: lo.diametre_depart_mm,
+            epaisseur_effective_um: lo.epaisseur_effective_um,
+            epaisseur_source: lo.epaisseur_source,
+            paroi_mm: lo.paroi_mm,
+            nb_bobines: lo.rebobinage.bobines.nb_bobines,
+          };
+        }
+      });
+      setDiametreEchoesParLot(echoes);
     } catch (err) {
       setMultilotsResult(null);
       setMultilotsError(
@@ -432,7 +454,7 @@ export function OptimisationRebobinage() {
     } finally {
       setMultilotsLoading(false);
     }
-  }, [buildMultilotsRequest]);
+  }, [buildMultilotsRequest, lotsAffiches, setDiametreEchoesParLot]);
 
   // Calcul auto déclenché par l'arrivée d'une rebobineuse sélectionnée
   // (auto-sélection initiale OU changement utilisateur dans le select).
