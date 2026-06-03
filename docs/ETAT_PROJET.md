@@ -9,8 +9,8 @@
 
 ## En-tête
 
-- **Date** : 2026-06-02
-- **Branche active** : `main` (après merges #86 puis hotfix #87)
+- **Date** : 2026-06-03
+- **Branche active** : `main` (après #88 optim UI + fix config_couts démo ICE)
 - **Sprint en cours** : Aucun. Dette archi « unifier `Machine` ↔ `MachineImprimerie` » **FERMÉE**. Prochain : suivre les follow-ups (cf. « En cours / à venir » + `docs/BACKLOG_BUGS_session_2026-06-02.md`).
 
 ---
@@ -42,13 +42,13 @@ Aucune.
 
 ## Baseline tests
 
-- **pytest local** (SQLite, `PG_TEST_URL` absent) : `1098 passed, 10 skipped, 0 failed` — main post-merges #86 + #87. Skips : 2 tests subprocess SQLite migration P1+P2 (limitation FK enforcement vs alembic transaction, documentée), 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
-- **pytest CI** (service `postgres:16`) : `1104 passed, 4 skipped, 0 failed` — inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod). Seuls les 4 skips inévitables restent (2 SQLite subprocess + 2 modèles obsolètes).
+- **pytest local** (SQLite, `PG_TEST_URL` absent) : `1100 passed, 10 skipped, 0 failed` — main + fix config_couts démo ICE (+2 tests `test_migration_realign_config_couts_demo_ice` : ré-alignement ent=1 + isolation multi-tenant + idempotence). Skips : 2 tests subprocess SQLite migration P1+P2 (limitation FK enforcement vs alembic transaction, documentée), 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
+- **pytest CI** (service `postgres:16`) : `1106 passed, 4 skipped, 0 failed` — inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod). Seuls les 4 skips inévitables restent (2 SQLite subprocess + 2 modèles obsolètes).
 - **Benchmark V1a 1 449,09 € + 5 cas (V1b/V2/V3/V4) + V8 : 13/13 EXACT** post-merge.
 - **Tripwire multi-lots P0b (`704,07 €`) : EXACT** post-merge — value-neutral confirmé (la migration `b2c3d4e5f6g7` n'a pas bougé la `laize_utile_mm = 320` pour Mark Andy 2200, principe sacré préservé).
 - **vitest** : `172/172 tests passed` (23/23 fichiers) — inchangé (P1+P2 est 100 % backend + 1 helper test PG).
 - **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
-- **alembic** : HEAD = **`b2c3d4e5f6g7`** (P1+P2 unify `Machine` ↔ `MachineImprimerie`). **Migration appliquée en prod Railway** post-merge #87. Application prod auto via `CMD` Dockerfile.
+- **alembic** : HEAD = **`c4d5e6f7a8b9`** (ré-alignement ICE `config_couts` compte démo ent=1, data-only, scope strict). Précédent `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile → corrige la ligne prod restée aux defaults 35/50/25.
 
 ---
 
@@ -99,7 +99,10 @@ Aucune.
 
 ## Carte multi-instances
 
-- **Lot en cours** — branche `feat/optim-machines-compatibles-ui` (worktree `devis-flexo-ui`). **Fix (b) du bug « 3 machines non-candidates »** : ce n'était PAS une exclusion mais une **fusion** par dédoublonnage moteur (`_dedoublonner_configs`, #9.1) — les presses de même clé (cylindre/poses/intervalles, donc même laize utile) sont fusionnées sous une représentante, les équivalentes reléguées dans `noms_machines_compatibles[1:]` et non affichées. Diagnostic : les 3 presses migrées (OMET/Nilpeter laize 330 = P5, Mark Andy 2200 laize 320 capée à 5 mm) collapsent sous P5 → « seuls P5 et Atelier 2 » apparaissent. **Fix UI-only** (option b, décision Eric) : l'étape 2 « Candidats viables » affiche désormais « Réalisable aussi sur : … » sous la machine représentante. **ZÉRO modif backend/moteur/seed/migration** (contrat API inchangé, champ déjà renvoyé). Test vitest ajouté (174/174). Pistes « champ NULL » et « pairing cylindre » du BACKLOG_BUGS **infirmées**.
+RAZ — aucun lot en cours côté Claude. Deux lots livrés ce 03/06 :
+
+- **#88 (mergé)** — **Fix (b) du bug « 3 machines non-candidates »** (UI seule). Ce n'était PAS une exclusion mais une **fusion** par dédoublonnage moteur (`_dedoublonner_configs`, #9.1) : les presses de même clé (cylindre/poses/intervalles → même laize utile) sont fusionnées sous une représentante, les équivalentes reléguées dans `noms_machines_compatibles[1:]` et non affichées (OMET/Nilpeter laize 330 = P5, Mark Andy 2200 320 capée à 5 mm collapsent sous P5 → « seuls P5 et Atelier 2 »). Fix : l'étape 2 affiche « Réalisable aussi sur : … ». **ZÉRO modif backend** (contrat API inchangé). Pistes « champ NULL » / « pairing cylindre » du BACKLOG_BUGS **infirmées**.
+- **Fix config_couts démo ICE** — branche `fix/config-couts-demo-realignement-ice`. La ligne `config_couts(ent=1)` EN PROD restée aux defaults template `35/50/25` (jamais ré-alignée : Phase 1 `w7l9g1e5d3f8` crée la table sans backfill, Lot 4a `x8m1h2f6c4e9` n'UPDATE que ses 7 champs) → page devis rend `1 347,35 €` au lieu du sacré `1 449,09 €`. **Local/CI = OK** car re-seed frais ([seed.py:388](../backend/scripts/seed.py#L388) pose déjà 18/375/70). **Fix = migration data `c4d5e6f7a8b9`** : `UPDATE config_couts SET marge=18, exploitation_machine=375, operateur=70 WHERE entreprise_id=1` — idempotente, **scope strict ent=1** (autres tenants intouchés), downgrade no-op. Vérif : `1 228,04 × 1,18 = 1 449,09`. Garde-fou : 2 tests migration (ré-alignement + isolation multi-tenant + idempotence). Baseline 1100, benchmark 13/13 + tripwire 704,07 EXACT.
 
 ---
 
