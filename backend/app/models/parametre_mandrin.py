@@ -77,6 +77,12 @@ class ParametreMandrin(Base):
     # ex: {"25": 200, "38": 150, "76": 80, "152": 30}
     stock_securite_par_modele: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
+    # Épaisseur de paroi du mandrin (mm). Destiné au calcul du Ø rouleau
+    # (bug #6 chaîne Format→Outil→Matière→Bobinage, étape 6.2 — NON câblé
+    # ici). NULLABLE : NULL = inconnu (aucune valeur en dur ; renseigné
+    # ensuite par l'imprimeur). Étape 6.1 : on crée seulement le champ.
+    epaisseur_paroi_mm: Mapped[int | None] = mapped_column(Integer)
+
     # Mode d'arbitrage par défaut — pilote le moteur Lot B.
     # Validé app-side via MODES_PAR_DEFAUT (pas de CHECK SQL pour rester
     # compat SQLite + extensibilité V2 sans migration).
