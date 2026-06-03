@@ -99,7 +99,7 @@ Aucune.
 
 ## Carte multi-instances
 
-RAZ — aucun lot en cours côté Claude. La PR P1+P2 + hotfix sont mergés et en prod. Prochaine session démarre sur la **bug optim 3 machines non-candidates** (cf. BACKLOG_BUGS).
+- **Lot en cours** — branche `feat/optim-machines-compatibles-ui` (worktree `devis-flexo-ui`). **Fix (b) du bug « 3 machines non-candidates »** : ce n'était PAS une exclusion mais une **fusion** par dédoublonnage moteur (`_dedoublonner_configs`, #9.1) — les presses de même clé (cylindre/poses/intervalles, donc même laize utile) sont fusionnées sous une représentante, les équivalentes reléguées dans `noms_machines_compatibles[1:]` et non affichées. Diagnostic : les 3 presses migrées (OMET/Nilpeter laize 330 = P5, Mark Andy 2200 laize 320 capée à 5 mm) collapsent sous P5 → « seuls P5 et Atelier 2 » apparaissent. **Fix UI-only** (option b, décision Eric) : l'étape 2 « Candidats viables » affiche désormais « Réalisable aussi sur : … » sous la machine représentante. **ZÉRO modif backend/moteur/seed/migration** (contrat API inchangé, champ déjà renvoyé). Test vitest ajouté (174/174). Pistes « champ NULL » et « pairing cylindre » du BACKLOG_BUGS **infirmées**.
 
 ---
 

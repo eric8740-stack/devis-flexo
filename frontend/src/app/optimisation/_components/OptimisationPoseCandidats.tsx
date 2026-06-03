@@ -194,7 +194,23 @@ export function OptimisationPoseCandidats() {
                     </span>
                   </td>
                   <td className="px-2 py-2">
-                    {c.noms_machines_compatibles[0] ?? `#${c.machine_id}`}
+                    <span>
+                      {c.noms_machines_compatibles[0] ?? `#${c.machine_id}`}
+                    </span>
+                    {/* Bug "3 machines non-candidates" — option (b) : les
+                        presses de même clé (cylindre/poses/intervalles) sont
+                        fusionnées par le dédoublonnage moteur (_dedoublonner_configs).
+                        On surface les équivalentes en texte visible (pas de
+                        tooltip) pour qu'elles ne paraissent plus "disparues". */}
+                    {c.noms_machines_compatibles.length > 1 && (
+                      <span
+                        data-testid="machines-equivalentes"
+                        className="mt-0.5 block text-[11px] leading-tight text-muted-foreground"
+                      >
+                        Réalisable aussi sur :{" "}
+                        {c.noms_machines_compatibles.slice(1).join(", ")}
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 py-2 font-mono text-xs">
                     {c.nb_poses_laize}×{c.nb_poses_dev}={c.nb_poses_total}
