@@ -41,6 +41,7 @@ export function OptimisationPoseDetailLots() {
   const {
     selection,
     setMatiereLot,
+    setEpaisseurSaisieLot,
     quantiteTotale,
     laizeEtiqMm,
     devEtiqMm,
@@ -104,7 +105,17 @@ export function OptimisationPoseDetailLots() {
       </header>
 
       <div className="grid gap-4">
-        {selection.map((lot, idx) => (
+        {selection.map((lot, idx) => {
+          const matiereLot =
+            (matieres ?? []).find((m) => m.id === lot.matiere_id) ?? null;
+          // Bug #6 (6.2) — l'épaisseur pilote le Ø bobine à l'étape suivante.
+          // Matière avec épaisseur catalogue → lecture seule. Matière sans
+          // épaisseur (caractérisée au grammage) → saisie opérateur requise,
+          // sinon le backend retombe sur 150 µm (ultime fallback).
+          const epaisseurCatalogue = matiereLot?.epaisseur_microns ?? null;
+          const matiereSansEpaisseur =
+            matiereLot !== null && epaisseurCatalogue === null;
+          return (
           <Card key={lot.id_candidat}>
             <CardHeader>
               <CardTitle className="text-lg">
@@ -140,6 +151,55 @@ export function OptimisationPoseDetailLots() {
                 </select>
               </div>
 
+              {/* Bug #6 (6.2) — épaisseur matière du lot, pilote le Ø bobine. */}
+              {matiereLot !== null && !matiereSansEpaisseur && (
+                <p
+                  className="text-xs text-muted-foreground"
+                  data-testid={`epaisseur-catalogue-${idx}`}
+                >
+                  Épaisseur catalogue : <strong>{epaisseurCatalogue} µm</strong>{" "}
+                  (utilisée pour le calcul du Ø bobine).
+                </p>
+              )}
+              {matiereSansEpaisseur && (
+                <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <label
+                    htmlFor={`epaisseur-saisie-${idx}`}
+                    className="text-xs font-semibold uppercase tracking-wide text-amber-900"
+                  >
+                    Épaisseur matière (µm) — saisie requise
+                  </label>
+                  <input
+                    id={`epaisseur-saisie-${idx}`}
+                    data-testid={`epaisseur-saisie-${idx}`}
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={lot.epaisseur_saisie_um ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "") {
+                        setEpaisseurSaisieLot(lot.id_candidat, null);
+                        return;
+                      }
+                      const n = parseInt(v, 10);
+                      setEpaisseurSaisieLot(
+                        lot.id_candidat,
+                        Number.isFinite(n) && n > 0 ? n : null,
+                      );
+                    }}
+                    placeholder="ex: 90"
+                  />
+                  <p className="text-xs text-amber-800">
+                    Cette matière n&apos;a pas d&apos;épaisseur au catalogue.
+                    Renseigne-la pour un Ø bobine juste — sinon le calcul
+                    retombe sur 150 µm par défaut.
+                  </p>
+                </div>
+              )}
+
               <SchemaImplantation
                 config={lot.candidat}
                 laizeEtiqMm={laizeEtiqMm}
@@ -148,7 +208,8 @@ export function OptimisationPoseDetailLots() {
               />
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {/* Sprint 16 Lot D — étape 3 → rebobinage → chiffrage. L'étape

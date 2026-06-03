@@ -94,6 +94,10 @@ export interface SelectionLot {
   candidat: OptimisationConfigOut;
   quantite: number;
   matiere_id: number | null;
+  // Bug #6 (6.2) — épaisseur saisie opérateur (µm) quand la matière du lot
+  // n'a pas d'`epaisseur_microns` au catalogue. null = pas de saisie (le
+  // backend retombe sur la matière, puis 150 µm en ultime fallback).
+  epaisseur_saisie_um: number | null;
 }
 
 interface OptimisationPoseContextValue {
@@ -138,6 +142,8 @@ interface OptimisationPoseContextValue {
   toggleSelection: (candidat: OptimisationConfigOut) => void;
   setQuantiteLot: (id_candidat: string, quantite: number) => void;
   setMatiereLot: (id_candidat: string, matiere_id: number) => void;
+  // Bug #6 (6.2) — saisie opérateur d'épaisseur (µm) pour un lot ; null efface.
+  setEpaisseurSaisieLot: (id_candidat: string, epaisseur_um: number | null) => void;
 
   sommeQuantitesLots: number;
 
@@ -428,6 +434,9 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
         candidat,
         quantite: lot.quantite,
         matiere_id: lot.matiere_id,
+        // Hydratation devis existant : pas de saisie opérateur reconstruite
+        // (l'épaisseur du lot vient de sa matière persistée).
+        epaisseur_saisie_um: null,
       };
     });
     setCandidats(candidatsReconstruits);
@@ -530,6 +539,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
             candidat,
             quantite: quantiteAuto,
             matiere_id: null,
+            epaisseur_saisie_um: null,
           },
         ];
       });
@@ -553,6 +563,19 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setSelection((prev) =>
         prev.map((s) =>
           s.id_candidat === id_candidat ? { ...s, matiere_id } : s
+        )
+      );
+    },
+    []
+  );
+
+  const setEpaisseurSaisieLot = useCallback(
+    (id_candidat: string, epaisseur_um: number | null) => {
+      setSelection((prev) =>
+        prev.map((s) =>
+          s.id_candidat === id_candidat
+            ? { ...s, epaisseur_saisie_um: epaisseur_um }
+            : s
         )
       );
     },
@@ -585,6 +608,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       toggleSelection,
       setQuantiteLot,
       setMatiereLot,
+      setEpaisseurSaisieLot,
       sommeQuantitesLots,
       optionsCodes,
       toggleOption,
@@ -629,6 +653,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       toggleSelection,
       setQuantiteLot,
       setMatiereLot,
+      setEpaisseurSaisieLot,
       sommeQuantitesLots,
       optionsCodes,
       toggleOption,

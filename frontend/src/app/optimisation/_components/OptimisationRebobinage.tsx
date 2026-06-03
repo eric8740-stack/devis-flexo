@@ -38,9 +38,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   postRebobinageCalculer,
+  postRebobinageCalculerMultilots,
+  type EpaisseurSource,
   type ModeRebobinageApplique,
   type ModeRebobinageIn,
   type RebobinageCalculerRequest,
+  type RebobinageMultilotsRequest,
+  type RebobinageMultilotsResponse,
   type RebobinageResultat,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -75,6 +79,19 @@ const TARIFS_DEFAULTS = {
 };
 
 const MOTIF_MIN_LENGTH = 10;
+
+// Bug #6 (6.2) — transparence sur l'origine de l'épaisseur retenue pour le Ø.
+const SOURCE_EPAISSEUR_LABEL: Record<EpaisseurSource, string> = {
+  matiere: "matière",
+  saisie: "saisie opérateur",
+  fallback: "fallback 150 µm",
+};
+
+const SOURCE_EPAISSEUR_CLASS: Record<EpaisseurSource, string> = {
+  matiere: "bg-emerald-100 text-emerald-800",
+  saisie: "bg-blue-100 text-blue-800",
+  fallback: "bg-amber-100 text-amber-900",
+};
 
 export function OptimisationRebobinage() {
   const {
@@ -206,6 +223,18 @@ export function OptimisationRebobinage() {
         TARIFS_DEFAULTS.cout_fixe_decoupe_interne_eur,
     );
 
+  // Bug #6 (6.2) — override optionnel de la paroi mandrin (mm). Vide = on
+  // laisse le backend appliquer la paroi du `parametre_mandrin` du tenant
+  // (NULL → 0, non-régressif). La paroi effectivement appliquée est renvoyée
+  // par lot dans la réponse multi-lots (`paroi_mm`) et ré-affichée ci-dessous.
+  const [paroiOverrideMm, setParoiOverrideMm] = useState<string>("");
+
+  // Résultat multi-lots (1 Ø par lot) — preview, ne persiste rien.
+  const [multilotsResult, setMultilotsResult] =
+    useState<RebobinageMultilotsResponse | null>(null);
+  const [multilotsLoading, setMultilotsLoading] = useState<boolean>(false);
+  const [multilotsError, setMultilotsError] = useState<string | null>(null);
+
   // Forçage commercial : mode + motif obligatoire si activé.
   const [forcerMode, setForcerMode] = useState<boolean>(
     rebobinageRequest ? rebobinageRequest.mode !== "auto" : false,
@@ -322,6 +351,89 @@ export function OptimisationRebobinage() {
     }
   }, [buildRequest]);
 
+  // ──────────────────────────────────────────────────────────────────
+  // Bug #6 (6.2) — calcul MULTI-LOTS : 1 Ø par lot avec l'épaisseur réelle
+  // de la matière du lot (ou saisie opérateur) + paroi mandrin. Remplace la
+  // lecture mono-lot `selection[0]` par une boucle sur tous les lots. Les
+  // lots à quantité nulle sont écartés (le backend exige nb_etiq > 0).
+  // ──────────────────────────────────────────────────────────────────
+  const lotsAffiches = useMemo(
+    () => selection.filter((s) => s.quantite > 0),
+    [selection],
+  );
+
+  const buildMultilotsRequest =
+    useCallback((): RebobinageMultilotsRequest | null => {
+      if (diametreMaxValide === null || machineRebobineuseId === null) {
+        return null;
+      }
+      if (lotsAffiches.length === 0) return null;
+      const paroiParsed = parseInt(paroiOverrideMm, 10);
+      const paroiOverride =
+        Number.isFinite(paroiParsed) && paroiParsed >= 0 ? paroiParsed : null;
+      const mode: ModeRebobinageIn = forcerMode ? modeForce : "auto";
+      const motif = forcerMode ? motifForce.trim() : null;
+      return {
+        lots: lotsAffiches.map((lot) => ({
+          nb_etiquettes_total: lot.quantite,
+          intervalle_developpe_mm: String(
+            lot.candidat.intervalle_dev_applique_mm ?? 2,
+          ),
+          diametre_mandrin_mm: diametreMandrin,
+          diametre_max_bobine_mm: diametreMaxValide,
+          nb_etiq_par_bobine_fixe: nbEtiqBobineFixe,
+          matiere_id: lot.matiere_id,
+          epaisseur_saisie_um:
+            lot.epaisseur_saisie_um != null
+              ? String(lot.epaisseur_saisie_um)
+              : null,
+          paroi_override_mm: paroiOverride,
+        })),
+        machine_rebobineuse_id: machineRebobineuseId,
+        tarifs_mandrins: {
+          prix_pre_coupe_par_mandrin_eur: prixPreCoupe,
+          cout_decoupe_interne_par_mandrin_eur: coutDecoupeInterne,
+          cout_fixe_decoupe_interne_eur: coutFixeDecoupeInterne,
+        },
+        mode,
+        motif_force: motif && motif.length > 0 ? motif : null,
+      };
+    }, [
+      lotsAffiches,
+      diametreMaxValide,
+      machineRebobineuseId,
+      paroiOverrideMm,
+      forcerMode,
+      modeForce,
+      motifForce,
+      diametreMandrin,
+      nbEtiqBobineFixe,
+      prixPreCoupe,
+      coutDecoupeInterne,
+      coutFixeDecoupeInterne,
+    ]);
+
+  const calculerMultilots = useCallback(async () => {
+    const req = buildMultilotsRequest();
+    if (req === null) {
+      setMultilotsResult(null);
+      return;
+    }
+    setMultilotsLoading(true);
+    setMultilotsError(null);
+    try {
+      const res = await postRebobinageCalculerMultilots(req);
+      setMultilotsResult(res);
+    } catch (err) {
+      setMultilotsResult(null);
+      setMultilotsError(
+        err instanceof Error ? err.message : "Erreur inconnue",
+      );
+    } finally {
+      setMultilotsLoading(false);
+    }
+  }, [buildMultilotsRequest]);
+
   // Calcul auto déclenché par l'arrivée d'une rebobineuse sélectionnée
   // (auto-sélection initiale OU changement utilisateur dans le select).
   // Recalcul des autres paramètres = bouton "Recalculer" manuel pour ne
@@ -333,6 +445,7 @@ export function OptimisationRebobinage() {
       machineRebobineuseId !== null
     ) {
       void calculer();
+      void calculerMultilots();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [machineRebobineuseId]);
@@ -643,6 +756,28 @@ export function OptimisationRebobinage() {
                 Propagé dans le devis pour traçabilité.
               </p>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="rebob-paroi-override">
+                Épaisseur paroi mandrin (mm) — optionnel
+              </Label>
+              <Input
+                id="rebob-paroi-override"
+                data-testid="paroi-override-input"
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                value={paroiOverrideMm}
+                onChange={(e) => setParoiOverrideMm(e.target.value)}
+                placeholder="laisser vide = paroi du parc"
+              />
+              <p className="text-xs text-muted-foreground">
+                Override de la paroi du mandrin. Vide = on applique la paroi
+                paramétrée pour le tenant ; le Ø de départ ={" "}
+                <strong>Ø intérieur + 2 × paroi</strong>. La valeur réellement
+                appliquée est rappelée par lot ci-dessous.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -716,11 +851,14 @@ export function OptimisationRebobinage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void calculer()}
-              disabled={calculLoading}
+              onClick={() => {
+                void calculer();
+                void calculerMultilots();
+              }}
+              disabled={calculLoading || multilotsLoading}
               data-testid="rebobinage-recalculer"
             >
-              {calculLoading ? "Calcul…" : "Recalculer"}
+              {calculLoading || multilotsLoading ? "Calcul…" : "Recalculer"}
             </Button>
           </div>
         </CardHeader>
@@ -793,6 +931,107 @@ export function OptimisationRebobinage() {
               </p>
             )
           )}
+        </CardContent>
+      </Card>
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* Bug #6 (6.2) — Ø PAR LOT (épaisseur réelle + paroi mandrin)  */}
+      {/* ────────────────────────────────────────────────────────── */}
+      <Card data-testid="multilots-section">
+        <CardHeader>
+          <CardTitle>Ø bobine par lot</CardTitle>
+          <CardDescription>
+            Un Ø et un nombre de bobines par lot, calculés sur l&apos;épaisseur
+            réelle de la matière du lot (ou la saisie opérateur), Ø de départ =
+            mandrin + 2 × paroi. Le badge indique d&apos;où vient
+            l&apos;épaisseur retenue.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {multilotsError && (
+            <div
+              role="alert"
+              data-testid="multilots-erreur"
+              className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {multilotsError}
+            </div>
+          )}
+
+          {multilotsResult?.lots && multilotsResult.lots.length > 0
+            ? multilotsResult.lots.map((lotOut, idx) => {
+                const lotSel = lotsAffiches[idx];
+                return (
+                  <div
+                    key={lotSel?.id_candidat ?? idx}
+                    data-testid={`lot-diametre-row-${idx}`}
+                    className="rounded-md border border-border bg-muted/20 p-4"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div className="text-sm font-semibold">
+                        Lot {idx + 1}
+                        {lotSel
+                          ? ` — ${lotSel.quantite.toLocaleString("fr-FR")} étiquettes`
+                          : ""}
+                      </div>
+                      <span
+                        data-testid={`lot-source-${idx}`}
+                        className={cn(
+                          "rounded px-2 py-0.5 text-xs font-medium",
+                          SOURCE_EPAISSEUR_CLASS[lotOut.epaisseur_source],
+                        )}
+                      >
+                        épaisseur {lotOut.epaisseur_effective_um} µm ·{" "}
+                        {SOURCE_EPAISSEUR_LABEL[lotOut.epaisseur_source]}
+                      </span>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Ø bobine
+                        </dt>
+                        <dd
+                          data-testid={`lot-diametre-${idx}`}
+                          className="font-mono text-lg font-semibold"
+                        >
+                          {lotOut.diametre_bobine_mm} mm
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Nb bobines
+                        </dt>
+                        <dd
+                          data-testid={`lot-nb-bobines-${idx}`}
+                          className="font-mono text-lg font-semibold"
+                        >
+                          {lotOut.rebobinage.bobines.nb_bobines.toLocaleString(
+                            "fr-FR",
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Ø départ (mandrin + 2×paroi)
+                        </dt>
+                        <dd className="font-mono text-sm">
+                          {lotOut.diametre_depart_mm} mm
+                          <span className="text-muted-foreground">
+                            {" "}
+                            (paroi {lotOut.paroi_mm} mm)
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                );
+              })
+            : !multilotsError && (
+                <p className="text-sm text-muted-foreground">
+                  Renseignez les paramètres puis cliquez « Recalculer » pour
+                  obtenir un Ø par lot.
+                </p>
+              )}
         </CardContent>
       </Card>
 

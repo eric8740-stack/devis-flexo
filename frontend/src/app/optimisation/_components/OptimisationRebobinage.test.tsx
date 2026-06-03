@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import type {
   Client,
   OptimisationConfigOut,
+  RebobinageMultilotsResponse,
   RebobinageResultat,
 } from "@/lib/api";
 
@@ -120,15 +121,48 @@ function buildResultat(
   };
 }
 
+// Bug #6 (6.2) — réponse multi-lots par défaut (1 entrée par lot). Les tests
+// surchargent `lots` pour piloter Ø / nb bobines / source d'épaisseur.
+function buildMultilotsResponse(
+  overrides: Partial<RebobinageMultilotsResponse> = {},
+): RebobinageMultilotsResponse {
+  return {
+    lots: [
+      {
+        epaisseur_effective_um: 90,
+        epaisseur_source: "matiere",
+        mandrin_mm: 76,
+        paroi_mm: 3,
+        diametre_depart_mm: 82,
+        diametre_bobine_mm: 305,
+        rebobinage: buildResultat(),
+      },
+    ],
+    ...overrides,
+  };
+}
+
 let fetchSpy: ReturnType<typeof vi.fn>;
 
-function installFetchMock(defaultResult: RebobinageResultat = buildResultat()) {
-  fetchSpy = vi.fn(async () => ({
-    ok: true,
-    status: 200,
-    statusText: "OK",
-    json: async () => defaultResult,
-  }));
+// Mock fetch URL-aware : le composant appelle MAINTENANT deux endpoints
+// (`/api/rebobinage/calculer` mono-lot conservé + `/api/rebobinage/
+// calculer-multilots` pour le Ø par lot). On route chaque URL vers la bonne
+// forme de réponse pour ne pas casser les assertions mono-lot existantes.
+function installFetchMock(
+  defaultResult: RebobinageResultat = buildResultat(),
+  multilotsResult: RebobinageMultilotsResponse = buildMultilotsResponse(),
+) {
+  fetchSpy = vi.fn(async (url: unknown) => {
+    const body = String(url).includes("/api/rebobinage/calculer-multilots")
+      ? multilotsResult
+      : defaultResult;
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => body,
+    };
+  });
   global.fetch = fetchSpy as unknown as typeof fetch;
 }
 
@@ -644,16 +678,18 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
 
     // Recalcul manuel pour vérifier le body envoyé.
     await userEvent.click(screen.getByTestId("rebobinage-recalculer"));
+    // endsWith pour cibler le mono-lot `/calculer` SANS matcher
+    // `/calculer-multilots` (qui contient la même sous-chaîne).
     await waitFor(() =>
       expect(
         fetchSpy.mock.calls.find((c) =>
-          String(c[0]).includes("/api/rebobinage/calculer"),
+          String(c[0]).endsWith("/api/rebobinage/calculer"),
         ),
       ).toBeTruthy(),
     );
     const lastCalc = [...fetchSpy.mock.calls]
       .reverse()
-      .find((c) => String(c[0]).includes("/api/rebobinage/calculer"));
+      .find((c) => String(c[0]).endsWith("/api/rebobinage/calculer"));
     const body = JSON.parse((lastCalc?.[1] as RequestInit).body as string);
     expect(body.profil_client.diametre_max_bobine_mm).toBe(350);
   });
@@ -810,5 +846,116 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("store-sens")).toHaveTextContent("2"),
     );
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Bug #6 (6.2) — Ø PAR LOT via /api/rebobinage/calculer-multilots
+  // ──────────────────────────────────────────────────────────────────
+
+  it("envoie 1 entrée PAR LOT sur /calculer-multilots (matiere_id + nb étiquettes du lot)", async () => {
+    setupRebobinage({ briefClient: { diametre_max_bobine_mm: 300 } });
+
+    const multiCall = await waitFor(() => {
+      const c = fetchSpy.mock.calls.find((x) =>
+        String(x[0]).includes("/api/rebobinage/calculer-multilots"),
+      );
+      expect(c).toBeTruthy();
+      return c!;
+    });
+    const body = JSON.parse((multiCall[1] as RequestInit).body as string);
+    expect(body.lots).toHaveLength(1);
+    expect(body.lots[0].matiere_id).toBe(1);
+    expect(body.lots[0].nb_etiquettes_total).toBe(12000);
+    // Pas de saisie / pas d'override → null (le backend résout depuis la
+    // matière + la paroi tenant).
+    expect(body.lots[0].epaisseur_saisie_um).toBeNull();
+    expect(body.lots[0].paroi_override_mm).toBeNull();
+  });
+
+  it("override paroi mandrin : la valeur saisie part dans paroi_override_mm de chaque lot", async () => {
+    setupRebobinage({ briefClient: { diametre_max_bobine_mm: 300 } });
+    await screen.findByTestId("paroi-override-input");
+
+    await userEvent.type(screen.getByTestId("paroi-override-input"), "4");
+    await userEvent.click(screen.getByTestId("rebobinage-recalculer"));
+
+    await waitFor(() => {
+      const last = [...fetchSpy.mock.calls]
+        .reverse()
+        .find((c) =>
+          String(c[0]).includes("/api/rebobinage/calculer-multilots"),
+        );
+      expect(last).toBeTruthy();
+      const b = JSON.parse((last![1] as RequestInit).body as string);
+      expect(b.lots[0].paroi_override_mm).toBe(4);
+    });
+  });
+
+  it("affiche un Ø et un nb bobines PAR LOT depuis la réponse multi-lots", async () => {
+    installFetchMock(
+      buildResultat(),
+      buildMultilotsResponse({
+        lots: [
+          {
+            epaisseur_effective_um: 90,
+            epaisseur_source: "matiere",
+            mandrin_mm: 76,
+            paroi_mm: 3,
+            diametre_depart_mm: 82,
+            diametre_bobine_mm: 305,
+            rebobinage: buildResultat({
+              bobines: {
+                nb_etiq_par_bobine: 1500,
+                nb_bobines: 7,
+                bobine_partielle: false,
+                nb_etiq_derniere_bobine: 1500,
+                longueur_totale_m: "900.00",
+              },
+            }),
+          },
+        ],
+      }),
+    );
+    setupRebobinage({ briefClient: { diametre_max_bobine_mm: 300 } });
+
+    expect(await screen.findByTestId("lot-diametre-0")).toHaveTextContent(
+      "305 mm",
+    );
+    expect(screen.getByTestId("lot-nb-bobines-0")).toHaveTextContent("7");
+  });
+
+  it("badge source épaisseur : 'matière' / 'saisie opérateur' / 'fallback 150 µm'", async () => {
+    const cas: Array<{
+      source: "matiere" | "saisie" | "fallback";
+      attendu: RegExp;
+    }> = [
+      { source: "matiere", attendu: /matière/i },
+      { source: "saisie", attendu: /saisie opérateur/i },
+      { source: "fallback", attendu: /fallback 150 µm/i },
+    ];
+    for (const c of cas) {
+      installFetchMock(
+        buildResultat(),
+        buildMultilotsResponse({
+          lots: [
+            {
+              epaisseur_effective_um: c.source === "fallback" ? 150 : 90,
+              epaisseur_source: c.source,
+              mandrin_mm: 76,
+              paroi_mm: 0,
+              diametre_depart_mm: 76,
+              diametre_bobine_mm: 300,
+              rebobinage: buildResultat(),
+            },
+          ],
+        }),
+      );
+      const { unmount } = setupRebobinage({
+        briefClient: { diametre_max_bobine_mm: 300 },
+      });
+      const badge = await screen.findByTestId("lot-source-0");
+      expect(badge).toHaveTextContent(c.attendu);
+      unmount();
+    }
   });
 });
