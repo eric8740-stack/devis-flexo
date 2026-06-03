@@ -472,6 +472,26 @@ export function OptimisationRebobinage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [machineRebobineuseId]);
 
+  // Bug #6 (6.2d) — l'override paroi (et l'épaisseur saisie par lot) doivent
+  // rafraîchir le bloc « Ø bobine par lot » SANS clic « Recalculer ». On
+  // recalcule UNIQUEMENT le multilots (le mono-lot reste piloté par machine /
+  // Recalculer), debouncé pour ne pas spammer l'API à chaque frappe.
+  const epaisseurSaisieSignature = useMemo(
+    () =>
+      lotsAffiches
+        .map((l) => `${l.id_candidat}:${l.epaisseur_saisie_um ?? ""}`)
+        .join("|"),
+    [lotsAffiches],
+  );
+  useEffect(() => {
+    if (diametreMaxValide === null || machineRebobineuseId === null) return;
+    const handle = setTimeout(() => {
+      void calculerMultilots();
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paroiOverrideMm, epaisseurSaisieSignature]);
+
   const modeRetenuFinal: ModeRebobinageApplique = useMemo(() => {
     if (result?.arbitrage.mode_applique) {
       return result.arbitrage.mode_applique;
@@ -506,6 +526,11 @@ export function OptimisationRebobinage() {
     setCalculLoading(true);
     setCalculError(null);
     try {
+      // Bug #6 (6.2d) — recalcul du multilots AVANT persistance pour ne jamais
+      // figer un Ø périmé dans `payload_visuel` (ex. override paroi saisi mais
+      // bloc pas rafraîchi). `calculerMultilots` met à jour les échos du store
+      // (setDiametreEchoesParLot) lus par OptimisationChiffrage.
+      await calculerMultilots();
       const res = await postRebobinageCalculer(req);
       setResult(res);
       // Propage au store → OptimisationChiffrage appliquera la ligne

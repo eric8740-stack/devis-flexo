@@ -958,4 +958,62 @@ describe("OptimisationRebobinage — Sprint 16 Lot D câblage", () => {
       unmount();
     }
   });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Bug #6 (6.2d) — recalcul multilots à la saisie override + avant persist
+  // ──────────────────────────────────────────────────────────────────
+
+  it("override paroi modifié → multilots recalculé avec paroi_override_mm SANS clic « Recalculer »", async () => {
+    setupRebobinage({ briefClient: { diametre_max_bobine_mm: 300 } });
+    await screen.findByTestId("paroi-override-input");
+    // Calcul initial (override vide) déjà parti.
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some((c) =>
+          String(c[0]).includes("/api/rebobinage/calculer-multilots"),
+        ),
+      ).toBe(true),
+    );
+
+    // On tape l'override SANS cliquer « Recalculer » → recalcul auto (debounce).
+    await userEvent.type(screen.getByTestId("paroi-override-input"), "5");
+
+    await waitFor(
+      () => {
+        const last = [...fetchSpy.mock.calls]
+          .reverse()
+          .find((c) =>
+            String(c[0]).includes("/api/rebobinage/calculer-multilots"),
+          );
+        const b = JSON.parse((last![1] as RequestInit).body as string);
+        expect(b.lots[0].paroi_override_mm).toBe(5);
+      },
+      { timeout: 2000 },
+    );
+  });
+
+  it("« Continuer » recalcule le multilots (override paroi) avant de persister + passer au chiffrage", async () => {
+    setupRebobinageAvecSpyEtape();
+    await screen.findByTestId("paroi-override-input");
+
+    await userEvent.type(screen.getByTestId("paroi-override-input"), "5");
+    // Clic immédiat (avant le debounce 400 ms) : le recalcul provient de
+    // validerEtContinuer, pas de l'effet debouncé.
+    await userEvent.click(screen.getByTestId("rebobinage-continuer"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("etape-courante")).toHaveTextContent(
+        "chiffrage",
+      ),
+    );
+
+    const multiCall = [...fetchSpy.mock.calls]
+      .reverse()
+      .find((c) =>
+        String(c[0]).includes("/api/rebobinage/calculer-multilots"),
+      );
+    expect(multiCall).toBeTruthy();
+    const b = JSON.parse((multiCall![1] as RequestInit).body as string);
+    expect(b.lots[0].paroi_override_mm).toBe(5);
+  });
 });
