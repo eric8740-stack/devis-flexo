@@ -1880,6 +1880,67 @@ export const retirerRebobinageDevis = (devisId: number) =>
   apiFetch<void>(`/api/devis/${devisId}/rebobinage`, { method: "DELETE" });
 
 // ---------------------------------------------------------------------------
+// Rebobinage multi-lots (bug #6 étape 6.2) — 1 Ø PAR LOT, épaisseur réelle
+// + paroi mandrin. Aligné sur `backend/app/schemas/rebobinage.py` :
+//   POST /api/rebobinage/calculer-multilots → preview, 1 entrée par lot.
+// L'épaisseur effective et le Ø de départ (mandrin + 2 × paroi) sont
+// RÉSOLUS backend ; le front envoie juste matiere_id + saisie + override.
+// ---------------------------------------------------------------------------
+
+export type EpaisseurSource = "matiere" | "saisie" | "fallback";
+
+export interface LotRebobinageIn {
+  nb_etiquettes_total: number;
+  // Decimals sérialisés string (pattern projet, cf. RebobinageSpecLot).
+  intervalle_developpe_mm: string;
+  diametre_mandrin_mm: number;
+  diametre_max_bobine_mm: number;
+  nb_etiq_par_bobine_fixe: number | null;
+  // Matière du lot : le backend lit `matiere.epaisseur_microns` (scopé tenant).
+  matiere_id: number | null;
+  // Saisie opérateur si la matière ne porte pas d'épaisseur. Decimal string.
+  epaisseur_saisie_um: string | null;
+  // Override de la paroi mandrin (`parametre_mandrin.epaisseur_paroi_mm`).
+  paroi_override_mm: number | null;
+}
+
+export interface RebobinageMultilotsRequest {
+  lots: LotRebobinageIn[];
+  machine_rebobineuse_id: number;
+  tarifs_mandrins: RebobinageTarifsMandrins;
+  mode: ModeRebobinageIn;
+  motif_force: string | null;
+}
+
+export interface LotRebobinageOut {
+  // Échos résolus backend (transparence affichée au front).
+  epaisseur_effective_um: number;
+  epaisseur_source: EpaisseurSource;
+  mandrin_mm: number;
+  paroi_mm: number;
+  diametre_depart_mm: number;
+  diametre_bobine_mm: number;
+  // Résultat rebobinage du lot (nb bobines, temps, arbitrage, coûts).
+  rebobinage: RebobinageResultat;
+}
+
+export interface RebobinageMultilotsResponse {
+  // 1 entrée par lot, dans l'ordre des lots envoyés.
+  lots: LotRebobinageOut[];
+}
+
+export const postRebobinageCalculerMultilots = (
+  payload: RebobinageMultilotsRequest,
+) =>
+  apiFetch<RebobinageMultilotsResponse>(
+    "/api/rebobinage/calculer-multilots",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+
+// ---------------------------------------------------------------------------
 // Brief stratégique v2 — onglet Stratégique (config par entreprise)
 //   /api/strategique/couts        (singleton : GET + PUT)
 //   /api/strategique/changements  (singleton : GET + PUT)
