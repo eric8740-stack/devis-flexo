@@ -52,6 +52,7 @@ from app.schemas.rebobinage import (
     RebobinageMultilotsResponse,
     ResultatRebobinageOut,
 )
+from app.services.devis_total import ht_total_avec_rebobinage
 from app.services.diametre_resolver import (
     resoudre_diametre_depart_mm,
     resoudre_epaisseur_um,
@@ -499,6 +500,22 @@ def _multilots_to_payload_dict(
     return payload, cout_total, cout_mandrins
 
 
+def _recompute_ht_total_avec_rebobinage(devis: Devis) -> None:
+    """Recalcule `devis.ht_total_eur` = base cost_engine + contribution
+    rebobinage (multilots > mono-lot > 0), bug #6 6.2e-final.
+
+    Base = `payload_output["prix_vente_ht_eur"]` (valeur PURE cost_engine,
+    jamais augmentée). Si absente (devis legacy sans chiffrage structuré), on
+    ne touche pas `ht_total` (non-régressif). Idempotent : la base n'inclut
+    jamais le rebobinage, donc rejouer le calcul ne double-compte pas.
+    """
+    po = devis.payload_output or {}
+    base = po.get("prix_vente_ht_eur")
+    if base is None:
+        return
+    devis.ht_total_eur = ht_total_avec_rebobinage(Decimal(str(base)), po)
+
+
 @router.post(
     "/api/devis/{devis_id}/rebobinage-multilots",
     response_model=RebobinageMultilotsApplyResponse,
@@ -537,6 +554,8 @@ def appliquer_rebobinage_multilots_au_devis(
     payload_output = dict(devis.payload_output) if devis.payload_output else {}
     payload_output["rebobinage_multilots"] = ligne
     devis.payload_output = payload_output
+    # bug #6 6.2e-final : le coût rebobinage multilots entre dans ht_total.
+    _recompute_ht_total_avec_rebobinage(devis)
 
     db.commit()
     db.refresh(devis)
@@ -566,6 +585,9 @@ def retirer_rebobinage_multilots_du_devis(
     if "rebobinage_multilots" in payload_output:
         payload_output.pop("rebobinage_multilots")
         devis.payload_output = payload_output
+        # Retrait de la contribution multilots → ht_total revient à la base
+        # (ou retombe sur la ligne mono-lot si elle existe encore).
+        _recompute_ht_total_avec_rebobinage(devis)
         db.commit()
 
 
@@ -597,6 +619,9 @@ def appliquer_rebobinage_au_devis(
     payload_output = dict(devis.payload_output) if devis.payload_output else {}
     payload_output["rebobinage"] = _resultat_to_payload_dict(result, machine.id)
     devis.payload_output = payload_output
+    # bug #6 6.2e-final : fallback mono-lot → contribue à ht_total si aucune
+    # ligne multilots n'est présente.
+    _recompute_ht_total_avec_rebobinage(devis)
 
     db.commit()
     db.refresh(devis)
@@ -623,4 +648,5 @@ def retirer_rebobinage_du_devis(
     if "rebobinage" in payload_output:
         payload_output.pop("rebobinage")
         devis.payload_output = payload_output
+        _recompute_ht_total_avec_rebobinage(devis)
         db.commit()

@@ -6,10 +6,13 @@ Couvre :
   - DELETE /api/devis/{id}/rebobinage (retire la ligne)
 
 Sacrés (à chaque commit) :
-  - `cost_engine` intouché : `devis.ht_total_eur` (denorm) reste à la
-    valeur exacte calculée par le moteur ORIGINE après une application
-    rebobinage (la ligne est ADDITIVE, stockée dans payload_output).
-  - V1a 1449,09 € / V1b / V7a EXACT préservés (test_cost_engine_5cas_*).
+  - bug #6 6.2e-final : `devis.ht_total_eur` = BASE cost_engine +
+    coût rebobinage. La BASE `payload_output["prix_vente_ht_eur"]` (valeur
+    PURE cost_engine) reste EXACTE après apply rebobinage — c'est elle qui
+    est sacrée, pas le total. `ht_total_eur` reflète désormais le coût total
+    (base + rebobinage).
+  - V1a 1449,09 € / V1b / V7a EXACT préservés (test_cost_engine_5cas_*),
+    asserts sur fixture cost_engine découplée (sans rebobinage).
 """
 from decimal import Decimal
 
@@ -19,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.main import app
+from app.services.devis_total import ht_total_avec_rebobinage
 from app.models import (
     Devis,
     MachineRebobineuse,
@@ -269,28 +273,35 @@ def test_calculer_preview_sans_parametre_mandrin_defaults_safe():
 
 
 def test_apply_rebobinage_devis_persiste_payload_output():
-    """Vérifie que la ligne rebobinage est bien stockée dans
-    payload_output sans toucher ht_total_eur (V1a EXACT préservé)."""
+    """Vérifie que la ligne rebobinage est bien stockée dans payload_output.
+
+    bug #6 6.2e-final : `ht_total_eur` = base cost_engine + coût rebobinage
+    (mono-lot fallback). La BASE `payload_output["prix_vente_ht_eur"]` reste
+    EXACTE (1449,09 € = valeur PURE cost_engine, sacrée)."""
     with SessionLocal() as db:
         mach = _create_machine_rebobineuse(db, nom="Daco apply")
         _ensure_parametre_mandrin(db, scie_disponible=True)
         devis = _create_devis(db, numero="TEST-RB-APPLY-001")
         machine_id = mach.id
         devis_id = devis.id
-        ht_total_avant = devis.ht_total_eur
 
     r = _http.post(
         f"/api/devis/{devis_id}/rebobinage",
         json=_payload_calcul_typique(machine_id=machine_id, nb_etiq_fixe=2500),
     )
     assert r.status_code == 200, r.text
+    rebob = Decimal(r.json()["cout_total_rebobinage_eur"])
+    assert rebob > 0
 
-    # Vérifie persistance + V1a EXACT préservé
     with SessionLocal() as db:
         d = db.query(Devis).filter_by(id=devis_id).one()
-        # SACRÉ : ht_total_eur (denorm cost_engine) inchangé
-        assert d.ht_total_eur == ht_total_avant
-        assert d.ht_total_eur == Decimal("1449.09")
+        # BASE cost_engine PURE inchangée (sacré).
+        assert d.payload_output["prix_vente_ht_eur"] == "1449.09"
+        # ht_total = base + coût rebobinage (mono-lot fallback), via le helper.
+        assert d.ht_total_eur == ht_total_avec_rebobinage(
+            Decimal("1449.09"), d.payload_output
+        )
+        assert d.ht_total_eur > Decimal("1449.09")
         # La ligne rebobinage est dans payload_output
         rebobinage = d.payload_output["rebobinage"]
         assert rebobinage["applique"] is True
@@ -419,15 +430,15 @@ def test_delete_rebobinage_devis_autre_tenant_404(as_user_b):
 # ---------------------------------------------------------------------------
 
 
-def test_apply_rebobinage_ne_modifie_pas_ht_total_eur_sacred():
-    """Apply rebobinage à un devis V1a (1449,09 €) → ht_total_eur
-    reste EXACTEMENT 1449,09 €. La ligne rebobinage est dans
-    payload_output mais NE TOUCHE PAS le cost_engine ni son denorm."""
+def test_apply_rebobinage_base_cost_engine_sacree_inchangee():
+    """bug #6 6.2e-final : apply rebobinage à un devis V1a → la BASE
+    cost_engine (`payload_output["prix_vente_ht_eur"]`) reste EXACTEMENT
+    1449,09 € (sacré), tandis que `ht_total_eur` = base + coût rebobinage
+    (le rebobinage entre désormais dans le total, fallback mono-lot)."""
     with SessionLocal() as db:
         mach = _create_machine_rebobineuse(db, nom="Sacred V1a")
         _ensure_parametre_mandrin(db, scie_disponible=True)
         devis = _create_devis(db, numero="TEST-RB-SACRED-V1A-001")
-        # Force la valeur sacrée V1a
         assert devis.ht_total_eur == Decimal("1449.09")
         devis_id = devis.id
         machine_id = mach.id
@@ -437,12 +448,17 @@ def test_apply_rebobinage_ne_modifie_pas_ht_total_eur_sacred():
         json=_payload_calcul_typique(machine_id=machine_id, nb_etiq_fixe=1000),
     )
     assert r.status_code == 200
+    rebob = Decimal(r.json()["cout_total_rebobinage_eur"])
+    assert rebob > 0  # garde-fou : on teste bien un ajout effectif
 
     with SessionLocal() as db:
         d = db.query(Devis).filter_by(id=devis_id).one()
-        # SACRÉ EXACT
-        assert d.ht_total_eur == Decimal("1449.09")
-        # payload_output.prix_vente_ht_eur (lecture seule cost_engine) inchangé
+        # BASE cost_engine PURE inchangée (sacré).
         assert d.payload_output["prix_vente_ht_eur"] == "1449.09"
+        # ht_total = base + coût rebobinage (via le helper, arrondi money).
+        assert d.ht_total_eur == ht_total_avec_rebobinage(
+            Decimal("1449.09"), d.payload_output
+        )
+        assert d.ht_total_eur > Decimal("1449.09")
         # Rebobinage stocké à côté
         assert d.payload_output["rebobinage"]["applique"] is True
