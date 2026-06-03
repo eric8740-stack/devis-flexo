@@ -21,8 +21,10 @@ from app.models import (
     Machine,
     Matiere,
     OptionFabrication,
+    ParametreMandrin,
     User,
 )
+from app.services.diametre_resolver import resoudre_diametre_depart_mm
 from app.schemas.matiere import MatiereOut
 from app.schemas.optimisation import (
     MatcherOutilIn,
@@ -250,6 +252,19 @@ def post_calculer(
     machines = charger_machines_actives(db, user.entreprise_id)
     baremes = charger_baremes(db, user.entreprise_id)
 
+    # Bug #6 point de calcul unique : le Ø candidat part du MÊME Ø de départ
+    # (mandrin + 2 × paroi) que le Ø final rebobinage, via le résolveur
+    # partagé. Paroi NULL/absente → 0 (Ø départ = mandrin, non-régressif).
+    pm_row = (
+        db.query(ParametreMandrin)
+        .filter_by(entreprise_id=user.entreprise_id)
+        .first()
+    )
+    diametre_depart_candidat_mm, _ = resoudre_diametre_depart_mm(
+        mandrin_mm=payload.mandrin_mm,
+        paroi_mm=(pm_row.epaisseur_paroi_mm if pm_row is not None else None),
+    )
+
     if not cylindres or not machines:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -347,7 +362,7 @@ def post_calculer(
                 chute_min_mm=chute_min,
                 palier_mm=palier,
                 marge_liner_mm=marge_liner,
-                mandrin_mm=payload.mandrin_mm,
+                mandrin_mm=diametre_depart_candidat_mm,
                 epaisseur_matiere_um=float(epaisseur_appliquee_um),
                 sens_enroulement=payload.sens_enroulement,
                 # Souveraineté + lacets

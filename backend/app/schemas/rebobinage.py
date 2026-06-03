@@ -77,6 +77,52 @@ class RebobinageCalculerRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Multi-lots (bug #6 étape 6.2a) — 1 Ø par lot, épaisseur réelle + paroi
+# ---------------------------------------------------------------------------
+
+
+class LotRebobinageIn(BaseModel):
+    """Un lot à rebobiner. L'épaisseur effective et le Ø de départ sont
+    résolus BACKEND (matière du lot + paroi mandrin), pas envoyés figés.
+
+    - `matiere_id` (optionnel) : on lit `matiere.epaisseur_microns` du lot
+      (scopé tenant). Si absent/NULL → on retombe sur `epaisseur_saisie_um`.
+    - `epaisseur_saisie_um` (optionnel) : valeur opérateur, utilisée si la
+      matière ne porte pas d'épaisseur. Ultime fallback backend = 150 µm.
+    - `paroi_override_mm` (optionnel) : override de la paroi mandrin du
+      `parametre_mandrin` pour ce lot.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nb_etiquettes_total: int = Field(gt=0)
+    intervalle_developpe_mm: Decimal = Field(gt=0)
+    diametre_mandrin_mm: int = Field(gt=0)
+    diametre_max_bobine_mm: int = Field(gt=0)
+    nb_etiq_par_bobine_fixe: int | None = Field(None, gt=0)
+    matiere_id: int | None = Field(None, gt=0)
+    epaisseur_saisie_um: Decimal | None = Field(None, gt=0)
+    paroi_override_mm: int | None = Field(None, ge=0)
+
+
+class RebobinageMultilotsRequest(BaseModel):
+    """Body POST /api/rebobinage/calculer-multilots.
+
+    Machine, tarifs et mode sont communs à tous les lots (1 rebobineuse,
+    1 grille tarifaire, 1 mode opérateur). Chaque lot porte ses propres
+    nb étiquettes / format / matière / mandrin → 1 Ø par lot.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lots: list[LotRebobinageIn] = Field(min_length=1)
+    machine_rebobineuse_id: int = Field(gt=0)
+    tarifs_mandrins: TarifsMandrinsIn
+    mode: ModeRebobinageIn = "auto"
+    motif_force: str | None = None
+
+
+# ---------------------------------------------------------------------------
 # Sorties du moteur (sérialisation HTTP)
 # ---------------------------------------------------------------------------
 
@@ -124,6 +170,43 @@ class ResultatRebobinageOut(BaseModel):
     # Snapshot ID de la machine rebobineuse utilisée (utile pour l'UI
     # qui veut afficher le nom de la machine sans rappeler /api/machines).
     machine_rebobineuse_id: int
+
+
+# ---------------------------------------------------------------------------
+# Sortie multi-lots (bug #6 étape 6.2a) — 1 résultat par lot
+# ---------------------------------------------------------------------------
+
+
+class LotRebobinageOut(BaseModel):
+    """Résultat d'un lot : valeurs RÉSOLUES (transparence) + rebobinage.
+
+    `epaisseur_source` documente d'où vient l'épaisseur retenue
+    ("matiere" / "saisie" / "fallback") ; `diametre_depart_mm` = Ø mandrin
+    + 2 × paroi (valeur passée au calcul bobines) ; `diametre_bobine_mm` =
+    Ø max de bobine atteint (contrainte client = bobine pleine).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # Échos résolus backend (à brancher au front en 6.2b).
+    epaisseur_effective_um: float
+    epaisseur_source: Literal["matiere", "saisie", "fallback"]
+    mandrin_mm: int
+    paroi_mm: int
+    diametre_depart_mm: int
+    diametre_bobine_mm: int
+
+    # Résultat rebobinage du lot (nb bobines, temps, arbitrage, coûts).
+    rebobinage: ResultatRebobinageOut
+
+
+class RebobinageMultilotsResponse(BaseModel):
+    """Réponse POST /api/rebobinage/calculer-multilots : 1 entrée par lot,
+    dans l'ordre des lots envoyés."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    lots: list[LotRebobinageOut]
 
 
 # ---------------------------------------------------------------------------
