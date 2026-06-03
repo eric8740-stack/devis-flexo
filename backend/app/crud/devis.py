@@ -28,6 +28,7 @@ from app.schemas.devis import DevisInput
 from app.schemas.devis_persist import DevisCreate, DevisUpdate, NbCouleursIn
 from app.services.cost_engine.errors import CostEngineError
 from app.services.cost_engine_aggregator import calculer_devis_multilots
+from app.services.devis_total import ht_total_avec_rebobinage
 from app.services.numero_devis_service import generate_next_numero
 
 logger = logging.getLogger(__name__)
@@ -516,9 +517,10 @@ def _chiffrer_devis_multilots(
     # et produit un 500 — on ne veut pas avaler silencieusement un défaut.
 
     # Mise à jour des résultats côté Devis + LotProduction.
-    devis.ht_total_eur = cout_agrege.prix_vente_ht_total_eur
     po = dict(devis.payload_output)
     po["mode"] = "multi-lots"
+    # INVARIANT SACRÉ : prix_vente_ht_eur = base cost_engine PUR (benchmark/
+    # tripwire) — jamais augmenté du rebobinage.
     po["prix_vente_ht_eur"] = str(cout_agrege.prix_vente_ht_total_eur)
     po["cout_revient_total_eur"] = str(cout_agrege.cout_revient_total_eur)
     po["nb_lots"] = cout_agrege.nb_lots
@@ -533,6 +535,15 @@ def _chiffrer_devis_multilots(
     ]
     po["note"] = "Devis créé depuis optimisation multi-lots, chiffrage automatique."
     devis.payload_output = po
+
+    # ht_total = base cost_engine + contribution rebobinage (multilots si
+    # présent, sinon mono-lot, sinon 0). À la création, aucune ligne
+    # rebobinage → ht_total = base (tripwire/benchmark inchangés). Si le devis
+    # est re-chiffré APRÈS application d'un rebobinage, la ligne est préservée
+    # dans `po` → le total la reflète (bug #6 6.2e-final).
+    devis.ht_total_eur = ht_total_avec_rebobinage(
+        cout_agrege.prix_vente_ht_total_eur, po
+    )
 
     # Persistance cout_lot_ht_eur sur chaque LotProduction (champ existant).
     for lot, detail in zip(lots, cout_agrege.details_par_lot):

@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from app.main import app
 from app.models import Devis, MachineRebobineuse, Matiere, ParametreMandrin
+from app.services.devis_total import ht_total_avec_rebobinage
 
 
 _http = TestClient(app)
@@ -159,8 +160,9 @@ def test_apply_persiste_cout_par_lot_et_agregat():
         assert ligne["lots"][0]["epaisseur_source"] == "matiere"
 
 
-def test_apply_ht_total_inchange_sacred():
-    """Ligne ADDITIVE : ht_total_eur (denorm cost_engine) reste EXACT."""
+def test_apply_alimente_ht_total_base_sacree_inchangee():
+    """bug #6 6.2e-final : le coût rebobinage multilots ENTRE dans ht_total.
+    La BASE cost_engine (`prix_vente_ht_eur`) reste EXACTE (sacré)."""
     with SessionLocal() as db:
         mid = _create_machine(db)
         _set_paroi_tenant(db, None)
@@ -171,10 +173,17 @@ def test_apply_ht_total_inchange_sacred():
         json=_payload(mid, [_lot(epaisseur_saisie_um="60")]),
     )
     assert r.status_code == 200, r.text
+    agg = Decimal(r.json()["cout_total_rebobinage_eur"])
+    assert agg > 0
     with SessionLocal() as db:
         devis = db.get(Devis, did)
-        assert devis.ht_total_eur == Decimal("1449.09")  # INCHANGÉ
+        # BASE cost_engine PURE inchangée (sacré).
         assert devis.payload_output["prix_vente_ht_eur"] == "1449.09"
+        # ht_total = base + coût rebobinage multilots (via helper, money 2dp).
+        assert devis.ht_total_eur == ht_total_avec_rebobinage(
+            Decimal("1449.09"), devis.payload_output
+        )
+        assert devis.ht_total_eur > Decimal("1449.09")
 
 
 def test_apply_deux_matieres_differentes_couts_distincts():
