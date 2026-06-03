@@ -90,7 +90,7 @@ export default function DevisListPage() {
           </p>
         </div>
         <Button asChild>
-          <Link href="/devis/nouveau">+ Nouveau devis</Link>
+          <Link href="/optimisation">+ Nouveau devis</Link>
         </Button>
       </header>
 
@@ -151,7 +151,7 @@ export default function DevisListPage() {
           {!debouncedSearch && !statut && (
             <div className="mt-4">
               <Button asChild>
-                <Link href="/devis/nouveau">Créer un devis</Link>
+                <Link href="/optimisation">Créer un devis</Link>
               </Button>
             </div>
           )}
