@@ -195,6 +195,32 @@ def test_parametre_mandrin_defaults_via_orm():
         assert pm.mode_par_defaut == "auto"
         assert pm.delai_livraison_fournisseur_jours is None
         assert pm.stock_securite_par_modele is None
+        # Bug #6 étape 6.1 : nouveau champ nullable, NULL par défaut.
+        assert pm.epaisseur_paroi_mm is None
+
+
+def test_parametre_mandrin_epaisseur_paroi_mm_nullable_et_persistance():
+    """`epaisseur_paroi_mm` existe, accepte NULL et persiste une valeur."""
+    with SessionLocal() as db:
+        ent = Entreprise(
+            raison_sociale="Entreprise paroi test",
+            siret="00000000002222",
+        )
+        db.add(ent)
+        db.flush()
+
+        # NULL accepté (champ omis).
+        pm_null = ParametreMandrin(entreprise_id=ent.id)
+        db.add(pm_null)
+        db.commit()
+        db.refresh(pm_null)
+        assert pm_null.epaisseur_paroi_mm is None
+
+        # Persistance d'une valeur entière (mm).
+        pm_null.epaisseur_paroi_mm = 12
+        db.commit()
+        db.refresh(pm_null)
+        assert pm_null.epaisseur_paroi_mm == 12
 
 
 def test_parametre_mandrin_cascade_delete_entreprise():
