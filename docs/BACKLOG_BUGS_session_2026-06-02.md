@@ -11,35 +11,20 @@ Chaque point = **audit read-only d'abord** (quel fichier, qu'est-ce qui est câb
 
 ---
 
-## 🔴 NOUVEAU — Bug post-unify P1+P2 (02/06, prioritaire)
+## ✅ RÉSOLU — Bug post-unify P1+P2 (clos par #88, 03/06)
 
-### 0. Les 3 presses migrées (Mark Andy 2200 / OMET / Nilpeter) ne ressortent PAS comme candidates dans l'optim
-**Observé** post-merge #86 + #87 sur compte démo (`entreprise_id=1`) : les 6 machines présentes en BDD sont bien `actif=true` (vérifié) :
-- Mark Andy P5 (parc historique)
-- Daco D250 finition (parc historique)
-- Atelier 2 (parc historique)
-- Mark Andy 2200 ⚠️ migrée depuis MI
-- OMET XFlex 330 ⚠️ migrée depuis MI
-- Nilpeter FA-22 ⚠️ migrée depuis MI
+### 0. Les 3 presses migrées (Mark Andy 2200 / OMET / Nilpeter) ne ressortaient PAS comme candidates dans l'optim — **RÉSOLU (#88)**
+**Observé** post-merge #86 + #87 sur compte démo (`entreprise_id=1`) : les 6 machines en BDD étaient bien `actif=true`, mais l'étape « Candidats viables » n'affichait que **P5 et Atelier 2** ; les 3 presses migrées (Mark Andy 2200, OMET XFlex 330, Nilpeter FA-22) ne généraient aucune **ligne** candidate visible.
 
-Mais l'étape « Candidats viables » de l'optim n'affiche que **P5 et Atelier 2**. Les 3 presses migrées ne génèrent **aucune config viable** → exclues silencieusement.
+**✅ Résolution** : PR #88 (`feat(optim): afficher machines équivalentes sur lignes candidates`, mergée 03/06, head `cdde171`). Fix **UI pur, zéro modif moteur** (option (b) ci-dessous).
 
-**Suspect** : la migration `b2c3d4e5f6g7` INSERT machine avec plusieurs champs **NULL** (mapping MI → Machine sans équivalent direct) :
-- `duree_calage_h` = NULL (pas dans MI)
-- `largeur_max_mm` = NULL (pas dans MI)
-- `commentaire` = NULL (pas dans MI)
-- `vitesse_max_m_min` ← `MI.vitesse_nominale_constructeur_m_min` (peut être NULL pour certaines MI)
+**Les 2 pistes initiales étaient erronées — INFIRMÉES :**
+1. ~~Champs **NULL** défautés par la migration `b2c3d4e5f6g7` (`duree_calage_h` / `largeur_max_mm` / `vitesse_max_m_min` NULL → filtre dur silencieux type `IS NOT NULL`)~~ → **INFIRMÉ** : les 3 presses migrées ont des **valeurs saines**, aucune n'est écartée par un filtre sur champ NULL.
+2. ~~**Appariement cylindre ↔ machine** (colonnes `CylindreMagnetique.nb_pc_2200 / nb_pc_p5 / …` → OMET & Nilpeter sans colonne dédiée → 0 cylindre compatible)~~ → **INFIRMÉ** : le moteur **n'apparie pas** par ces colonnes ; les colonnes `nb_pc_*` ne participent **pas** à la génération de candidats → piste sans objet.
 
-Si `charger_machines_actives` ou la génération de candidats filtre dur sur un de ces champs NULL (ex. `WHERE vitesse_max_m_min IS NOT NULL`), les 3 presses sont écartées silencieusement.
+**🎯 Vraie cause — dédoublonnage moteur** (`_dedoublonner_configs`, héritage PR #9.1) : le moteur **fusionne** les configs qui ne diffèrent que par la machine. Deux presses de **même laize utile** produisent une **clé de config identique** (même cylindre, mêmes poses dev/laize, mêmes intervalles) → elles sont **fusionnées en une seule ligne**, la machine au meilleur score représentant les autres (agrégées dans `machines_compatibles`). Les presses « manquantes » n'étaient donc **pas exclues** : elles étaient **masquées derrière une ligne équivalente**.
 
-**À investiguer (read-only d'abord, puis fix)** :
-1. [`backend/app/services/optimisation_loader.py::charger_machines_actives`](../backend/app/services/optimisation_loader.py) — filtre `actif=True` + scope tenant déjà OK (cf. tests B3a). Y a-t-il un filtre supplémentaire sur `vitesse_moyenne_m_h IS NOT NULL` ou un autre champ que la migration laisse NULL ?
-2. Génération de candidats (`backend/app/services/optimisation/*`) — règles métier qui pourraient écarter une machine sans `largeur_max_mm` / `duree_calage_h` (effet banane, capacité couleurs, contrainte cliente).
-3. Appariement cylindre ↔ machine — les 3 presses migrées n'ont-elles pas de cylindre compatible côté `CylindreMagnetique` (qui a des colonnes `nb_pc_10p / nb_pc_13p / nb_pc_2200 / nb_pc_p5`) ? Mark Andy 2200 ↔ `nb_pc_2200` semble couplé, mais OMET et Nilpeter n'ont pas leur colonne → exclues côté cylindre ?
-
-**Hypothèse forte** : c'est l'appariement cylindre ↔ machine (point 3). Le schéma `CylindreMagnetique` connaît `nb_pc_10p / 13p / 2200 / p5` — donc seulement Mark Andy 2200 a une colonne dédiée, et P5 a la sienne (`nb_pc_p5`). Daco/Atelier sont des lignes finition (pas concernées par l'appariement cylindre). OMET et Nilpeter n'ont pas leur colonne → 0 cyl compatible → 0 config.
-
-**Scope/risque** : si confirmé, soit (a) ajouter `nb_pc_omet` / `nb_pc_nilpeter` (migration + seed compte démo), soit (b) redesign vers un modèle générique d'appariement (M:N `CylindreMachine` au lieu de colonnes par machine). Sprint dédié, mini-cadrage avant code.
+**Fix livré (#88, option b)** : exposer les machines équivalentes **côté UI** sur chaque ligne candidate (lecture du `machines_compatibles` déjà produit par le moteur) — **aucune modification du moteur ni de son scoring**. L'option (a) écartée (ajouter `nb_pc_omet`/`nb_pc_nilpeter` ou refondre l'appariement en M:N) était inutile, la piste appariement étant infirmée.
 
 ---
 
