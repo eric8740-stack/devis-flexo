@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { useEffect } from "react";
 
@@ -6,6 +7,7 @@ import type { OptimisationConfigOut } from "@/lib/api";
 
 import { OptimisationPoseCandidats } from "./OptimisationPoseCandidats";
 import {
+  buildIdCandidat,
   OptimisationPoseProvider,
   useOptimisationPose,
 } from "./OptimisationPoseStore";
@@ -67,18 +69,30 @@ function makeCandidat(
 }
 
 /** Seede le store avec les candidats fournis puis bascule à l'étape 2. */
-function Seeder({ candidats }: { candidats: OptimisationConfigOut[] }) {
-  const { goCandidats } = useOptimisationPose();
+function Seeder({
+  candidats,
+  nbFronts,
+}: {
+  candidats: OptimisationConfigOut[];
+  nbFronts?: number;
+}) {
+  const { goCandidats, setBriefClient } = useOptimisationPose();
   useEffect(() => {
+    if (nbFronts !== undefined) {
+      setBriefClient({ nb_fronts_sortie: nbFronts });
+    }
     goCandidats(candidats, 10_000, 100, 80, 76);
-  }, [goCandidats, candidats]);
+  }, [goCandidats, setBriefClient, candidats, nbFronts]);
   return null;
 }
 
-function renderAvecCandidats(candidats: OptimisationConfigOut[]) {
+function renderAvecCandidats(
+  candidats: OptimisationConfigOut[],
+  nbFronts?: number,
+) {
   return render(
     <OptimisationPoseProvider>
-      <Seeder candidats={candidats} />
+      <Seeder candidats={candidats} nbFronts={nbFronts} />
       <OptimisationPoseCandidats />
     </OptimisationPoseProvider>,
   );
@@ -119,5 +133,78 @@ describe("OptimisationPoseCandidats — machines équivalentes", () => {
       screen.queryByTestId("machines-equivalentes"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/Réalisable aussi sur/)).not.toBeInTheDocument();
+  });
+});
+
+// Règle métier (Eric) — nb_poses_laize doit être un MULTIPLE de
+// nb_fronts_sortie. Cohérent ⟺ nb_poses_laize % nb_fronts === 0.
+describe("OptimisationPoseCandidats — cohérence fronts ↔ poses laize", () => {
+  it("nb_fronts=1 (défaut) : neutre — aucun badge, rien bloqué, pas de toggle", () => {
+    const c = makeCandidat({ nb_poses_laize: 3 });
+    renderAvecCandidats([c]); // nbFronts non fourni → défaut 1
+    const id = buildIdCandidat(c);
+
+    expect(
+      screen.queryByTestId(`badge-incoherent-${id}`),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId(`candidat-checkbox-${id}`)).not.toBeDisabled();
+    // Le toggle n'apparaît que si la règle s'applique (nbFronts > 1).
+    expect(
+      screen.queryByTestId("toggle-masquer-incoherents"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("nb_fronts=2 : laize impaire = incohérente (badge + bloquée), laize paire = OK", () => {
+    const impair = makeCandidat({ nb_poses_laize: 3 });
+    const pair = makeCandidat({ nb_poses_laize: 4 });
+    renderAvecCandidats([impair, pair], 2);
+    const idImpair = buildIdCandidat(impair);
+    const idPair = buildIdCandidat(pair);
+
+    expect(
+      screen.getByTestId(`badge-incoherent-${idImpair}`),
+    ).toHaveTextContent("incompatible avec 2 fronts");
+    expect(screen.getByTestId(`candidat-checkbox-${idImpair}`)).toBeDisabled();
+
+    expect(
+      screen.queryByTestId(`badge-incoherent-${idPair}`),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId(`candidat-checkbox-${idPair}`)).not.toBeDisabled();
+  });
+
+  it("toggle « Masquer les incohérents » : filtre les incohérents, garde les cohérents", async () => {
+    const impair = makeCandidat({ nb_poses_laize: 3 });
+    const pair = makeCandidat({ nb_poses_laize: 4 });
+    renderAvecCandidats([impair, pair], 2);
+    const idImpair = buildIdCandidat(impair);
+    const idPair = buildIdCandidat(pair);
+
+    // Défaut OFF → les deux lignes visibles.
+    expect(screen.getByTestId(`candidat-row-${idImpair}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`candidat-row-${idPair}`)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("toggle-masquer-incoherents"));
+
+    expect(
+      screen.queryByTestId(`candidat-row-${idImpair}`),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId(`candidat-row-${idPair}`)).toBeInTheDocument();
+  });
+
+  it("nb_fronts=3 : seuls les multiples de 3 sont sélectionnables", () => {
+    const c3 = makeCandidat({ nb_poses_laize: 3 });
+    const c4 = makeCandidat({ nb_poses_laize: 4 });
+    const c6 = makeCandidat({ nb_poses_laize: 6 });
+    renderAvecCandidats([c3, c4, c6], 3);
+
+    expect(
+      screen.getByTestId(`candidat-checkbox-${buildIdCandidat(c3)}`),
+    ).not.toBeDisabled();
+    expect(
+      screen.getByTestId(`candidat-checkbox-${buildIdCandidat(c4)}`),
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId(`candidat-checkbox-${buildIdCandidat(c6)}`),
+    ).not.toBeDisabled();
   });
 });
