@@ -38,10 +38,12 @@ from app.services.cost_engine.orchestrator import MoteurDevis
 # Bug #5 : poste 4 = « Mise en route / Calage » (lié à l'OUTIL/montage).
 _POSTE_CALAGE_NUMERO = 4
 
-# Signature de montage = ce qui définit un même outil (plaque de découpe +
-# clichés) sur une même presse, indépendamment de la bobine (matière/laize).
-# Deux lots de même signature ne doivent compter qu'UN calage.
-MontageSignature = tuple[int, int, int, int]  # (cylindre, machine, poses_dev, poses_laize)
+# Signature de montage = ce qui définit un même outil (cylindre + clichés
+# montés) sur une même presse, INDÉPENDAMMENT de la bobine ET de la laize
+# (poses en travers). `nb_poses_laize` est exclu volontairement : changer la
+# laize sur le même cylindre/presse = même montage → 1 seul calage. Deux lots
+# de même signature ne doivent compter qu'UN calage.
+MontageSignature = tuple[int, int, int]  # (cylindre, machine, poses_dev)
 
 
 @dataclass(frozen=True)

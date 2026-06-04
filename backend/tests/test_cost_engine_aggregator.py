@@ -88,7 +88,7 @@ def test_aggregateur_somme_avec_dedup_signatures_distinctes():
             db=MagicMock(),
             entreprise_id=1,
             devis_inputs=[MagicMock(), MagicMock()],
-            montage_signatures=[(1, 1, 1, 3), (2, 1, 1, 3)],  # cylindres ≠
+            montage_signatures=[(1, 1, 1), (2, 1, 1)],  # cylindres ≠ → montages ≠
         )
     # Signatures distinctes → pas de dédup → 123.45 + 876.55 = 1000.00.
     assert result.prix_vente_ht_total_eur == Decimal("1000.00")
@@ -131,7 +131,7 @@ def test_aggregateur_dedup_calage_meme_montage():
         result = calculer_devis_multilots(
             db=MagicMock(), entreprise_id=1,
             devis_inputs=[MagicMock(), MagicMock()],
-            montage_signatures=[(7, 1, 1, 3), (7, 1, 1, 3)],  # même montage
+            montage_signatures=[(7, 1, 1), (7, 1, 1)],  # même montage
         )
     # Lot 1 intact (1180 / 1000). Lot 2 dédup : cout 1000-225=775,
     # prix 775×1.18=914.50. Total = 2094.50 / 1775.
@@ -156,7 +156,7 @@ def test_aggregateur_un_lot_jamais_dedup_sacred():
         result = calculer_devis_multilots(
             db=MagicMock(), entreprise_id=1,
             devis_inputs=[MagicMock()],
-            montage_signatures=[(7, 1, 1, 3)],
+            montage_signatures=[(7, 1, 1)],
         )
     assert result.prix_vente_ht_total_eur == Decimal("704.07")  # calage conservé
     assert Decimal(result.details_par_lot[0].details["calage_montage_deduplique_eur"]) == 0
