@@ -65,17 +65,23 @@ def _purge_devis():
         db.commit()
 
 
-def _post_2_lots_meme_montage(mat_id: int, machine_id: int, cyl_id: int):
-    """2 lots : MÊME montage (cylindre, machine, poses) — split de production."""
-    base_lot = {
-        "cylindre_id": cyl_id,
-        "machine_id": machine_id,
-        "nb_poses_dev": 2,
-        "nb_poses_laize": 3,
-        "sens_enroulement": 1,
-        "quantite": 10_000,
-        "matiere_id": mat_id,
-    }
+def _post_2_lots_meme_montage(
+    mat_id: int, machine_id: int, cyl_id: int,
+    laize_a: int = 3, laize_b: int = 3,
+):
+    """2 lots : MÊME cylindre + presse + nb_poses_dev (= même montage), avec
+    `nb_poses_laize` paramétrable par lot. `laize_a == laize_b` → split simple ;
+    `laize_a != laize_b` → cas Eric (laize différente sur le même montage)."""
+    def lot(nb_poses_laize: int) -> dict:
+        return {
+            "cylindre_id": cyl_id,
+            "machine_id": machine_id,
+            "nb_poses_dev": 2,
+            "nb_poses_laize": nb_poses_laize,
+            "sens_enroulement": 1,
+            "quantite": 10_000,
+            "matiere_id": mat_id,
+        }
     payload = {
         "payload_input": {
             "format_etiquette_largeur_mm": 100,
@@ -86,7 +92,7 @@ def _post_2_lots_meme_montage(mat_id: int, machine_id: int, cyl_id: int):
         "payload_output": {"mode": "manuel", "prix_vente_ht_eur": "0.00"},
         "statut": "brouillon",
         "quantite_totale": 20_000,
-        "lots": [dict(base_lot), dict(base_lot)],
+        "lots": [lot(laize_a), lot(laize_b)],
     }
     _purge_devis()
     r = client.post("/api/devis", json=payload)
@@ -116,6 +122,32 @@ def test_2_lots_meme_montage_un_seul_calage():
 
     # Propriété « 1 calage par montage » : la somme des calages EFFECTIVEMENT
     # comptés (poste 4 - dédup) sur les 2 lots == exactement 1 calage.
+    calage_compte = (_poste(d0, _POSTE_CALAGE) - _marker(d0)) + (
+        _poste(d1, _POSTE_CALAGE) - _marker(d1)
+    )
+    assert calage_compte == calage_unitaire
+
+
+def test_2_lots_meme_cylindre_laize_differente_un_seul_calage():
+    """Cas RÉEL Eric (non couvert par #102) : 2 lots MÊME cylindre + presse +
+    nb_poses_dev, mais `nb_poses_laize` DIFFÉRENT (laize changée). Le montage
+    est le même (clichés montés inchangés) → 1 SEUL calage.
+
+    Avec l'ancienne signature à 4-uplets (incluant nb_poses_laize), les 2 lots
+    avaient des signatures distinctes → 2 calages. Ce test échoue AVANT le fix,
+    passe APRÈS (nb_poses_laize retiré de la signature)."""
+    machine_id, cyl_id, mat_id = _fks_demo()
+    po = _post_2_lots_meme_montage(mat_id, machine_id, cyl_id, laize_a=3, laize_b=2)
+    dpl = po["details_par_lot"]
+    assert len(dpl) == 2
+
+    d0, d1 = dpl[0]["details"], dpl[1]["details"]
+    calage_unitaire = _poste(d0, _POSTE_CALAGE)
+    assert calage_unitaire > 0
+    # Laize différente mais MÊME montage → lot 2 dédupliqué.
+    assert _marker(d0) == 0
+    assert _marker(d1) == calage_unitaire
+    # Propriété « 1 calage par montage » malgré la laize différente.
     calage_compte = (_poste(d0, _POSTE_CALAGE) - _marker(d0)) + (
         _poste(d1, _POSTE_CALAGE) - _marker(d1)
     )

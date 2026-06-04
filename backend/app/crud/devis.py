@@ -492,10 +492,15 @@ def _chiffrer_devis_multilots(
             for lot in lots
         ]
         # Bug #5 — 1 calage par montage : signature = (cylindre, machine,
-        # poses dev, poses laize). Deux lots de même signature (même outil/
-        # clichés, bobine différente) ne comptent qu'un seul calage (P4).
+        # poses dev). `nb_poses_laize` est VOLONTAIREMENT exclu : changer la
+        # laize (poses en travers) sur le même cylindre + presse = même
+        # montage (mêmes clichés montés) → AUCUN nouveau calage (convention
+        # métier Eric). `nb_poses_dev` reste un garde-fou : une disposition de
+        # clichés AUTOUR du cylindre différente = montage réellement distinct.
+        # Le vrai 2e jeu de die/clichés (même cylindre) = override
+        # `changement_outil_cliche` à venir (backlog).
         montage_signatures = [
-            (lot.cylindre_id, lot.machine_id, lot.nb_poses_dev, lot.nb_poses_laize)
+            (lot.cylindre_id, lot.machine_id, lot.nb_poses_dev)
             for lot in lots
         ]
         cout_agrege = calculer_devis_multilots(
