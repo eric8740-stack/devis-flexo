@@ -491,7 +491,16 @@ def _chiffrer_devis_multilots(
             )
             for lot in lots
         ]
-        cout_agrege = calculer_devis_multilots(db, entreprise_id, devis_inputs)
+        # Bug #5 — 1 calage par montage : signature = (cylindre, machine,
+        # poses dev, poses laize). Deux lots de même signature (même outil/
+        # clichés, bobine différente) ne comptent qu'un seul calage (P4).
+        montage_signatures = [
+            (lot.cylindre_id, lot.machine_id, lot.nb_poses_dev, lot.nb_poses_laize)
+            for lot in lots
+        ]
+        cout_agrege = calculer_devis_multilots(
+            db, entreprise_id, devis_inputs, montage_signatures=montage_signatures
+        )
     except (CostEngineError, ValueError) as exc:
         # Échec MÉTIER attendu (matière non reliée à un complexe, complexe
         # sans grammage, onboarding incomplet...). Option B : on NE met PAS
