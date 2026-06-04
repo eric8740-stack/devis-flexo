@@ -55,9 +55,11 @@ def charger_machines_actives(
 
     B3a : lit le modele `Machine` (CRUD /machines, edite par l'imprimeur)
     au lieu de `MachineImprimerie` (legacy catalogue, deprecie). Garantit
-    que l'etape 2 « Candidats viables » affiche le parc reel (P5/Daco/
-    Atelier 2 pour le tenant demo) et non plus les references catalogue
-    (Mark Andy 2200 / OMET XFlex 330 / Nilpeter FA-22).
+    que l'etape 2 « Candidats viables » affiche le parc reel utilisateur et
+    non plus les references catalogue.
+
+    #4.3 : seules les machines `type_machine == "presse"` sont chargees. Les
+    lignes de finition (Daco, Rotoflex) ne generent JAMAIS de candidat optim.
 
     Derivations / fallbacks :
       - `vitesse_pratique_m_min` (dataclass moteur) <-
@@ -81,7 +83,7 @@ def charger_machines_actives(
     """
     rows = (
         db.query(MachineORM)
-        .filter_by(entreprise_id=entreprise_id, actif=True)
+        .filter_by(entreprise_id=entreprise_id, actif=True, type_machine="presse")
         .all()
     )
     machines: list[Machine] = []

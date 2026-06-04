@@ -46,19 +46,20 @@ def _ensure_tenant(db, entreprise_id: int, raison: str) -> Entreprise:
     return ent
 
 
-def test_charger_machines_actives_retourne_parc_reel_pas_mark_andy_2200():
-    """Le tenant demo a 3 machines reelles (P5, Daco, Atelier 2). On NE
-    DOIT PAS voir "Mark Andy 2200" (catalogue Machine)."""
+def test_charger_machines_actives_retourne_presses_pas_finition_ni_catalogue():
+    """#4.3 : le loader ne retourne que les PRESSES du tenant demo
+    (P5, Atelier 2). La finition Daco D250 est EXCLUE (type_machine='finition').
+    Et toujours pas le catalogue "Mark Andy 2200"."""
     with SessionLocal() as db:
         machines = charger_machines_actives(db, DEMO_ENTREPRISE_ID)
     noms = sorted(m.nom for m in machines)
     assert noms == [
         "Atelier 2 (vieille presse)",
-        "Daco D250 ligne finition",
         "Mark Andy P5",
-    ], f"Parc demo attendu (P5/Daco/Atelier 2), obtenu : {noms}"
-    # Anti-regression explicite vs le bug B3a corrige : pas de catalogue
-    # Machine.
+    ], f"Presses demo attendues (P5/Atelier 2), obtenu : {noms}"
+    # #4.3 : la finition n'est plus candidate.
+    assert "Daco D250 ligne finition" not in noms
+    # Anti-regression B3a : pas de catalogue Machine.
     assert "Mark Andy 2200" not in noms
 
 
@@ -68,9 +69,9 @@ def test_vitesse_pratique_derivee_de_vitesse_moyenne_divisee_60():
     with SessionLocal() as db:
         machines = charger_machines_actives(db, DEMO_ENTREPRISE_ID)
     par_nom = {m.nom: m.vitesse_pratique_m_min for m in machines}
-    # Cf. seeds/machine.csv : vitesse_moyenne_m_h = 6000/3500/4500
+    # Cf. seeds/machine.csv : vitesse_moyenne_m_h = 6000/4500 (presses).
+    # Daco (finition) n'est plus chargée (#4.3).
     assert par_nom["Mark Andy P5"] == 100  # 6000 / 60
-    assert par_nom["Daco D250 ligne finition"] == 58  # 3500 / 60 = 58.33 -> 58
     assert par_nom["Atelier 2 (vieille presse)"] == 75  # 4500 / 60
 
 
@@ -85,11 +86,8 @@ def test_mapping_champs_optim_b1_b2():
     assert p5.nb_groupes_couleurs == 8
     assert p5.nb_postes_decoupe == 1
     assert p5.options == []
-    # Daco D250 a nb_groupes_couleurs NULL (ligne finition, pas une presse)
-    # -> mappe a 0 (filtre dur capacite couleurs exclura des qu'on demande
-    # au moins une couleur).
-    daco = next(m for m in machines if m.nom.startswith("Daco"))
-    assert daco.nb_groupes_couleurs == 0
+    # #4.3 : Daco (finition) n'est plus chargée par le loader optim.
+    assert all(not m.nom.startswith("Daco") for m in machines)
 
 
 def test_laize_utile_fallback_sur_laize_max_si_null():
