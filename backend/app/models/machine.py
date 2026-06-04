@@ -8,6 +8,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base
 
 
+# Rôle de la machine dans le parc (#4.3). Validé app-side (pas de CHECK SQL,
+# même pattern que `ParametreMandrin.mode_par_defaut` : compat SQLite + extensible
+# sans migration). "presse" = machine d'impression (génère des candidats optim) ;
+# "finition" = ligne de finition / refendage / rembobinage (Daco, Rotoflex…) →
+# JAMAIS candidate à l'optim presse.
+TYPES_MACHINE = frozenset({"presse", "finition"})
+
+
 class Machine(Base):
     """Presse flexo de l'imprimerie. Sert au calcul du temps de roulage (S3).
 
@@ -76,6 +84,13 @@ class Machine(Base):
     # Mapping migration : 'actif'/'maintenance' → True, 'inactif' → False
     # (perte info "maintenance" assumée par Eric brief 4.3).
     actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # #4.3 — rôle de la machine. Défaut "presse" (server_default) : toute
+    # machine existante reste une presse. Les finitions (Daco / Rotoflex) sont
+    # re-typées par data migration. Le loader d'optim ne charge que les presses.
+    type_machine: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="presse", server_default="presse"
+    )
 
     commentaire: Mapped[str | None] = mapped_column(Text)
 

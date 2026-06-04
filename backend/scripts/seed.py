@@ -277,6 +277,9 @@ def seed_machine(session: Session) -> int:
                 laize_utile_mm=laize_max_val,
                 actif=actif,
                 commentaire=row.get("commentaire"),
+                # #4.3 — rôle : presse (défaut) / finition. Daco D250 =
+                # finition (cf machine.csv) → exclue des candidats optim.
+                type_machine=row.get("type_machine") or "presse",
             )
         )
     return len(rows)
