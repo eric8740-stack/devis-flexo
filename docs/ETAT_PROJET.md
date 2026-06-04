@@ -10,23 +10,23 @@
 ## En-tête
 
 - **Date** : 2026-06-03
-- **Branche active** : `main` (après #88 optim UI + fix config_couts démo ICE)
-- **Sprint en cours** : Aucun. Dette archi « unifier `Machine` ↔ `MachineImprimerie` » **FERMÉE**. Prochain : suivre les follow-ups (cf. « En cours / à venir » + `docs/BACKLOG_BUGS_session_2026-06-02.md`).
+- **Branche active** : `main` (après #104 — bugs #5 calage/montage + #6 flux rebobinage CLOS + alerte cohérence fronts↔poses laize)
+- **Sprint en cours** : Aucun. Dette archi « unifier `Machine` ↔ `MachineImprimerie` » **FERMÉE** ; **bug #6 (flux matière↔bobinage, Ø + coût) CLOS** (PRs #93→#100), **bug #5 (1 calage par montage) CLOS** (#102/#103). Prochain : follow-ups UX (cf. `docs/BACKLOG_BUGS_session_2026-06-02.md` — dette UI flux rebobinage, #2/#3/#4).
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
-- **#87** — fix(machine): cast `options` en JSON dans INSERT migration P1+P2 (hotfix `DatatypeMismatch` prod) + test PG enrichi seeds options non-vides
-- **#86** — feat(machine): unify `Machine` ↔ `MachineImprimerie` (P1+P2) — migration `b2c3d4e5f6g7` insère 3 presses catalogue + remappe FK `lot_production`/`porte_cliche` + drop `machine_imprimerie` + `configuration_pose`. Code lit `Machine` partout.
-- #84 — test(devis): figer benchmark sacré multi-lots pré-repoint (P0b) — tripwire `704,07 €`
-- #83 — chore(machine): drop colonne morte `vitesse_pratique_m_min` (B3b)
-- #82 — feat(optim): B3a repoint moteur sur `Machine` + vitesse réelle dérivée (`vitesse_moyenne_m_h ÷ 60`)
-- #81 — feat(machine): B2 exposer champs optim Machine + harmoniser vitesse réelle (chiffrage ET optim)
-- #80 — feat(machine): B1 enrichir Machine pour absorber les besoins optim (convergence option B)
-- #79 — docs(etat-projet): cleanup branches + PRs fermées + sacred fix #77/#78
-- #78 — fix(devis): update_devis préserve payload_output recalculé (pop conditionnel)
-- #77 — fix(devis): UNIQUE(devis.numero) scopée tenant + MAX+1 + retry loop (résout 409 sur hard-delete)
+- **#104** — feat(optim): alerte cohérence **fronts ↔ poses laize** (étape Candidats) — `nb_poses_laize` doit être multiple de `nb_fronts_sortie` ; badge + désactivation sélection des incohérents + toggle « Masquer les incohérents » (front pur, `nb_fronts=1` neutre)
+- **#103** — fix(devis): signature de montage trop stricte — retirer `nb_poses_laize` du calage (bug #5)
+- **#102** — feat(devis): **1 calage par montage** (dedup calage des lots de même signature) (bug #5)
+- #101 — docs(backlog): clore bug #6 + noter dette UI flux rebobinage
+- **#100** — feat(devis): `ht_total` consomme le coût rebobinage multilots (épaisseur réelle + paroi) (bug #6 6.2e-final ; base `cost_engine` préservée, ligne additive)
+- #99 — fix(devis): apply rebobinage via endpoint multilots (bug #6 6.2e-front)
+- #98 — feat(rebobinage): persister le coût rebobinage par lot — épaisseur réelle + paroi (bug #6 6.2e-back)
+- #97 — fix(rebobinage): recalcul multilots à la saisie override + avant persistance (bug #6 6.2d)
+- #96 — feat(devis): persister le Ø multilots dans `payload_visuel` + rapport le lit (bug #6 6.2c)
+- #95 — feat(rebobinage): UI multi-lots, 1 Ø par lot + épaisseur réelle + paroi (bug #6 6.2b ; voir aussi #94 6.2a + #93 6.1)
 
 ## PRs ouvertes
 
@@ -46,7 +46,7 @@ Aucune.
 - **pytest CI** (service `postgres:16`) : `1143 passed, 4 skipped, 0 failed` — inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod). Seuls les 4 skips inévitables restent (2 SQLite subprocess + 2 modèles obsolètes).
 - **Benchmark V1a 1 449,09 € + 5 cas (V1b/V2/V3/V4) + V8 : 13/13 EXACT** post-merge.
 - **Tripwire multi-lots P0b (`704,07 €`) : EXACT** post-merge — value-neutral confirmé (la migration `b2c3d4e5f6g7` n'a pas bougé la `laize_utile_mm = 320` pour Mark Andy 2200, principe sacré préservé).
-- **vitest** : `186/186 tests passed` (26/26 fichiers) — +4 sur bug #6 étape 6.2c (payload_visuel enrichi du Ø multilots + rapport qui le lit + fallback candidat), après +10 de 6.2b.
+- **vitest** : `194/194 tests passed` (26/26 fichiers) — +4 sur l'alerte cohérence fronts↔poses laize (#104) ; +2 apply multilots (#99), +2 recalc override (#97), +4 (#96) après +10 (#95). Bug #6 front (6.2b→6.2e) intégralement couvert.
 - **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
 - **alembic** : HEAD = **`d5e6f7a8b9c0`** (champ `parametre_mandrin.epaisseur_paroi_mm` nullable, additif, bug #6 étape 6.1 — non câblé). Précédents `c4d5e6f7a8b9` (config_couts ICE) puis `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
 

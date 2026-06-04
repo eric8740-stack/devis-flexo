@@ -32,6 +32,7 @@ export function OptimisationPoseCandidats() {
     goSaisie,
     goDetail,
     optimWarnings,
+    briefClient,
   } = useOptimisationPose();
 
   const [scoreFiltre, setScoreFiltre] = useState(true);
@@ -40,6 +41,18 @@ export function OptimisationPoseCandidats() {
   // laize secondaires d'un même cylindre, ne montre que la meilleure
   // (premier rencontré, donc le mieux scoré puisque tri DESC).
   const [grouperParCyl, setGrouperParCyl] = useState(false);
+  // Règle métier (Eric) — nb_poses_laize doit être un MULTIPLE de
+  // nb_fronts_sortie. Toggle "Masquer les incohérents" (défaut OFF) :
+  // composable en AND avec le filtre Score.
+  const [masquerIncoherents, setMasquerIncoherents] = useState(false);
+
+  // nb_fronts_sortie du brief client. 0/absent → 1 (neutre : tout cohérent,
+  // comportement inchangé). Un candidat est incohérent si sa laize n'est pas
+  // un multiple du nb de fronts demandé.
+  const nbFronts =
+    briefClient.nb_fronts_sortie > 0 ? briefClient.nb_fronts_sortie : 1;
+  const estIncoherent = (nbPosesLaize: number) =>
+    nbFronts > 1 && nbPosesLaize % nbFronts !== 0;
 
   const machinesDispo = useMemo(() => {
     const ids = new Set<number>();
@@ -55,6 +68,13 @@ export function OptimisationPoseCandidats() {
     const filtres = candidats.filter((c) => {
       if (scoreFiltre && c.score < SCORE_SEUIL_DEFAULT) return false;
       if (machineFiltre !== null && c.machine_id !== machineFiltre) return false;
+      // Filtre incohérents (AND avec Score) — actif seulement si nbFronts > 1.
+      if (
+        masquerIncoherents &&
+        nbFronts > 1 &&
+        c.nb_poses_laize % nbFronts !== 0
+      )
+        return false;
       return true;
     });
     if (!grouperParCyl) return filtres;
@@ -66,7 +86,14 @@ export function OptimisationPoseCandidats() {
       vus.add(c.cylindre_id);
       return true;
     });
-  }, [candidats, scoreFiltre, machineFiltre, grouperParCyl]);
+  }, [
+    candidats,
+    scoreFiltre,
+    machineFiltre,
+    grouperParCyl,
+    masquerIncoherents,
+    nbFronts,
+  ]);
 
   const sommeOK = sommeQuantitesLots === quantiteTotale && selection.length > 0;
   const ecart = sommeQuantitesLots - quantiteTotale;
@@ -144,6 +171,20 @@ export function OptimisationPoseCandidats() {
           />
           <span>Grouper par cylindre</span>
         </label>
+        {/* Règle métier — nb_poses_laize multiple de nb_fronts_sortie. Toggle
+            visible seulement si la règle s'applique (nbFronts > 1). */}
+        {nbFronts > 1 && (
+          <label className="flex cursor-pointer items-center gap-1">
+            <input
+              type="checkbox"
+              data-testid="toggle-masquer-incoherents"
+              checked={masquerIncoherents}
+              onChange={(e) => setMasquerIncoherents(e.target.checked)}
+              className="h-4 w-4 accent-foreground"
+            />
+            <span>Masquer les incohérents</span>
+          </label>
+        )}
         <span className="ml-auto text-xs text-muted-foreground">
           {candidatsAffiches.length} affichées
         </span>
@@ -171,20 +212,33 @@ export function OptimisationPoseCandidats() {
               const id = buildIdCandidat(c);
               const lot = selection.find((s) => s.id_candidat === id);
               const coche = lot !== undefined;
+              const incoherent = estIncoherent(c.nb_poses_laize);
               return (
                 <tr
                   key={id}
+                  data-testid={`candidat-row-${id}`}
                   className={
                     "border-t border-border " +
-                    (coche ? "bg-blue-50/50" : "hover:bg-muted/30")
+                    (incoherent
+                      ? "bg-muted/20 text-muted-foreground"
+                      : coche
+                        ? "bg-blue-50/50"
+                        : "hover:bg-muted/30")
                   }
                 >
                   <td className="px-2 py-2">
                     <input
                       type="checkbox"
                       checked={coche}
-                      onChange={() => toggleSelection(c)}
-                      className="h-4 w-4 accent-foreground"
+                      disabled={incoherent}
+                      onChange={() => {
+                        // Court-circuit : un candidat incohérent (laize non
+                        // multiple de nb_fronts) n'est pas sélectionnable.
+                        if (incoherent) return;
+                        toggleSelection(c);
+                      }}
+                      className="h-4 w-4 accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      data-testid={`candidat-checkbox-${id}`}
                     />
                   </td>
                   <td className="px-2 py-2 font-medium">
@@ -228,10 +282,18 @@ export function OptimisationPoseCandidats() {
                     {c.sens_enroulement_libelle}
                   </td>
                   <td className="px-2 py-2">
+                    {incoherent && (
+                      <span
+                        data-testid={`badge-incoherent-${id}`}
+                        className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900"
+                      >
+                        ⚠ incompatible avec {nbFronts} fronts
+                      </span>
+                    )}
                     {c.petit_cylindre && (
                       <span
                         title="Cylindre de petit diamètre — vérifier visuellement la planéité du tirage si tu doutes"
-                        className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-900"
+                        className="ml-1 inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-900"
                       >
                         ℹ️ Petit cylindre
                       </span>
