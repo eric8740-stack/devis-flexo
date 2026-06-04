@@ -49,7 +49,7 @@ La migration unify supprimait Daco/Atelier → risque de casser le rebobinage.
 - Trancher : compter un mini-coût « montée bande » au changement de bobine, ou rien.
 **Scope/risque** : change la logique du moteur → **bouge les prix + le benchmark**. Sprint dédié, nouveau benchmark, validation explicite.
 
-### 6. Flux matière ↔ bobinage incohérent — Ø calculé sur défauts (épaisseur matière + paroi mandrin) — **CADRÉ**
+### 6. Flux matière ↔ bobinage incohérent — Ø calculé sur défauts (épaisseur matière + paroi mandrin) — **✅ RÉSOLU / CLOS (PRs #93→#100)**
 **Observé** : le Ø bobine ne coïncide pas avec le vrai papier. Deux causes de « valeur de départ fausse » fournie au calcul du Ø :
 - **Épaisseur matière** : le Ø lit `candidat.epaisseur_appliquee_um` **figé à la saisie** (étape 1), pas la matière choisie à l'étape **Matière** (`detail`, par lot, dont l'épaisseur est affichée mais jamais propagée). Fallback **150 µm** injecté à 3 endroits (front saisie `useState("150")`, schéma `epaisseur_matiere_um=Field(150.0)`, rebobinage `?? 150`). `matiere.epaisseur_microns` est **NULLABLE** → NULL traité en 150.
 - **Paroi mandrin** : le Ø de départ de l'enroulement = `mandrin_mm` **brut** (Ø intérieur nominal), sans paroi → léger sous-estimé. Aucun champ d'épaisseur de paroi n'existe nulle part.
@@ -65,13 +65,34 @@ La migration unify supprimait Daco/Atelier → risque de casser le rebobinage.
 
 **SACRED** : `bat_calculs` / `rotation_se` **non modifiés**. Re-valider les **fixtures Ø** (242 mm `CoherenceBobineAlerte`, benchmarks) **uniquement si** la valeur effective de départ change.
 
-**Plan en lots** :
-- **6.1** — champ `epaisseur_paroi_mm` sur `parametre_mandrin` (migration + modèle + expo). *(en cours)*
-- **6.2** — propagation matière + paroi → **Ø par lot** + cohérence (front + orchestration), **après** validation du cadrage et **merge de 6.1**.
+**Plan en lots (LIVRÉ)** :
+- **6.1** (#93) — champ `epaisseur_paroi_mm` sur `parametre_mandrin` (migration + modèle + expo).
+- **6.2a** (#94) — orchestration Ø sur les vraies valeurs (résolveur partagé) + endpoint `POST /api/rebobinage/calculer-multilots`.
+- **6.2b** (#95) — UI rebobinage multi-lots : 1 Ø par lot + épaisseur réelle + override paroi.
+- **6.2c** (#96) — Ø multilots persisté dans `payload_visuel` + rapport `/devis/[id]` le lit.
+- **6.2d** (#97) — recalcul multilots à la saisie override + avant persistance.
+- **6.2e** (#98 back + #99 front + #100 ht_total) — coût rebobinage **par lot** (épaisseur réelle + paroi) intégré au `ht_total`.
+
+**✅ RÉSOLUTION (validée en live)** :
+- Ø calculé sur l'**épaisseur RÉELLE de la matière par lot** + **paroi mandrin** (Ø départ = Ø intérieur + 2×paroi).
+- **Coût rebobinage par lot intégré au `ht_total`** ; **base `cost_engine` PRÉSERVÉE** (`prix_vente_ht_eur` sacré intact — **V1a 1 449,09 €** + **tripwire 704,07 €** toujours EXACTS, ligne rebobinage ADDITIVE).
+- **Vérifié live** : devis matière **50 µm** + paroi **5** → **Ø départ 86 mm** ; `ht_total = base cost_engine + coût rebobinage`.
+- SACRED : `bat_calculs` / `rotation_se` **non touchés** (Ø/épaisseur passés en paramètres) ; fixtures Ø « 242 mm » stables.
+
+→ Reste une **dette UI de nettoyage** (pas de bug de prix) : cf. « Dette UI — flux rebobinage » plus bas.
 
 ---
 
 ## Bugs UX / câblage (légers, hors SACRED, parallélisables)
+
+### Dette UI — flux rebobinage (passe de nettoyage)
+Suite du bug #6 **RÉSOLU** : le **devis final est juste** (Ø + coût + `ht_total` sur épaisseur réelle/paroi). Restent des **résidus d'écran** — le calcul multi-lots a été **empilé sur l'ancien mono-lot** sans retirer ce dernier.
+**Note** : l'**ORDRE des étapes est DÉJÀ** Format → Outil → Matière → Bobinage — **pas de réordonnancement** ; il s'agit de **nettoyage / dédoublonnage**, hors SACRED.
+**À faire** :
+- **a. Bloc « Calcul rebobinage » mono-lot périmé** — affiche encore « épaisseur 150 µm » + coût mono-lot à l'écran Rebobinage, **trompeur** (le devis final prend bien le multi-lots ; cet intermédiaire est faux). → **aligner sur le multi-lots** (épaisseur réelle + coût retenu) **ou retirer le bloc**.
+- **b. Double saisie de la MATIÈRE** — saisie initiale (étape 1) **et** étape Matière (par lot) → **unifier** (source unique, lecture seule ailleurs).
+- **c. Double saisie du MANDRIN** — saisie initiale (étape 1) **et** étape Rebobinage → **unifier**.
+**Scope/risque** : front-only, hors SACRED (le `ht_total` ne dépend plus de ces écrans intermédiaires). Cosmétique/clarté, mais **a.** est prioritaire (affichage faux à l'écran).
 
 ### 2. « Options de fabrication » en double
 Même liste affichée dans **Optimisation de pose** (niveau lot) **et** Chiffrage final « **globales** » (niveau devis).
