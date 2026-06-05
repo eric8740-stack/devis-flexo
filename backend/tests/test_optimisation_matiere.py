@@ -134,16 +134,23 @@ def test_matiere_autre_tenant_404(cleanup_and_onboard, switch_to_user_b):
     assert r.status_code == 404
 
 
-def test_forcage_epaisseur_sans_motif_422(cleanup_and_onboard):
+def test_forcage_epaisseur_sans_motif_non_bloquant(cleanup_and_onboard):
+    """Souveraineté (Règle 7) : forçage épaisseur SANS motif → 200 + warning
+    (plus de 422). Le forçage est appliqué + enregistré."""
     _onboard_tenant_minimal_avec_matieres()
     mid = _matiere_id_par_code("PAP_COUCHE_BRILL_80")
     payload = _payload_base() | {
         "matiere_id": mid,
         "epaisseur_matiere_force_um": 100,
-        # Pas de motif → 422
+        # Pas de motif → 200 + warning (non bloquant)
     }
     r = client.post("/api/optimisation/calculer", json=payload)
-    assert r.status_code == 422
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert any("épaisseur" in w.lower() for w in body["warnings"])
+    top1 = body["configurations"][0]
+    assert top1["forcage_epaisseur"] is True
+    assert top1["epaisseur_appliquee_um"] == 100
 
 
 def test_forcage_epaisseur_applique_avec_motif(cleanup_and_onboard):
@@ -158,10 +165,13 @@ def test_forcage_epaisseur_applique_avec_motif(cleanup_and_onboard):
     }
     r = client.post("/api/optimisation/calculer", json=payload)
     assert r.status_code == 200, r.text
-    top1 = r.json()["configurations"][0]
+    body = r.json()
+    top1 = body["configurations"][0]
     assert top1["forcage_epaisseur"] is True
     assert top1["epaisseur_appliquee_um"] == 100
     assert "fournisseur" in top1["motif_forcage_epaisseur"]
+    # Avec motif → aucun warning de forçage épaisseur.
+    assert not any("épaisseur" in w.lower() for w in body["warnings"])
 
 
 def test_matiere_optionnelle_retro_compat(cleanup_and_onboard):
