@@ -102,34 +102,80 @@
 - **Phase 2 / `matiere_prix_kg_defaut`** (à arbitrer) — fallback P1 conservé sur `TarifPoste` (Q1 audit Lot 4a) ; migrer vers `ConfigCouts` ou supprimer le fallback.
 - **Dette `payload_output` = donnée serveur** (PR séparé à prévoir) — durcissement intégral : recalcul serveur mono-config OU purge `DevisSaveBar` si `/devis/nouveau` abandonné. Le pop conditionnel actuel (#78) suffit à éteindre la régression sans casser le flux legacy.
 
-### 🆕 Spec backlog — « mode sans outil » (refente / rebobinage finisseuse) — À CADRER, NON LANCÉ
+---
 
-**Besoin métier** : chiffrer un devis SANS fabrication d'un outil de découpe neuf — typiquement une prestation de **refente / rebobinage seule sur finisseuse** (`Machine.type_machine="finition"`, #105 ; ex. Daco D250, Rotoflex), sur matière déjà imprimée. Un toggle « avec / sans outil » au moment du calcul.
+## Chantier — Mode « format sans outil » (impression laize entière + refente) — SPEC, NON LANCÉ
 
-**Cartographie back actuelle (read-only, 2026-06-05) :**
+> Spec métier rédigée par Eric (2026-06-05). Cadrage à valider avant lot.
+> Cartographie back (read-only) ajoutée en fin de section.
 
-- **cost_engine = 7 postes** assemblés par `MoteurDevis` ([orchestrator.py:59-67](../backend/app/services/cost_engine/orchestrator.py#L59-L67)) ; `prix_vente_ht = Σ(postes) × (1 + marge)` ([orchestrator.py:80-87](../backend/app/services/cost_engine/orchestrator.py#L80-L87)).
-- **P3 Outillage/Clichés** ([poste_3_cliches.py:55-107](../backend/app/services/cost_engine/poste_3_cliches.py#L55-L107)) = **P3a clichés** (`nb_couleurs × prix_couleur`, [L58-61](../backend/app/services/cost_engine/poste_3_cliches.py#L58-L61), TOUJOURS facturé) **+ P3b découpe** (0 € si `devis.outil_decoupe_existant=True`, sinon `base + traces×tarif ± forme spé`, [L64-82](../backend/app/services/cost_engine/poste_3_cliches.py#L64-L82)). ⚠️ `outil_decoupe_existant=True` n'annule **que P3b** — **P3a clichés reste facturé**.
-- **P4 Calage** ([poste_4_calage.py:40-42](../backend/app/services/cost_engine/poste_4_calage.py#L40-L42)) = forfait fixe `ConfigCouts.calage_forfait_eur`, **AUCUN paramètre du payload** → non neutralisable par devis aujourd'hui.
-- **Champs `DevisInput` existants** ([schemas/devis.py](../backend/app/schemas/devis.py)) : `forme_speciale` ([L98](../backend/app/schemas/devis.py#L98)), `outil_decoupe_existant` ([L102](../backend/app/schemas/devis.py#L102), default `True`), `nb_traces_complexite` ([L112](../backend/app/schemas/devis.py#L112)). **Aucun champ « sans outil / sans impression » global.**
-- **Flux multi-lots (réel, via `/optimisation`)** : `_construire_devis_input_pour_lot` ([crud/devis.py:622-731](../backend/app/crud/devis.py#L622-L731)) reconstruit le `DevisInput` par lot **sans poser** `outil_decoupe_existant` → défaut `True` → **P3b déjà à 0** dans ce flux (seul P3a clichés + P4 calage restent).
-- **Pas de poste « refente / rebobinage » dans cost_engine** (les 7 postes sont figés). Le **rebobinage est un module ISOLÉ** ([services/rebobinage/](../backend/app/services/rebobinage/)), coût **ADDITIF** : `ht_total = prix_vente_ht (PUR, 7 postes) + contribution_rebobinage` ([devis_total.py:36-50](../backend/app/services/devis_total.py#L36-L50)). `prix_vente_ht_eur` n'est JAMAIS augmenté.
-- **`type_machine="finition"`** est lu **UNIQUEMENT** par le loader optim pour exclure les finisseuses des candidats ([optimisation_loader.py:86](../backend/app/services/optimisation_loader.py#L86)). **Aucune logique cost_engine ne le consulte.**
+### Principe
 
-**Point d'insertion recommandé (à valider) :**
+Toggle sur le format : « avec outil » (mode actuel) / « sans outil ».
+Sans outil : pas d'outil réel (cylindre/plaque), impression pleine largeur sans découpe par outil, puis refente en bobines filles sur la finisseuse.
 
-- **Champ** `mode_sans_outil: bool = False` sur **`DevisInput`** ([schemas/devis.py](../backend/app/schemas/devis.py), après [L157](../backend/app/schemas/devis.py#L157)) — point d'entrée unique du cost_engine, value-neutral par défaut.
-- **Threading** : (a) `/api/cost/calculer` (mono-config) → direct sur `DevisInput` ; (b) flux réel `/api/optimisation/calculer` → multi-lots : porter le flag sur le `payload_input` (étape 4 chiffrage) et l'injecter dans `_construire_devis_input_pour_lot` ([crud/devis.py:719](../backend/app/crud/devis.py#L719)). Persistance par lot optionnelle = nouvelle colonne `LotProduction.mode_sans_outil` ([models/lot_production.py](../backend/app/models/lot_production.py), migration additive).
-- **Postes neutralisés quand `True`** : P3 (au moins P3b ; P3a clichés à trancher — cf. questions) et P4 calage presse (→ 0 € ou forfait réduit via nouveau tarif `ConfigCouts`).
-- **Guardrail** : `mode_sans_outil=False` (défaut) → **sacrés L2 EXACTS** (V1a 1 424,31 € … tripwire P0b 695,36 €), aucun impact tant que le flag n'est pas posé.
+### Format
 
-**Questions ouvertes pour Eric (à cadrer avant lot) :**
+- Format laize × dev TOUJOURS saisi (impératif devis).
+- Sans outil : développé LIBRE / factice (aucun outil ne le contraint).
+- Sans outil : intervalle DEV = 0 (impression continue, pas d'échenillage transversal) → champ masqué/forcé.
+- Intervalle LAIZE conservé = espace entre les filles de refente (lames).
 
-1. Périmètre : « sans outil » = juste pas de die neuf (P3b déjà à 0) **ou** « refente / rebobinage seul » = pas d'impression presse du tout (alors P2 encres + P3a clichés + P4 calage + P5 roulage presse → 0, seul le rebobinage additif facture) ?
-2. P3a clichés : facturé ou non en mode sans outil ?
-3. P4 calage : 0 € ou forfait réduit (nouveau tarif `ConfigCouts.calage_forfait_*`) ?
-4. Flag par devis (global) ou par lot (`LotProduction`) ?
-5. Le coût de la prestation finisseuse passe-t-il par le module rebobinage existant (additif `ht_total`) ou faut-il un poste dédié dans `prix_vente_ht` ?
+### Matière & unités
+
+- Matière en m² (= laize × ml) ; production en ml.
+- Matière = laize bobine STOCK montée (ex 220), PAS l'utile.
+- Déchet latéral = laize stock − laize utile (utile = filles + intervalles refente) → AFFICHÉ/tracé.
+- V1 : déchet inclus dans le coût (bobine entière consommée) + affiché. « Facturer/absorber » = raffinement futur (cf. surplus planificateur).
+
+### Production & postes
+
+- Impression pleine largeur (sans poses découpées par outil).
+- Calage = calage IMPRESSION (pas de calage découpe).
+- Refente = BOBINAGE des filles sur finisseuse (type_machine=finition, #105) : réutilise planificateur + rotation_se (8 sens) + bat_calculs (Ø). Chaque fille : sens enroulement (int/ext) + sens lecture (déjà encodés).
+- PAS de coût de découpe outil.
+
+### Invariants
+
+- Calage lié à l'outil/cliché (ici clichés d'impression) — 1 calage / montage.
+- rotation_se / 8 sens : SACRED → réutilisation pure, JAMAIS modifier le mapping.
+- bat_calculs (Ø) : SSOT → prudence.
+
+### À cartographier
+
+- Poste refente/bobinage finisseuse : déjà un poste de coût ?
+- Point d'insertion du toggle avec/sans outil (front + back).
+
+### Cartographie back (read-only, 2026-06-05) — réponses
+
+**Le poste refente/bobinage finisseuse N'EXISTE PAS comme poste cost_engine.**
+
+- **cost_engine = 7 postes figés** (P1→P7) assemblés par `MoteurDevis` ([orchestrator.py:59-67](../backend/app/services/cost_engine/orchestrator.py#L59-L67)) ; `prix_vente_ht = Σ(postes) × (1 + marge)` ([orchestrator.py:80-87](../backend/app/services/cost_engine/orchestrator.py#L80-L87)). **Aucun poste « refente/bobinage ».**
+- Le **rebobinage est un module ISOLÉ** ([services/rebobinage/](../backend/app/services/rebobinage/)) — déjà branché sur le **planificateur** (3 scénarios A/B/C), **`rotation_se` (8 sens)** et **`bat_calculs` (Ø)** (cf. #66/#68/#73 et bug #6). Son coût est **ADDITIF, hors `prix_vente_ht`** : `ht_total = prix_vente_ht (PUR, 7 postes) + contribution_rebobinage` ([devis_total.py:36-50](../backend/app/services/devis_total.py#L36-L50)). C'est l'ancrage naturel du **bobinage des filles** sans toucher au cost_engine.
+- **`type_machine="finition"` (#105)** n'est lu QUE par le loader optim pour exclure les finisseuses des candidats ([optimisation_loader.py:86](../backend/app/services/optimisation_loader.py#L86)). **Aucune logique cost_engine ne le consulte** → un mode « sans outil » devra explicitement router le calcul, le rôle parc ne suffit pas.
+
+**Postes presse en mode sans outil (impression conservée, découpe outil supprimée) :**
+
+- **P1 Matière** ([poste_1_matiere.py](../backend/app/services/cost_engine/poste_1_matiere.py)) : facture déjà `laize × ml` (m²). En mode sans outil, brancher la base sur la **laize bobine STOCK** (ex. 220), pas l'utile → cohérent avec « déchet latéral inclus + tracé ». P1 consomme déjà `DevisInput.laize_papier_mm` (L2 #114) — c'est le point d'entrée pour porter la laize stock.
+- **P2 Encres / P5 Roulage / P7 MO** : impression pleine largeur → **conservés** (impression réelle).
+- **P3 Outillage/Clichés** ([poste_3_cliches.py:55-107](../backend/app/services/cost_engine/poste_3_cliches.py#L55-L107)) : **P3a clichés impression = CONSERVÉ** (`nb_couleurs × prix`, [L58-61](../backend/app/services/cost_engine/poste_3_cliches.py#L58-L61)) ; **P3b découpe outil = 0** — déjà le cas si `outil_decoupe_existant=True` ([L64-82](../backend/app/services/cost_engine/poste_3_cliches.py#L64-L82)), et le flux multi-lots `_construire_devis_input_pour_lot` ne pose pas ce champ → **P3b déjà à 0** ([crud/devis.py:622-731](../backend/app/crud/devis.py#L622-L731)).
+- **P4 Calage** ([poste_4_calage.py:40-42](../backend/app/services/cost_engine/poste_4_calage.py#L40-L42)) : forfait fixe `ConfigCouts.calage_forfait_eur`, non paramétrable par payload → en mode sans outil c'est **calage IMPRESSION** (conservé, conforme à l'invariant « 1 calage / montage »). Pas de calage découpe à retirer (P4 ne distingue pas aujourd'hui).
+
+**Point d'insertion du toggle (back) :**
+
+- **Champ** `mode_sans_outil: bool = False` (ou `format_sans_outil`) sur **`DevisInput`** ([schemas/devis.py](../backend/app/schemas/devis.py), après [L157](../backend/app/schemas/devis.py#L157)) — point d'entrée unique cost_engine, value-neutral par défaut.
+- **Schéma optim** : ajouter le toggle sur le **format** côté `OptimisationCalculerRequest` ([schemas/optimisation.py](../backend/app/schemas/optimisation.py)) ; en mode sans outil, forcer `intervalle_dev = 0` (masqué front) et libérer le développé (factice). L'optim pose découpe n'est plus contrainte par un outil → cadrer si l'étape « candidats » est court-circuitée.
+- **Threading** : (a) `/api/cost/calculer` (mono) → direct ; (b) flux réel `/api/optimisation/calculer` → multi-lots : porter le flag sur `payload_input` (étape 4) + l'injecter dans `_construire_devis_input_pour_lot` ([crud/devis.py:719](../backend/app/crud/devis.py#L719)) → `DevisInput`. Persistance par lot = colonne `LotProduction.mode_sans_outil` ([models/lot_production.py](../backend/app/models/lot_production.py), migration additive) si flag historisé.
+- **Refente des filles** : réutiliser le **module rebobinage** existant (coût additif `ht_total`) pour le bobinage des bobines filles, sans nouveau poste cost_engine.
+- **Guardrail** : `mode_sans_outil=False` (défaut) → **sacrés L2 EXACTS** (V1a 1 424,31 € … tripwire P0b 695,36 €) ; **`rotation_se` / 8 sens et `bat_calculs` (Ø) INTOUCHÉS** (réutilisation pure, mapping SACRED).
+
+**Questions de cadrage restantes (Eric) :**
+
+1. Laize stock (matière) : nouveau champ explicite `laize_bobine_stock_mm` ou réutiliser `laize_papier_mm` (L2) repointé sur la bobine stock en mode sans outil ?
+2. Déchet latéral V1 : confirmé « inclus dans le coût + affiché » (pas de ligne séparée facturable) ?
+3. P3a clichés impression : confirmé facturé en sans outil (impression réelle) ?
+4. L'optim pose (étape candidats) est-elle court-circuitée en sans outil (pas d'outil → pas de contrainte poses dev) ou conservée pour le calcul des filles en laize ?
+5. Granularité du flag : devis global ou par lot ?
 
 ---
 
