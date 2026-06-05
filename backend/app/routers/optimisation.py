@@ -317,10 +317,15 @@ def post_calculer(
     # B3a : lookup nom depuis le parc reel `Machine` (au lieu de
     # MachineImprimerie deprecie). Cohérent avec `charger_machines_actives`
     # qui rentourne maintenant les machines du parc utilisateur.
-    nom_par_machine = {m.id: m.nom for m in
-                       db.query(Machine)
-                       .filter_by(entreprise_id=user.entreprise_id, actif=True)
-                       .all()}
+    machines_parc = (db.query(Machine)
+                     .filter_by(entreprise_id=user.entreprise_id, actif=True)
+                     .all())
+    nom_par_machine = {m.id: m.nom for m in machines_parc}
+    # L2 — laize utile par machine (plafond laize papier du candidat).
+    laize_utile_par_machine = {
+        m.id: (float(m.laize_utile_mm) if m.laize_utile_mm is not None else None)
+        for m in machines_parc
+    }
     chute_min = float(entreprise.chute_laterale_min_mm)
     palier = entreprise.palier_laize_papier_mm
     marge_liner = float(entreprise.marge_liner_mm)
@@ -380,6 +385,7 @@ def post_calculer(
                 chute_min_mm=chute_min,
                 bord_lateral_mm=bord_lateral_effectif,
                 laize_mini_roulable_mm=laize_mini_roulable,
+                laize_utile_mm=laize_utile_par_machine.get(c.machine_id),
                 palier_mm=palier,
                 marge_liner_mm=marge_liner,
                 mandrin_mm=diametre_depart_candidat_mm,
@@ -478,6 +484,7 @@ def _to_config_out(
     chute_min_mm: float,
     bord_lateral_mm: float,
     laize_mini_roulable_mm: float,
+    laize_utile_mm: float | None,
     palier_mm: int,
     marge_liner_mm: float,
     mandrin_mm: int,
@@ -509,7 +516,8 @@ def _to_config_out(
     # L1 : laize papier déterministe = plaque + 2×bord latéral effectif
     # (défaut = chute_min → valeur inchangée), planchée à laize_mini_roulable.
     laize_papier = calcul_laize_papier(
-        laize_plaque, bord_lateral_mm, palier_mm, laize_mini_roulable_mm
+        laize_plaque, bord_lateral_mm, palier_mm, laize_mini_roulable_mm,
+        laize_utile_mm,
     )
     chute_reelle = calcul_chute_reelle_par_cote(laize_papier, laize_plaque)
     ml_total = calcul_ml_total(quantite, c.nb_poses_dev, c.nb_poses_laize, z_cyl_mm)

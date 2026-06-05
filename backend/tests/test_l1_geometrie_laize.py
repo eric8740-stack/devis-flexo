@@ -33,6 +33,14 @@ _CHUTE_MIN = 10.0
 _PALIER = 10
 
 
+def _laize_utile_machine(machine_id: int) -> float:
+    """Laize utile (mm) de la machine candidate — plafond L2 du papier."""
+    with SessionLocal() as db:
+        m = db.get(Machine, machine_id)
+        assert m is not None and m.laize_utile_mm is not None
+        return float(m.laize_utile_mm)
+
+
 @pytest.fixture
 def onboarded():
     db = SessionLocal()
@@ -102,34 +110,43 @@ def test_geometrie_laize_exposee_et_coherente(onboarded):
         "laize_papier_mm",
         "intervalle_laize_mm",
     }
-    # Cohérence interne : laize_papier == calcul depuis plaque + bord effectif.
-    attendu = calcul_laize_papier(g["laize_plaque_mm"], g["bord_lateral_mm"], _PALIER)
+    # Cohérence interne (L2) : laize_papier == min(arrondi_palier(plaque +
+    # 2×bord), laize_utile machine candidate).
+    lu = _laize_utile_machine(cfg["machine_id"])
+    attendu = calcul_laize_papier(
+        g["laize_plaque_mm"], g["bord_lateral_mm"], _PALIER, 0.0, lu
+    )
     assert g["laize_papier_mm"] == attendu
 
 
 def test_bord_null_defaut_chute_min_non_regression(onboarded):
-    """Sans surcharge : bord effectif == chute_min ; laize papier == valeur
-    actuelle (plaque + 2×chute, arrondi palier). forcage_bord_lateral=False."""
+    """Sans surcharge : bord effectif == chute_min ; laize papier = plaque +
+    2×chute (arrondi palier) PLAFONNÉE à laize_utile. forcage_bord_lateral=False."""
     body = _calculer()
     cfg = body["configurations"][0]
     g = cfg["geometrie_laize"]
     assert g["bord_lateral_mm"] == _CHUTE_MIN
+    lu = _laize_utile_machine(cfg["machine_id"])
     assert g["laize_papier_mm"] == calcul_laize_papier(
-        g["laize_plaque_mm"], _CHUTE_MIN, _PALIER
+        g["laize_plaque_mm"], _CHUTE_MIN, _PALIER, 0.0, lu
     )
     assert cfg["forcage_bord_lateral"] is False
 
 
 def test_bord_surcharge_reflete_laize_papier_et_echo(onboarded):
-    """Bord surchargé à 20 mm → laize papier = plaque + 2×20 (palier) ; écho
-    forcage + motif ; warning si motif absent."""
+    """Bord surchargé à 20 mm → laize papier = min(plaque + 2×20 arrondi,
+    laize_utile) (L2 : le plafond ROGNE le bord quand il dépasse la presse) ;
+    écho forcage + motif ; warning si motif absent."""
     body = _calculer(bord_lateral_mm=20)
     cfg = body["configurations"][0]
     g = cfg["geometrie_laize"]
     assert g["bord_lateral_mm"] == 20.0
+    lu = _laize_utile_machine(cfg["machine_id"])
     assert g["laize_papier_mm"] == calcul_laize_papier(
-        g["laize_plaque_mm"], 20.0, _PALIER
+        g["laize_plaque_mm"], 20.0, _PALIER, 0.0, lu
     )
+    # Le plafond ne laisse jamais dépasser la laize utile presse.
+    assert g["laize_papier_mm"] <= lu
     assert cfg["forcage_bord_lateral"] is True
     # Surcharge sans motif → warning non bloquant (Règle 7).
     assert any("bord latéral" in w.lower() for w in body["warnings"])

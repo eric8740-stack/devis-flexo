@@ -216,10 +216,19 @@ def fixture_session_factory() -> Iterator[Callable[[], Session]]:
 
 def _devis_v1a_median() -> DevisInput:
     """V1a = V1 médian + outil existant (defaults Pydantic Lot 5b alignés
-    sur format 60×40, 3p1d, outil_decoupe_existant=True). Cible 1449.09 €."""
+    sur format 60×40, 3p1d, outil_decoupe_existant=True).
+
+    RE-BASELINE L2 : P1 facturé sur la **laize papier réelle** (déterministe).
+    Géométrie figée : plaque = 3×60 + 2×intervalle(5) = 190 ; bord = chute_min
+    10 ; palier 10 → papier brut = 210 ; plafond laize_utile 220 → **210**
+    (le plafond ne mord pas, 210 < 220). `marge_confort` retirée. Cible
+    1424,09... → 1424,31 € (cf. expected). `laize_papier_mm=210` injecté pour
+    rendre P1 déterministe sur cette fixture in-memory découplée de l'optim.
+    """
     return DevisInput(
         complexe_id=31,
         laize_utile_mm=220,
+        laize_papier_mm=Decimal("210"),
         ml_total=3000,
         nb_couleurs_par_type={"process_cmj": 4, "pantone": 1},
         machine_id=1,
@@ -268,18 +277,21 @@ def _devis_v4_multi_couleurs() -> DevisInput:
 
 
 def _check_v1a_reference(out: DevisOutput) -> None:
-    """V1a = cas médian + outil existant. P3b=0 → P3=225 (inchangé) → HT=1449.09."""
-    assert out.prix_vente_ht_eur == Decimal("1449.09")
-    assert out.cout_revient_eur == Decimal("1228.04")
+    """V1a = cas médian + outil existant. RE-BASELINE L2 (P1 sur laize papier
+    210, sans marge_confort) : P1 241,50→220,50 (−21,00) → cout_revient
+    1228,04→1207,04 → HT 1449,09→1424,31. P3=225 inchangé (calage intouché)."""
+    assert out.prix_vente_ht_eur == Decimal("1424.31")
+    assert out.cout_revient_eur == Decimal("1207.04")
     p3 = next(p for p in out.postes if p.poste_numero == 3)
     assert p3.montant_eur == Decimal("225.00")
     assert p3.details["mode_outil"] == "existant"
 
 
 def _check_v1b_nouvel_outil_4_traces(out: DevisOutput) -> None:
-    """V1b : nouvel outil 4 tracés simple. P3b=400 → P3=625 → cout_revient=1628.04 → HT=1921.09."""
-    assert out.cout_revient_eur == Decimal("1628.04")
-    assert out.prix_vente_ht_eur == Decimal("1921.09")
+    """V1b : nouvel outil 4 tracés simple. P3b=400 → P3=625. RE-BASELINE L2 :
+    cout_revient 1628,04→1607,04 (−21,00 sur P1) → HT 1921,09→1896,31."""
+    assert out.cout_revient_eur == Decimal("1607.04")
+    assert out.prix_vente_ht_eur == Decimal("1896.31")
     p3 = next(p for p in out.postes if p.poste_numero == 3)
     assert p3.montant_eur == Decimal("625.00")
     assert p3.details["mode_outil"] == "nouveau"
@@ -343,35 +355,35 @@ VARIANTES = [
         description="Cas médian + outil EXISTANT (figé Lot 3d, P3b=0 €)",
         devis_factory=_devis_v1a_median,
         business_check=_check_v1a_reference,
-        expected_total_ht=Decimal("1449.09"),
+        expected_total_ht=Decimal("1424.31"),
     ),
     BenchmarkVariante(
         name="V1b_nouvel_outil_4_traces",
         description="Cas médian + nouvel outil 4 tracés simple (P3b=400 €) — NEW Lot 5c",
         devis_factory=_devis_v1b_nouvel_outil,
         business_check=_check_v1b_nouvel_outil_4_traces,
-        expected_total_ht=Decimal("1921.09"),
+        expected_total_ht=Decimal("1896.31"),
     ),
     BenchmarkVariante(
         name="V2_petite_serie",
         description="Petite série 500 ml — forfaits dominants (outil existant)",
         devis_factory=_devis_v2_petite_serie,
         business_check=_check_v2_forfaits_dominants,
-        expected_total_ht=Decimal("743.01"),
+        expected_total_ht=Decimal("738.88"),
     ),
     BenchmarkVariante(
         name="V3_grande_serie",
         description="Grande série 30 000 ml — effet d'échelle (outil existant)",
         devis_factory=_devis_v3_grande_serie,
         business_check=_check_v3_matiere_et_roulage_dominants,
-        expected_total_ht=Decimal("8437.47"),
+        expected_total_ht=Decimal("8189.67"),
     ),
     BenchmarkVariante(
         name="V4_multi_couleurs",
         description="8 couleurs (4 CMJ + 3 Pantone + 1 Blanc HO) — outil existant",
         devis_factory=_devis_v4_multi_couleurs,
         business_check=_check_v4_p3_360,
-        expected_total_ht=Decimal("1697.17"),
+        expected_total_ht=Decimal("1672.39"),
     ),
 ]
 

@@ -45,6 +45,7 @@ def calcul_laize_papier(
     chute_min_mm: float,
     palier_mm: int,
     laize_mini_roulable_mm: float = 0.0,
+    laize_utile_mm: float | None = None,
 ) -> float:
     """Laize matière commandée chez le fournisseur.
 
@@ -53,14 +54,22 @@ def calcul_laize_papier(
     défaut ou surcharge opérateur L1), puis on arrondit AU PALIER SUPÉRIEUR
     (les fournisseurs livrent par palier standard, typiquement 10 mm).
 
-    L1 : plancher `laize_mini_roulable_mm` (défaut 0 → aucun plancher,
-    non-régressif) : la laize papier ne descend jamais sous cette valeur
-    (contrainte presse/rebobineuse).
+    L2 : **plafond `laize_utile_mm`** (5ᵉ param OPTIONNEL — défaut `None` = pas
+    de cap → non-régressif pour les appels positionnels existants). Le bord
+    d'échenillage est ROGNÉ par la presse quand `plaque + 2×bord` dépasse la
+    laize utile : `laize_papier = min(arrondi_palier(plaque + 2×bord),
+    laize_utile)`.
+
+    L1 : plancher `laize_mini_roulable_mm` (défaut 0 → aucun plancher) :
+    la laize papier ne descend jamais sous cette valeur (contrainte
+    presse/rebobineuse). Le plancher est appliqué APRÈS le plafond.
     """
     if palier_mm <= 0:
         raise ValueError(f"palier_mm doit être > 0, reçu {palier_mm}")
     laize_mini = laize_plaque_mm + 2 * chute_min_mm
     papier = math.ceil(laize_mini / palier_mm) * palier_mm
+    if laize_utile_mm is not None:
+        papier = min(papier, laize_utile_mm)
     return max(papier, laize_mini_roulable_mm)
 
 

@@ -40,13 +40,13 @@ DEMO_ENTREPRISE_ID = 1
 
 
 # === VALEUR SACRED FIGEE ===
-# Tripwire chemin multi-lots PRE-repoint P1, laize source MachineImprimerie=320
-# (1re machine onboarding = Mark Andy 2200, cf catalogue_defaults.MACHINES_DEFAULT).
-# Bouge volontairement au repoint P1 -> re-baseline a faire :
-#   1. lancer le test, lire la nouvelle valeur observee,
-#   2. validation Eric explicite que le changement est metier-acceptable,
-#   3. mettre a jour _EXPECTED_PRIX_VENTE_HT + le commentaire de provenance.
-_EXPECTED_PRIX_VENTE_HT: Decimal = Decimal("704.07")
+# Tripwire chemin multi-lots. Machine source Mark Andy 2200 (laize_utile=320).
+# RE-BASELINE L2 (validée Eric) : P1 rebasé sur laize_papier réelle plafonnée à
+# laize_utile, marge_confort retirée. Le plafond MORD ici : laize_plaque=310
+# (3×100 + 2×5), papier brut = 330 > laize_utile 320 → plafonné à 320. Base P1
+# 330→320 → P1 243,56→236,18 (ΔP1 −7,38) → cout_revient 596,67→589,29 →
+# prix_vente 704,07 → 695,36 €.
+_EXPECTED_PRIX_VENTE_HT: Decimal = Decimal("695.36")
 
 # Garde anti-drift fixture : la 1re MachineImprimerie active du tenant demo
 # DOIT avoir cette laize utile. Si l'ordre d'INSERT onboarding ou le catalogue
