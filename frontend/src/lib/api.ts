@@ -1173,6 +1173,20 @@ export interface OptimisationCalculerRequest {
   lacet_gauche_mm?: number | null;
   // Sprint 13 avenant : forçage nb poses laize (null = auto).
   nb_poses_laize_force?: number | null;
+  // L1 — bord latéral SYMÉTRIQUE surchargeable (mm). NULL/absent → défaut
+  // backend = `entreprise.chute_laterale_min_mm` (non-régression stricte).
+  // Concept SÉPARÉ des lacets (intervalle/2, intouchés). Asymétrie g/d hors L1.
+  bord_lateral_mm?: number | null;
+}
+
+// L1 — contrat géométrie laize partagé (par candidat). Aligné sur
+// `backend/app/schemas/optimisation.py::GeometrieLaize`.
+//   laize_papier = arrondi_palier(laize_plaque + 2×bord_lateral).
+export interface GeometrieLaize {
+  laize_plaque_mm: number;
+  bord_lateral_mm: number; // bord effectif retenu (surcharge ou défaut)
+  laize_papier_mm: number;
+  intervalle_laize_mm: number;
 }
 
 export interface OptimisationConfigOut {
@@ -1248,6 +1262,10 @@ export interface OptimisationConfigOut {
   epaisseur_source?: EpaisseurSource;
   paroi_mm?: number;
   nb_bobines_rebobinage?: number;
+  // L1 — contrat géométrie laize partagé (back le renvoie sur chaque candidat
+  // /calculer). Optionnel côté front : les `payload_visuel` des devis legacy
+  // (créés avant L1) ne le portent pas → l'affichage décompo se garde dessus.
+  geometrie_laize?: GeometrieLaize;
 }
 
 export interface OptimisationCalculerResponse {

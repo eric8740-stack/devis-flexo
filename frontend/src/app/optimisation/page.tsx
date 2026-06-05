@@ -277,6 +277,14 @@ function OptimisationPoseSaisie() {
   const [lacetsAsymetriques, setLacetsAsymetriques] = useState(false);
   const [lacetDroit, setLacetDroit] = useState<string>("2.5");
   const [lacetGauche, setLacetGauche] = useState<string>("2.5");
+  // L1 — bord latéral / surplus extérieur (mm), SYMÉTRIQUE. Non forcé → on
+  // envoie null ; le backend applique son défaut (chute latérale mini) et le
+  // renvoie comme `geometrie_laize.bord_lateral_mm`. Le défaut effectif vient
+  // donc de la réponse /calculer (pas d'appel entreprise séparé) ; on s'en
+  // sert pour pré-remplir le champ override + l'afficher en non forcé.
+  const [bordDefautMoteur, setBordDefautMoteur] = useState<number | null>(null);
+  const [forcerBord, setForcerBord] = useState(false);
+  const [bordLateral, setBordLateral] = useState<string>("");
 
   const [submitting, setSubmitting] = useState(false);
   // Brief #28 : `response` state retiré — l'étape 2 (OptimisationPoseCandidats)
@@ -392,6 +400,9 @@ function OptimisationPoseSaisie() {
           nbPosesLaizeMode === "force"
             ? parseInt(nbPosesLaizeForce, 10)
             : null,
+        // L1 — bord latéral : null si non forcé (backend applique le défaut
+        // entreprise → non-régression stricte), sinon la valeur saisie.
+        bord_lateral_mm: forcerBord ? parseFloat(bordLateral) : null,
       });
       if (r.nb_candidats === 0) {
         toast({
@@ -410,6 +421,16 @@ function OptimisationPoseSaisie() {
         // valeur forcée hors recommandation moteur, motif manquant) pour
         // affichage en bandeau orange à l'étape candidats.
         setOptimWarnings(r.warnings ?? []);
+        // L1 — le bord latéral EFFECTIF (surcharge si forcée, sinon défaut
+        // entreprise appliqué par le back) revient dans `geometrie_laize`. On
+        // le mémorise pour l'affichage "non forcé" + pré-remplir le champ
+        // override tant que l'opérateur n'a pas saisi sa propre valeur.
+        const bordEffectif =
+          r.configurations[0]?.geometrie_laize?.bord_lateral_mm;
+        if (typeof bordEffectif === "number") {
+          setBordDefautMoteur(bordEffectif);
+          if (!forcerBord) setBordLateral(String(bordEffectif));
+        }
         // Sprint 13 avenant : push les candidats dans le store et bascule
         // vers étape 2 (tableau multi-sélection).
         goCandidats(
@@ -915,6 +936,55 @@ function OptimisationPoseSaisie() {
                       onChange={(e) => setLacetGauche(e.target.value)}
                     />
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* L1 — Bord latéral / surplus extérieur (SYMÉTRIQUE). Concept
+                distinct des lacets ci-dessus (intervalle/2). Défaut = chute
+                latérale mini entreprise ; éditable si forcé. Pas de motif
+                (contrat L1). Asymétrie g/d hors L1. */}
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={forcerBord}
+                  onChange={(e) => setForcerBord(e.target.checked)}
+                  data-testid="forcer-bord-lateral"
+                />
+                Forcer le bord latéral / surplus extérieur
+              </label>
+              {!forcerBord && (
+                <p className="text-xs text-muted-foreground">
+                  Par défaut, le moteur applique la chute latérale mini de
+                  l&apos;entreprise des 2 côtés
+                  {bordDefautMoteur !== null
+                    ? ` (${bordDefautMoteur} mm appliqué au dernier calcul)`
+                    : " (valeur visible dans la décompo après calcul)"}
+                  . Coche pour saisir une autre valeur.
+                </p>
+              )}
+              {forcerBord && (
+                <div>
+                  <Label htmlFor="bord-lateral" className="text-xs">
+                    Bord latéral / surplus extérieur (mm) — symétrique, appliqué
+                    des 2 côtés
+                  </Label>
+                  <Input
+                    id="bord-lateral"
+                    data-testid="bord-lateral-input"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    value={bordLateral}
+                    onChange={(e) => setBordLateral(e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Surplus de matière de chaque côté de l&apos;impression. La
+                    laize papier réelle = laize imprimée + 2 × bord latéral.
+                    N&apos;impacte pas le prix en l&apos;état.
+                  </p>
                 </div>
               )}
             </div>

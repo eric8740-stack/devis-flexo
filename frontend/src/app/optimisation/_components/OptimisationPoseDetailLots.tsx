@@ -200,6 +200,35 @@ export function OptimisationPoseDetailLots() {
                 </div>
               )}
 
+              {/* L1 — décompo laize (lecture seule) depuis le contrat
+                  partagé `geometrie_laize`. Informatif : aucun impact prix.
+                  Absent pour les devis legacy (payload_visuel pré-L1) → masqué. */}
+              {lot.candidat.geometrie_laize && (
+                <div
+                  data-testid={`decompo-laize-${idx}`}
+                  className="rounded-md border border-border bg-muted/20 p-3 text-sm"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Décompo laize papier
+                  </span>
+                  <div className="mt-1 font-mono">
+                    Imprimé{" "}
+                    <strong>
+                      {lot.candidat.geometrie_laize.laize_plaque_mm} mm
+                    </strong>{" "}
+                    + 2 × bord{" "}
+                    <strong>
+                      {lot.candidat.geometrie_laize.bord_lateral_mm} mm
+                    </strong>{" "}
+                    ={" "}
+                    <strong>
+                      {lot.candidat.geometrie_laize.laize_papier_mm} mm
+                    </strong>{" "}
+                    de laize papier réelle
+                  </div>
+                </div>
+              )}
+
               <SchemaImplantation
                 config={lot.candidat}
                 laizeEtiqMm={laizeEtiqMm}
