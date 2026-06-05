@@ -94,6 +94,14 @@ class ConfigCouts(Base):
         Numeric(8, 4), nullable=False, default=Decimal("0.1000")
     )
 
+    # L1 (géométrie laize) — plancher de laize papier roulable (mm). La laize
+    # papier déterministe ne descend jamais sous cette valeur (contrainte
+    # presse/rebobineuse). Défaut NEUTRE = 0 en L1 (aucun plancher) ; câblage
+    # métier réel à l'étape 2. NON consommé par P1 (cost_engine intouché).
+    laize_mini_roulable_mm: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

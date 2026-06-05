@@ -153,6 +153,16 @@ class DevisInput(BaseModel):
         description="Si null, lit entreprise.pct_marge_defaut (curseur 4 presets)",
     )
 
+    # --- L1 géométrie laize (plomberie pour le rebasage P1 — étape 2) ---
+    laize_papier_mm: Decimal | None = Field(
+        default=None,
+        gt=0,
+        description="L1 : laize papier réelle déterministe (plaque + 2×bord, "
+        "arrondi palier, plancher roulable). EXPOSÉE au cost_engine mais "
+        "PAS ENCORE consommée par P1 (qui garde laize_utile + marge_confort). "
+        "Le rebasage de P1 sur ce champ est l'étape 2.",
+    )
+
     @model_validator(mode="after")
     def _check_intervalle_coherent_avec_mode(self) -> Self:
         """Sprint 7 Lot 7b — interdit intervalle_mm en mode matching.

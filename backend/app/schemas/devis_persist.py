@@ -43,6 +43,10 @@ class LotProductionCreate(BaseModel):
     score_optim: float | None = None
     cout_lot_ht_eur: Decimal | None = None
 
+    # L1 — bord latéral surchargeable par lot (mm). NULL → défaut =
+    # entreprise.chute_laterale_min_mm (comportement actuel).
+    bord_lateral_mm: Decimal | None = None
+
     # Brief #33 — snapshot visuel pour SchemaImplantation par lot (laize
     # papier, liner, chute latérale, diamètre bobine, lacets, rotations).
     # Stocké tel quel en JSONB côté DB.
