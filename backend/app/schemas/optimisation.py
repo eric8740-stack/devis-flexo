@@ -171,6 +171,17 @@ class OptimisationCalculerRequest(BaseModel):
     lacet_droit_mm: float | None = Field(None, ge=0.5, le=50)
     lacet_gauche_mm: float | None = Field(None, ge=0.5, le=50)
 
+    # L1 — bord latéral SYMÉTRIQUE surchargeable (mm), pilote la laize papier
+    # déterministe (plaque + 2×bord). NULL → défaut = chute_laterale_min_mm
+    # (comportement actuel préservé). Concept SÉPARÉ des lacets ci-dessus
+    # (intervalle/2) qui restent intouchés. Asymétrie g/d hors L1.
+    bord_lateral_mm: float | None = Field(None, ge=0, le=100)
+    # Motif de surcharge (Règle 7 — souveraineté commerciale). Non bloquant :
+    # si une surcharge `bord_lateral_mm` est posée sans motif (ou < 10 car.),
+    # le router renvoie un warning (cf. warnings[]). Aligné sur le pattern des
+    # forçages intervalle laize/dev.
+    motif_bord_lateral: str | None = Field(None, max_length=500)
+
     @model_validator(mode="after")
     def _valider_forcages_et_lacets(self) -> "OptimisationCalculerRequest":
         # Forçage intervalle laize : le motif obligatoire (≥10 car.) a été
@@ -205,6 +216,22 @@ class OptimisationCalculerRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
+
+
+class GeometrieLaize(BaseModel):
+    """L1 — contrat géométrie laize partagé (par lot/candidat).
+
+    `bord_lateral_mm` = bord latéral EFFECTIF retenu (surcharge opérateur ou
+    défaut `chute_laterale_min_mm`). `laize_papier_mm` = déterministe =
+    `arrondi_palier(laize_plaque + 2×bord)`, planchée à `laize_mini_roulable`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    laize_plaque_mm: float
+    bord_lateral_mm: float
+    laize_papier_mm: float
+    intervalle_laize_mm: float
 
 
 class OptimisationConfigOut(BaseModel):
@@ -297,6 +324,14 @@ class OptimisationConfigOut(BaseModel):
     epaisseur_appliquee_um: int
     forcage_epaisseur: bool
     motif_forcage_epaisseur: str | None = None
+
+    # L1 — contrat géométrie laize partagé avec le front (par lot/candidat).
+    geometrie_laize: GeometrieLaize
+    # L1 — écho souveraineté du bord latéral (Règle 7) : surcharge appliquée ?
+    # + motif. `forcage_bord_lateral=False` quand le bord est au défaut
+    # (chute_min). Le motif est purement informatif (jamais bloquant).
+    forcage_bord_lateral: bool = False
+    motif_bord_lateral: str | None = None
 
 
 class OptimisationCalculerResponse(BaseModel):

@@ -44,17 +44,24 @@ def calcul_laize_papier(
     laize_plaque_mm: float,
     chute_min_mm: float,
     palier_mm: int,
+    laize_mini_roulable_mm: float = 0.0,
 ) -> float:
     """Laize matière commandée chez le fournisseur.
 
-    La laize papier englobe la plaque ET les 2 chutes latérales mini
-    (échenillage), puis on arrondit AU PALIER SUPÉRIEUR (les fournisseurs
-    livrent par palier standard, typiquement 10 mm).
+    La laize papier englobe la plaque ET les 2 bords latéraux (`chute_min_mm`
+    par côté — l'appelant passe le **bord latéral effectif**, échenillage par
+    défaut ou surcharge opérateur L1), puis on arrondit AU PALIER SUPÉRIEUR
+    (les fournisseurs livrent par palier standard, typiquement 10 mm).
+
+    L1 : plancher `laize_mini_roulable_mm` (défaut 0 → aucun plancher,
+    non-régressif) : la laize papier ne descend jamais sous cette valeur
+    (contrainte presse/rebobineuse).
     """
     if palier_mm <= 0:
         raise ValueError(f"palier_mm doit être > 0, reçu {palier_mm}")
     laize_mini = laize_plaque_mm + 2 * chute_min_mm
-    return math.ceil(laize_mini / palier_mm) * palier_mm
+    papier = math.ceil(laize_mini / palier_mm) * palier_mm
+    return max(papier, laize_mini_roulable_mm)
 
 
 def calcul_chute_reelle_par_cote(

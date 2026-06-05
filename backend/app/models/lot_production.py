@@ -91,6 +91,13 @@ class LotProduction(Base):
     intervalle_dev_reel_mm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     intervalle_laize_reel_mm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     largeur_plaque_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+
+    # L1 (géométrie laize) — bord latéral SYMÉTRIQUE surchargeable par côté
+    # (mm). NULL → défaut = `entreprise.chute_laterale_min_mm` (comportement
+    # actuel préservé). Pilote la laize papier déterministe (plaque + 2×bord).
+    # Concept SÉPARÉ des lacets (intervalle/2) qui restent intouchés. Asymétrie
+    # g/d hors L1. NON consommé par P1 (cost_engine intouché).
+    bord_lateral_mm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     score_optim: Mapped[float | None] = mapped_column(Float)
     cout_lot_ht_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 

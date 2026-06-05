@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import require_module
 from app.models import (
+    ConfigCouts,
     CylindreMagnetique,
     Entreprise,
     Machine,
@@ -27,6 +28,7 @@ from app.models import (
 from app.services.diametre_resolver import resoudre_diametre_depart_mm
 from app.schemas.matiere import MatiereOut
 from app.schemas.optimisation import (
+    GeometrieLaize,
     MatcherOutilIn,
     MatcherOutilOut,
     MatchOutilOut,
@@ -323,6 +325,22 @@ def post_calculer(
     palier = entreprise.palier_laize_papier_mm
     marge_liner = float(entreprise.marge_liner_mm)
 
+    # L1 géométrie laize : bord latéral EFFECTIF (surcharge opérateur ou défaut
+    # = chute_laterale_min_mm → laize papier inchangée) + plancher laize
+    # roulable (ConfigCouts, défaut 0 si non configuré → neutre).
+    bord_lateral_effectif = (
+        float(payload.bord_lateral_mm)
+        if payload.bord_lateral_mm is not None
+        else chute_min
+    )
+    _cfg = (
+        db.query(ConfigCouts)
+        .filter_by(entreprise_id=user.entreprise_id)
+        .first()
+    )
+    laize_mini_roulable = float(_cfg.laize_mini_roulable_mm) if _cfg else 0.0
+    forcage_bord_lateral = payload.bord_lateral_mm is not None
+
     matiere_out = (
         MatiereOut.model_validate(matiere_obj) if matiere_obj is not None else None
     )
@@ -360,6 +378,8 @@ def post_calculer(
                 laize_etiq_mm=payload.format.largeur_mm,
                 dev_etiq_mm=payload.format.hauteur_mm,
                 chute_min_mm=chute_min,
+                bord_lateral_mm=bord_lateral_effectif,
+                laize_mini_roulable_mm=laize_mini_roulable,
                 palier_mm=palier,
                 marge_liner_mm=marge_liner,
                 mandrin_mm=diametre_depart_candidat_mm,
@@ -381,6 +401,8 @@ def post_calculer(
                 epaisseur_appliquee_um=epaisseur_appliquee_um,
                 forcage_epaisseur=forcage_epaisseur,
                 motif_forcage_epaisseur=payload.motif_forcage_epaisseur,
+                forcage_bord_lateral=forcage_bord_lateral,
+                motif_bord_lateral=payload.motif_bord_lateral,
             )
         )
 
@@ -408,6 +430,20 @@ def post_calculer(
                 "traçabilité commerciale."
             )
 
+    # L1 — surcharge bord latéral sans motif (Règle 7, non bloquant).
+    if forcage_bord_lateral:
+        warnings.append(
+            f"Bord latéral forcé à {bord_lateral_effectif:g} mm "
+            f"(valeur imposée par l'opérateur, défaut = {chute_min:g} mm)."
+        )
+        motif_bord_norm = (payload.motif_bord_lateral or "").strip()
+        if len(motif_bord_norm) < 10:
+            warnings.append(
+                "Motif de surcharge bord latéral manquant ou trop court "
+                "(< 10 caractères) — pense à le renseigner pour la "
+                "traçabilité commerciale."
+            )
+
     return OptimisationCalculerResponse(
         configurations=configurations_out,
         nb_candidats=out.nb_candidats,
@@ -427,6 +463,8 @@ def _to_config_out(
     laize_etiq_mm: float,
     dev_etiq_mm: float,
     chute_min_mm: float,
+    bord_lateral_mm: float,
+    laize_mini_roulable_mm: float,
     palier_mm: int,
     marge_liner_mm: float,
     mandrin_mm: int,
@@ -448,12 +486,18 @@ def _to_config_out(
     epaisseur_appliquee_um: int,
     forcage_epaisseur: bool,
     motif_forcage_epaisseur: str | None,
+    forcage_bord_lateral: bool = False,
+    motif_bord_lateral: str | None = None,
 ) -> OptimisationConfigOut:
     """Map ConfigurationPose → OptimisationConfigOut avec champs BAT calculés."""
     laize_plaque = calcul_laize_plaque(
         c.nb_poses_laize, laize_etiq_mm, c.intervalle_laize_reel_mm
     )
-    laize_papier = calcul_laize_papier(laize_plaque, chute_min_mm, palier_mm)
+    # L1 : laize papier déterministe = plaque + 2×bord latéral effectif
+    # (défaut = chute_min → valeur inchangée), planchée à laize_mini_roulable.
+    laize_papier = calcul_laize_papier(
+        laize_plaque, bord_lateral_mm, palier_mm, laize_mini_roulable_mm
+    )
     chute_reelle = calcul_chute_reelle_par_cote(laize_papier, laize_plaque)
     ml_total = calcul_ml_total(quantite, c.nb_poses_dev, c.nb_poses_laize, z_cyl_mm)
     m2 = calcul_m2_consomme(ml_total, laize_papier)
@@ -527,6 +571,15 @@ def _to_config_out(
         epaisseur_appliquee_um=int(epaisseur_appliquee_um),
         forcage_epaisseur=forcage_epaisseur,
         motif_forcage_epaisseur=motif_forcage_epaisseur,
+        # L1 — contrat géométrie laize (partagé front).
+        geometrie_laize=GeometrieLaize(
+            laize_plaque_mm=round(laize_plaque, 2),
+            bord_lateral_mm=round(bord_lateral_mm, 2),
+            laize_papier_mm=round(laize_papier, 2),
+            intervalle_laize_mm=round(c.intervalle_laize_reel_mm, 2),
+        ),
+        forcage_bord_lateral=forcage_bord_lateral,
+        motif_bord_lateral=motif_bord_lateral,
     )
 
 

@@ -19,14 +19,20 @@ from sqlalchemy.orm import Session
 from app.models import (
     Client,
     Complexe,
+    ConfigCouts,
     CylindreMagnetique,
     Devis,
+    Entreprise,
     LotProduction,
     Machine,
 )
 from app.schemas.devis import DevisInput
 from app.schemas.devis_persist import DevisCreate, DevisUpdate, NbCouleursIn
 from app.services.cost_engine.errors import CostEngineError
+from app.services.optimisation.bat_calculs import (
+    calcul_laize_papier,
+    calcul_laize_plaque,
+)
 from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.devis_total import ht_total_avec_rebobinage
 from app.services.numero_devis_service import generate_next_numero
@@ -361,6 +367,8 @@ def create_devis(
                 score_optim=lot_in.score_optim,
                 cout_lot_ht_eur=lot_in.cout_lot_ht_eur,
                 payload_visuel=lot_in.payload_visuel,
+                # L1 — bord latéral surchargeable (NULL = défaut chute_min).
+                bord_lateral_mm=lot_in.bord_lateral_mm,
             )
             db.add(lot)
             lots_persistes.append(lot)
@@ -564,6 +572,43 @@ def _chiffrer_devis_multilots(
         lot.cout_lot_ht_eur = detail.prix_vente_ht_eur
 
 
+def _calcul_laize_papier_lot(
+    db: Session, entreprise_id: int, lot: LotProduction, format_l: int
+) -> Decimal | None:
+    """L1 — laize papier déterministe d'un lot (plaque + 2×bord, arrondi
+    palier, plancher roulable). Plomberie pour DevisInput ; NON consommée par
+    P1. GARDÉE : retourne None sur toute donnée manquante/incohérente (le
+    cost_engine ignore ce champ → jamais bloquant pour le chiffrage)."""
+    try:
+        entreprise = db.get(Entreprise, entreprise_id)
+        if entreprise is None:
+            return None
+        chute_min = float(entreprise.chute_laterale_min_mm)
+        palier = int(entreprise.palier_laize_papier_mm)
+        bord = (
+            float(lot.bord_lateral_mm)
+            if lot.bord_lateral_mm is not None
+            else chute_min
+        )
+        cfg = (
+            db.query(ConfigCouts)
+            .filter_by(entreprise_id=entreprise_id)
+            .first()
+        )
+        laize_mini = float(cfg.laize_mini_roulable_mm) if cfg else 0.0
+        if lot.largeur_plaque_mm is not None:
+            laize_plaque = float(lot.largeur_plaque_mm)
+        else:
+            interv = float(lot.intervalle_laize_reel_mm or 0)
+            laize_plaque = calcul_laize_plaque(
+                lot.nb_poses_laize, float(format_l), interv
+            )
+        papier = calcul_laize_papier(laize_plaque, bord, palier, laize_mini)
+        return Decimal(str(papier))
+    except Exception:  # noqa: BLE001 — plomberie non-bloquante (P1 ignore)
+        return None
+
+
 def _construire_devis_input_pour_lot(
     lot: LotProduction,
     payload_input: dict[str, Any],
@@ -653,10 +698,19 @@ def _construire_devis_input_pour_lot(
         if machine.laize_utile_mm is not None
         else machine.laize_max_mm
     )
+
+    # L1 — laize papier déterministe (plaque + 2×bord, arrondi palier, plancher
+    # roulable), EXPOSÉE au DevisInput mais NON consommée par P1 (cost_engine
+    # intouché). Gardée : tout défaut laisse `laize_papier_mm=None` (P1 ignore).
+    laize_papier_val = _calcul_laize_papier_lot(
+        db, entreprise_id, lot, format_l
+    )
+
     return DevisInput(
         complexe_id=complexe.id,
         laize_utile_mm=int(laize_utile_val),
         ml_total=ml_total,
+        laize_papier_mm=laize_papier_val,
         # Sprint 16 fix chiffrage : nb_couleurs propagé depuis le payload
         # (mappé en amont). {} si non fourni → P2 Encres = 0 (antérieur).
         nb_couleurs_par_type=nb_couleurs_par_type or {},
