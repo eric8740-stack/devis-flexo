@@ -10,13 +10,15 @@
 ## En-tête
 
 - **Date** : 2026-06-05
-- **Branche active** : `main` = **`b38544c`** (après #108 — **L1 géométrie laize COMPLET front+back, déployé prod**)
-- **Sprint en cours** : Aucun. **L1 (géométrie laize / bord latéral, P1 INTOUCHÉ) COMPLET** (#107 back + #108 front, déployés). Bugs #5 (calage/montage) et #6 (flux matière↔bobinage) **CLOS**. **Prochaine étape définie : L2** (rebasage P1 sur `laize_papier` + re-baseline des sacrés validée Eric + retrait `marge_confort`) — **pas encore lancé**.
+- **Branche active** : `main` = **`e96757b`** (après #112 — **forçages Règle 7 non bloquants, back déployé prod**)
+- **Sprint en cours** : Aucun. **L1 géométrie laize COMPLET** (#107+#108, déployés) ; **lot Souveraineté (forçages non bloquants) back mergé+déployé (#112)** → front #111 (CC2) derrière. Bugs #5/#6 **CLOS**. **Prochaine étape définie : L2** (rebasage P1 sur `laize_papier` + re-baseline des sacrés validée Eric + retrait `marge_confort`) — **pas encore lancé**.
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- **#112** — feat(optim): **forçages Règle 7 NON BLOQUANTS** — motif optionnel (warning `warnings[]`, plus de 422) pour forçage intervalle dev + épaisseur (laize déjà non bloquant). Bornes `ge/le` conservées ; check structurel lacets asymétriques gardé. **Validation seule, calcul intouché → sacrés EXACTS** (V1a 1 449,09 / tripwire 704,07). Déployé prod.
+- **#110** — docs(etat-projet): L1 COMPLET (front+back) mergé + déployé prod — CC1+CC2 libres.
 - **#108** — feat(optim): **L1-front** (CC2) — saisie **bord latéral (surplus extérieur)** + décompo laize ; consomme `geometrie_laize` + envoie `bord_lateral_mm`/`motif_bord_lateral`. Front pur (back #107 inchangé). vitest 194→198.
 - **#109** — docs(etat-projet): L1-back mergé (#107) + déployé prod — carte + baseline + head alembic.
 - **#107** — feat(optim): **L1 géométrie laize** — `bord_lateral_mm` (surchargeable) + `motif_bord_lateral` + sortie `geometrie_laize` sur `OptimisationConfigOut` + `laize_papier` déterministe (plancher `laize_mini_roulable`). **P1 INTOUCHÉ** (cost_engine) → V1a 1 449,09 € + tripwire 704,07 € EXACTS. Migration `f7a8b9c0d1e2`. Déployé prod (deploy Railway vert).
@@ -25,12 +27,10 @@
 - **#104** — feat(optim): alerte cohérence **fronts ↔ poses laize** (étape Candidats) — `nb_poses_laize` doit être multiple de `nb_fronts_sortie` ; badge + désactivation sélection des incohérents + toggle « Masquer les incohérents » (front pur, `nb_fronts=1` neutre)
 - **#103** — fix(devis): signature de montage trop stricte — retirer `nb_poses_laize` du calage (bug #5)
 - **#102** — feat(devis): **1 calage par montage** (dedup calage des lots de même signature) (bug #5)
-- #101 — docs(backlog): clore bug #6 + noter dette UI flux rebobinage
-- **#100** — feat(devis): `ht_total` consomme le coût rebobinage multilots (épaisseur réelle + paroi) (bug #6 6.2e-final ; base `cost_engine` préservée, ligne additive)
 
 ## PRs ouvertes
 
-Aucune.
+- **#111** — feat(optim): **front souveraineté** (CC2) — affiche les warnings non bloquants des forçages (motif optionnel) ; consomme le champ `warnings` (inchangé). Câble derrière #112 (back mergé).
 
 ## PRs récemment fermées (non mergées)
 
@@ -114,9 +114,12 @@ Aucune.
 - **Non-régression** : `laize_papier` non surchargé == valeur actuelle → **zéro re-baseline**, V1a/tripwire EXACTS. +7 tests L1 back / +4 vitest front.
 
 **Carte qui-fait-quoi :**
-- **CC1 + CC2 = LIBRES** (RAZ). L1 complet livré + déployé prod ; aucun lot en cours.
+- **L1 géométrie laize : COMPLET** (back #107 + front #108, déployés prod).
+- **Lot Souveraineté (forçages Règle 7 non bloquants)** : **back mergé + déployé prod (#112)**. **CC2 câble le front derrière (#111)** : affichage des warnings non bloquants (motif optionnel), champ `warnings` inchangé. CC1 = libre.
 
-**Prochaine étape** : **L2** (rebasage P1 sur `laize_papier` + re-baseline complète des sacrés validée Eric + retrait `marge_confort`) — **défini, PAS encore lancé**. Attend le brief L2.
+**Prochaines étapes** :
+- **#111 (front souveraineté, CC2)** — en cours, derrière #112.
+- **L2** (rebasage P1 sur `laize_papier` + re-baseline complète des sacrés validée Eric + retrait `marge_confort`) — **défini, PAS encore lancé**. Attend le brief L2.
 
 ---
 
