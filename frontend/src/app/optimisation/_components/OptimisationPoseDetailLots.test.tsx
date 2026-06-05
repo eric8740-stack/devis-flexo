@@ -54,7 +54,9 @@ function installFetchMock(matieres: MatiereOut[] = buildMatieres()) {
   global.fetch = fetchSpy as unknown as typeof fetch;
 }
 
-function fakeCandidat(): OptimisationConfigOut {
+function fakeCandidat(
+  overrides: Partial<OptimisationConfigOut> = {},
+): OptimisationConfigOut {
   // Champs minimaux lus par DetailLots + buildIdCandidat ; le reste n'est
   // pas rendu (SchemaImplantation mocké).
   return {
@@ -68,10 +70,11 @@ function fakeCandidat(): OptimisationConfigOut {
     noms_machines_compatibles: ["MA-1"],
     score: 100,
     sens_enroulement: "SE1",
+    ...overrides,
   } as unknown as OptimisationConfigOut;
 }
 
-function setupDetail() {
+function setupDetail(candidat: OptimisationConfigOut = fakeCandidat()) {
   function EpaisseurSpy() {
     const { selection } = useOptimisationPose();
     return (
@@ -84,7 +87,6 @@ function setupDetail() {
     const { goCandidats, toggleSelection, setQuantiteLot } =
       useOptimisationPose();
     useEffect(() => {
-      const candidat = fakeCandidat();
       goCandidats([candidat], 12000, 100, 80, 76);
       toggleSelection(candidat);
       const id = `${candidat.cylindre_id}-${candidat.machine_id}-${candidat.nb_poses_dev}x${candidat.nb_poses_laize}-${candidat.sens_enroulement}`;
@@ -147,5 +149,76 @@ describe("OptimisationPoseDetailLots — épaisseur par lot (bug #6)", () => {
     const catalogue = await screen.findByTestId("epaisseur-catalogue-0");
     expect(catalogue).toHaveTextContent("50 µm");
     expect(screen.queryByTestId("epaisseur-saisie-0")).toBeNull();
+  });
+});
+
+// L1 — décompo laize (lecture seule) depuis le contrat `geometrie_laize`.
+describe("OptimisationPoseDetailLots — décompo laize (L1)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    installFetchMock();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("affiche la décompo laize quand geometrie_laize est présent", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 200,
+          bord_lateral_mm: 10,
+          laize_papier_mm: 220,
+          intervalle_laize_mm: 2,
+        },
+      }),
+    );
+    const decompo = await screen.findByTestId("decompo-laize-0");
+    expect(decompo).toHaveTextContent("200 mm"); // imprimé (laize plaque)
+    expect(decompo).toHaveTextContent("10 mm"); // 2 × bord
+    expect(decompo).toHaveTextContent("220 mm"); // laize papier réelle
+    // Garde-fou : aucun affichage d'impact prix (L1 informatif).
+    expect(decompo).not.toHaveTextContent("€");
+  });
+
+  it("pas de décompo si geometrie_laize absent (devis legacy) — aucun crash", async () => {
+    setupDetail(fakeCandidat()); // pas de geometrie_laize
+    // Le composant se monte (le sélecteur matière apparaît) sans la décompo.
+    await screen.findByRole("combobox");
+    expect(screen.queryByTestId("decompo-laize-0")).toBeNull();
+  });
+
+  it("bord forcé : surface l'écho forcage_bord_lateral + motif", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 200,
+          bord_lateral_mm: 15,
+          laize_papier_mm: 230,
+          intervalle_laize_mm: 2,
+        },
+        forcage_bord_lateral: true,
+        motif_bord_lateral: "Contrainte client export",
+      }),
+    );
+    const force = await screen.findByTestId("bord-force-0");
+    expect(force).toHaveTextContent(/Bord latéral forcé/);
+    expect(force).toHaveTextContent("Contrainte client export");
+  });
+
+  it("bord au défaut (forcage false) : pas d'écho forcé", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 200,
+          bord_lateral_mm: 10,
+          laize_papier_mm: 220,
+          intervalle_laize_mm: 2,
+        },
+        forcage_bord_lateral: false,
+      }),
+    );
+    await screen.findByTestId("decompo-laize-0");
+    expect(screen.queryByTestId("bord-force-0")).toBeNull();
   });
 });
