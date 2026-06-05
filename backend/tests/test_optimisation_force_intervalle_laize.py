@@ -98,7 +98,8 @@ def test_force_intervalle_laize_motif_trop_court_warning_non_bloquant(cleanup_an
     r = client.post("/api/optimisation/calculer", json=payload)
     assert r.status_code == 200, r.text
     warnings = r.json().get("warnings") or []
-    assert any("motif" in w.lower() and "court" in w.lower() for w in warnings), warnings
+    # Wording aligné (Règle 7) : « Forçage intervalle laize sans motif — recommandé ».
+    assert any("sans motif" in w.lower() for w in warnings), warnings
 
 
 def test_force_intervalle_laize_negatif_ou_zero_reste_422(cleanup_and_onboard):
@@ -160,11 +161,19 @@ def test_sans_forcage_intervalle_laize_recommande_egal_applique(cleanup_and_onbo
 # ---------------------------------------------------------------------------
 
 
-def test_force_intervalle_dev_sans_motif_422(cleanup_and_onboard):
+def test_force_intervalle_dev_sans_motif_non_bloquant(cleanup_and_onboard):
+    """Souveraineté (Règle 7) : forçage intervalle dev SANS motif → 200 +
+    warning (plus de 422). Le forçage est appliqué + enregistré (audit
+    « forcé, sans motif »)."""
     _onboard_tenant_minimal()
     payload = _payload_base() | {"intervalle_dev_force_mm": 4.0}
     r = client.post("/api/optimisation/calculer", json=payload)
-    assert r.status_code == 422
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert any("intervalle dev" in w.lower() for w in body["warnings"])
+    top1 = body["configurations"][0]
+    assert top1["forcage_intervalle_dev"] is True
+    assert top1["intervalle_dev_applique_mm"] == 4.0
 
 
 def test_force_intervalle_dev_applique(cleanup_and_onboard):
@@ -175,8 +184,11 @@ def test_force_intervalle_dev_applique(cleanup_and_onboard):
     }
     r = client.post("/api/optimisation/calculer", json=payload)
     assert r.status_code == 200, r.text
-    top1 = r.json()["configurations"][0]
+    body = r.json()
+    top1 = body["configurations"][0]
     assert top1["forcage_intervalle_dev"] is True
     assert top1["intervalle_dev_applique_mm"] == 4.0
     # Le moteur a recalculé son intervalle_dev_reel basé sur 4 mm → ≥ 4 mm
     assert top1["intervalle_dev_reel_mm"] >= 4.0
+    # Avec motif → aucun warning de forçage dev.
+    assert not any("intervalle dev" in w.lower() for w in body["warnings"])

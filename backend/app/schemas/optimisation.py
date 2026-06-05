@@ -184,27 +184,16 @@ class OptimisationCalculerRequest(BaseModel):
 
     @model_validator(mode="after")
     def _valider_forcages_et_lacets(self) -> "OptimisationCalculerRequest":
-        # Forçage intervalle laize : le motif obligatoire (≥10 car.) a été
-        # rétrogradé en warning non bloquant — voir router (warnings[]).
-        # Garde-fou Pydantic conservé : gt=0 / le=50 sur la valeur elle-même.
+        # Souveraineté commerciale (Règle 7) : TOUS les motifs de forçage
+        # (intervalle laize / intervalle dev / épaisseur / bord latéral) sont
+        # NON BLOQUANTS — coche + valeur → le calcul passe TOUJOURS. Le motif
+        # absent/court ne lève plus 422 : le router remonte un WARNING dans
+        # `warnings[]` (audit « forcé, sans motif »). Les BORNES de valeur
+        # (ge/le sur chaque champ) restent des garde-fous Pydantic (une valeur
+        # hors borne reste refusée — sécurité du calcul).
 
-        # Forçage intervalle dev → motif obligatoire ≥ 10 chars
-        if self.intervalle_dev_force_mm is not None:
-            motif = (self.motif_forcage_intervalle_dev or "").strip()
-            if len(motif) < 10:
-                raise ValueError(
-                    "Forçage intervalle dev : motif obligatoire (10 caractères min)."
-                )
-
-        # Forçage épaisseur → motif obligatoire ≥ 10 chars
-        if self.epaisseur_matiere_force_um is not None:
-            motif = (self.motif_forcage_epaisseur or "").strip()
-            if len(motif) < 10:
-                raise ValueError(
-                    "Forçage épaisseur matière : motif obligatoire (10 caractères min)."
-                )
-
-        # Lacets asymétriques → les deux valeurs obligatoires + min 0.5 mm
+        # Lacets asymétriques → check STRUCTUREL (pas un motif) conservé : si
+        # on demande l'asymétrie, les deux valeurs sont nécessaires au calcul.
         if self.lacets_asymetriques:
             if self.lacet_droit_mm is None or self.lacet_gauche_mm is None:
                 raise ValueError(

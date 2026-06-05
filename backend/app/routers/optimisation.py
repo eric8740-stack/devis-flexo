@@ -425,10 +425,23 @@ def post_calculer(
         motif_norm = (payload.motif_forcage_intervalle_laize or "").strip()
         if len(motif_norm) < 10:
             warnings.append(
-                "Motif de forçage intervalle laize manquant ou trop court "
-                "(< 10 caractères) — pense à le renseigner pour la "
-                "traçabilité commerciale."
+                "Forçage intervalle laize sans motif — recommandé."
             )
+
+    # Forçage intervalle dev sans motif (Règle 7, non bloquant) : le forçage
+    # est appliqué + enregistré (forcage_intervalle_dev + valeur dans la
+    # réponse). Le motif n'est plus obligatoire — warning seulement s'il
+    # manque (avec motif → aucun warning).
+    if forcage_intervalle_dev:
+        motif_dev_norm = (payload.motif_forcage_intervalle_dev or "").strip()
+        if len(motif_dev_norm) < 10:
+            warnings.append("Forçage intervalle dev sans motif — recommandé.")
+
+    # Forçage épaisseur matière sans motif (Règle 7, non bloquant).
+    if forcage_epaisseur:
+        motif_ep_norm = (payload.motif_forcage_epaisseur or "").strip()
+        if len(motif_ep_norm) < 10:
+            warnings.append("Forçage épaisseur sans motif — recommandé.")
 
     # L1 — surcharge bord latéral sans motif (Règle 7, non bloquant).
     if forcage_bord_lateral:
