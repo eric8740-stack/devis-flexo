@@ -10,18 +10,20 @@
 ## En-tête
 
 - **Date** : 2026-06-05
-- **Branche active** : `main` = **`e96757b`** (après #112 — **forçages Règle 7 non bloquants, back déployé prod**)
-- **Sprint en cours** : Aucun. **L1 géométrie laize COMPLET** (#107+#108, déployés) ; **lot Souveraineté (forçages non bloquants) back mergé+déployé (#112)** → front #111 (CC2) derrière. Bugs #5/#6 **CLOS**. **Prochaine étape définie : L2** (rebasage P1 sur `laize_papier` + re-baseline des sacrés validée Eric + retrait `marge_confort`) — **pas encore lancé**.
+- **Branche active** : `main` = **`1061ae5`** (après #114 — **L2 rebasage P1 sur laize papier plafonnée, back déployé prod**)
+- **Sprint en cours** : Aucun. **L2 COMPLET (back) MERGÉ + DÉPLOYÉ PROD (#114)** : P1 rebasé sur la laize papier réelle (plafonnée à `laize_utile`), `marge_confort` retirée → **🔴 RE-BASELINE DES SACRÉS** (cf. Baseline tests). **L1 géométrie laize COMPLET** (#107+#108, déployés) ; **lot Souveraineté (forçages non bloquants) COMPLET** (back #112 + front #111). Bugs #5/#6 **CLOS**. CC2 câble le front L2 derrière (décompo laize sur `laize_papier_mm` désormais **plafonnée**).
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
-- **#112** — feat(optim): **forçages Règle 7 NON BLOQUANTS** — motif optionnel (warning `warnings[]`, plus de 422) pour forçage intervalle dev + épaisseur (laize déjà non bloquant). Bornes `ge/le` conservées ; check structurel lacets asymétriques gardé. **Validation seule, calcul intouché → sacrés EXACTS** (V1a 1 449,09 / tripwire 704,07). Déployé prod.
+- **#114** — feat(cost-engine): **L2 rebasage P1 sur laize papier plafonnée** — P1 (matière) facture la laize papier RÉELLE `min(arrondi_palier(plaque + 2×bord), laize_utile)` au lieu de `laize_utile + marge_confort` (retirée, double-comptait les bords). 5ᵉ param `laize_utile_mm` OPTIONNEL sur `calcul_laize_papier` (cap) ; propagation router + crud (machine du lot) ; `poste_1_matiere` consomme `DevisInput.laize_papier_mm`. **🔴 TOUCHE LES SACRÉS → RE-BASELINE validée Eric** (cf. Baseline tests). Clé `details` `laize_machine_mm`→`laize_facturee_mm`+`base_laize_source`. **P4 calage / Ø diamètre INTOUCHÉS**, zéro migration. CI verte, déployé prod (`/` → 200). Baseline **1148**.
+- **#111** — feat(optim): **front souveraineté** (CC2) — motif de forçage recommandé (non bloquant) + note discrète ; consomme `warnings` (inchangé). Câblé derrière #112. → **lot Souveraineté COMPLET**.
+- **#112** — feat(optim): **forçages Règle 7 NON BLOQUANTS** — motif optionnel (warning `warnings[]`, plus de 422) pour forçage intervalle dev + épaisseur (laize déjà non bloquant). Bornes `ge/le` conservées ; check structurel lacets asymétriques gardé. **Validation seule, calcul intouché → sacrés EXACTS au moment du merge** (V1a 1 449,09 / tripwire 704,07 ; **rebasés depuis par L2 #114 → 1 424,31 / 695,36**). Déployé prod.
 - **#110** — docs(etat-projet): L1 COMPLET (front+back) mergé + déployé prod — CC1+CC2 libres.
 - **#108** — feat(optim): **L1-front** (CC2) — saisie **bord latéral (surplus extérieur)** + décompo laize ; consomme `geometrie_laize` + envoie `bord_lateral_mm`/`motif_bord_lateral`. Front pur (back #107 inchangé). vitest 194→198.
 - **#109** — docs(etat-projet): L1-back mergé (#107) + déployé prod — carte + baseline + head alembic.
-- **#107** — feat(optim): **L1 géométrie laize** — `bord_lateral_mm` (surchargeable) + `motif_bord_lateral` + sortie `geometrie_laize` sur `OptimisationConfigOut` + `laize_papier` déterministe (plancher `laize_mini_roulable`). **P1 INTOUCHÉ** (cost_engine) → V1a 1 449,09 € + tripwire 704,07 € EXACTS. Migration `f7a8b9c0d1e2`. Déployé prod (deploy Railway vert).
+- **#107** — feat(optim): **L1 géométrie laize** — `bord_lateral_mm` (surchargeable) + `motif_bord_lateral` + sortie `geometrie_laize` sur `OptimisationConfigOut` + `laize_papier` déterministe (plancher `laize_mini_roulable`). **P1 INTOUCHÉ** (cost_engine) → V1a 1 449,09 € + tripwire 704,07 € EXACTS **au moment du merge** (**rebasés depuis par L2 #114 → 1 424,31 / 695,36**). Migration `f7a8b9c0d1e2`. Déployé prod (deploy Railway vert).
 - **#106** — docs(etat-projet): chantier L1 laize papier (séquencé L1/L2) + carte qui-fait-quoi + reconcile #105.
 - **#105** — feat(machine): `type_machine` (presse/finition) + filtre loader optim — les finitions (Daco) ne génèrent plus de candidats. Migration `e6f7a8b9c0d1` (re-type par motif daco/rotoflex/finition, tous tenants). Sacrés EXACTS.
 - **#104** — feat(optim): alerte cohérence **fronts ↔ poses laize** (étape Candidats) — `nb_poses_laize` doit être multiple de `nb_fronts_sortie` ; badge + désactivation sélection des incohérents + toggle « Masquer les incohérents » (front pur, `nb_fronts=1` neutre)
@@ -30,7 +32,7 @@
 
 ## PRs ouvertes
 
-- **#111** — feat(optim): **front souveraineté** (CC2) — affiche les warnings non bloquants des forçages (motif optionnel) ; consomme le champ `warnings` (inchangé). Câble derrière #112 (back mergé).
+- _(aucune)_ — #111 (front souveraineté) mergé ; #114 (L2 back) mergé.
 
 ## PRs récemment fermées (non mergées)
 
@@ -42,13 +44,34 @@
 
 ## Baseline tests
 
-- **pytest local** (SQLite, `PG_TEST_URL` absent) : `1148 passed, 10 skipped, 0 failed` — main + L1-back géométrie laize (#107 ; +7 tests : plancher `laize_mini_roulable` + endpoint `geometrie_laize`/bord/écho). Skips : 2 tests subprocess SQLite migration P1+P2 (limitation FK enforcement vs alembic transaction, documentée), 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
-- **pytest CI** (service `postgres:16`) : `1154 passed, 4 skipped, 0 failed` — inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod). Seuls les 4 skips inévitables restent (2 SQLite subprocess + 2 modèles obsolètes).
-- **Benchmark V1a 1 449,09 € + 5 cas (V1b/V2/V3/V4) + V8 : 13/13 EXACT** post-merge.
-- **Tripwire multi-lots P0b (`704,07 €`) : EXACT** post-merge — value-neutral confirmé (la migration `b2c3d4e5f6g7` n'a pas bougé la `laize_utile_mm = 320` pour Mark Andy 2200, principe sacré préservé).
-- **vitest** : `198/198 tests passed` — +4 sur L1-front bord latéral (#108 : saisie surplus extérieur + décompo laize) ; +4 alerte cohérence fronts↔poses laize (#104) ; bug #6 front (6.2b→6.2e) intégralement couvert.
+> **🔴 RE-BASELINE SACRÉE L2 (#114, 2026-06-05) — LIRE EN PRIORITÉ.**
+> P1 (matière) facture désormais la **laize papier réelle plafonnée** (et plus
+> `laize_utile + marge_confort`). **Les anciens sacrés `1 449,09 €` et
+> `704,07 €` NE SONT PLUS valides** — toute occurrence ci-dessous ou dans les
+> archives historiques de ce doc qui les cite est un snapshot PRÉ-L2.
+> **Nouvelle baseline sacrée validée Eric** :
+>
+> | Cas | Valeur sacrée L2 | Plafond mord ? |
+> |---|---|---|
+> | **V1a** | **1 424,31 €** HT | non (papier 210 < laize_utile 220) |
+> | **V1b** | **1 896,31 €** HT | non |
+> | **V2** | **738,88 €** HT | non |
+> | **V3** | **8 189,67 €** HT | non |
+> | **V4** | **1 672,39 €** HT | non |
+> | **V7a** | **1 424,31 €** / **6,73 €/mille** | non |
+> | **V8a** | **1 424,31 €** / **3,37 €/mille** | non |
+> | **Tripwire P0b multi-lots** | **695,36 €** HT | **oui** (papier brut 330 > laize_utile 320 → cap 320) |
+>
+> V8b-e : **ratios inchangés** (non re-figés — passent par le fallback legacy
+> `laize_utile + marge_confort`, vérifiés verts).
+
+- **pytest local** (SQLite, `PG_TEST_URL` absent) : `1148 passed, 10 skipped, 0 failed` — inclut L2 (#114) : 2 tests unitaires P1 recalibrés (clé `laize_facturee_mm` + `base_laize_source`) + sacrés re-figés (5cas / benchmark / matching / tripwire P0b). Skips : 2 tests subprocess SQLite migration P1+P2, 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
+- **pytest CI** (service `postgres:16`) : vert sur #114 (`test` job 6m29s). Inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod).
+- **Benchmark `cost_engine` 13/13 EXACT** post-#114 — re-figés aux valeurs L2 (V1a 1 424,31 / V1b 1 896,31 / V2 738,88 / V3 8 189,67 / V4 1 672,39 / V7a 6,73 / V8a 3,37 ; V8b-e ratios inchangés).
+- **Tripwire multi-lots P0b : `695,36 €` EXACT** post-#114 — le plafond `laize_utile=320` MORD ici (laize_plaque 310, papier brut 330 → cap 320), base P1 330→320 → P1 243,56→236,18. Garde anti-drift fixture `machine.laize_utile_mm == 320` conservée.
+- **vitest** : `198/198 tests passed` (back L2 sans impact front). ⚠️ **CC2 doit recalibrer** la décompo laize : `geometrie_laize.laize_papier_mm` est désormais **plafonnée**.
 - **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
-- **alembic** : HEAD = **`f7a8b9c0d1e2`** (L1 géométrie laize, #107 : `config_couts.laize_mini_roulable_mm` défaut 0 + `lot_production.bord_lateral_mm` nullable, additif). **Appliquée en prod Railway** post-merge #107 (deploy vert, `/` → 200). Précédents `e6f7a8b9c0d1` (type_machine) → `d5e6f7a8b9c0` (paroi mandrin) → `c4d5e6f7a8b9` (config_couts ICE) → `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
+- **alembic** : HEAD = **`f7a8b9c0d1e2`** (L1 géométrie laize, #107 — **L2 #114 n'ajoute AUCUNE migration**, logique seule). `config_couts.laize_mini_roulable_mm` défaut 0 + `lot_production.bord_lateral_mm` nullable, additif. **Appliquée en prod Railway** (deploy vert, `/` → 200). Précédents `e6f7a8b9c0d1` (type_machine) → `d5e6f7a8b9c0` (paroi mandrin) → `c4d5e6f7a8b9` (config_couts ICE) → `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
 
 ---
 
@@ -61,13 +84,13 @@
 - Refactor `cost_engine` Phase 2 : Lot 1 benchmark figé (#67), Lot 2 marge scopée tenant + isolation multi-tenant (#70), Lot 3 P5/P7 scopés tenant via `ConfigCouts` (#72), **Lot 4a 7 tarifs P1/P3/P4/P6 scopés tenant via `ConfigCouts` (#75)**. **Dette config-driven Phase 2 identifiée 28/05 → résolue par Lots 1/2/3/4a (marge, P5/P7, P1/P3/P4/P6).**
 - Numérotation devis robuste (#77, 29/05) — `UNIQUE(devis.numero)` scopée tenant via `ix_devis_entreprise_id_numero` + `generate_next_numero` en `MAX(seq)+1` scope tenant + retry loop borné (5). Résout 409 sur hard-delete (count+1 rebouchait les trous) et autorise deux tenants à avoir chacun `DEV-YYYY-0001` sans collision.
 - **Convergence machines B1/B2/B3a/B3b (#80 + #81 + #82 + #83, 29/05-01/06)** — `Machine` legacy enrichi des 3 champs optim (`laize_utile_mm`, `nb_postes_decoupe`, `options`) + renommage `nb_couleurs` → `nb_groupes_couleurs`. UI `/machines` expose ces champs dans un bloc DISTINCT « Paramètres optimisation » (multi-select alimenté par `GET /api/machines/modules-disponibles`). **Vitesse réelle unique** : `vitesse_moyenne_m_h ÷ 60` pilote chiffrage ET optim, label harmonisé entre `/machines` et Stratégique > Machines (100/58/75 cohérents). **Moteur d'optim repointé sur `Machine` (B3a #82)** : `optimisation_loader.charger_machines_actives` lit le parc réel (P5/Daco/Atelier 2) au lieu du catalogue `MachineImprimerie` (Mark Andy 2200) → étape 2 « Candidats viables » affiche le vrai parc utilisateur. **B3b #83** : colonne morte `machine.vitesse_pratique_m_min` droppée (migration `a1b2c3d4e5f6` réversible).
-- **P0b tripwire sacré multi-lots (#84, 02/06)** — `test_benchmark_multilots_sacred_p0b.py` fige `prix_vente_ht_eur = 704,07 €` sur scénario déterministe `POST /api/devis` multi-lots (1 lot, 100×80mm, 2×3 poses, qté 10 000, `laize_utile=320`). Garde anti-drift fixture : assertion explicite `machine.laize_utile_mm == 320` sur la machine source (échoue FORT si l'ordre/le catalogue change). Maintenu EXACT post-P1+P2.
-- **Unify `Machine` ↔ `MachineImprimerie` — P1+P2 (#86 + hotfix #87, 02/06)** — fin de la convergence. Migration `b2c3d4e5f6g7` (RÉVERSIBLE, dialect-aware) : (1) bump `machine_id_seq` Postgres défensif AVANT INSERT presses ; (2) INSERT 3 presses catalogue (Mark Andy 2200 / OMET XFlex 330 / Nilpeter FA-22) depuis `MachineImprimerie` dans `Machine`, idempotent par `(nom, entreprise_id)` ; (3) **UPDATE atomique CASE WHEN** des FK `lot_production.machine_id` + `porte_cliche.machine_id` (`machine_imprimerie.id` → `machine.id`) — anti-cascade bug ; (4) DROP `machine_imprimerie` + DROP `configuration_pose` (table jamais peuplée). Code repointé sur `Machine` (`crud/devis`, `services/onboarding_service`, `routers/porte_cliche`, `scripts/seed`). Modèles `machine_imprimerie.py` + `configuration_pose.py` supprimés. **Test PG sous FK strictes** (`test_migration_p1p2_sous_fk_strictes_postgres`) en CI via service `postgres:16` du workflow `backend.yml` — sentinelle scénario réel boot Railway prod. **Parc démo (`entreprise_id=1`) post-migration : 6 machines actives** — Mark Andy P5 + Daco D250 finition + Atelier 2 (parc utilisateur existant) + Mark Andy 2200 + OMET XFlex 330 + Nilpeter FA-22 (catalogue MI réinsérées). **Aucune fiche `Machine` existante touchée** (Daco / Atelier conservés). Principe VALUE-NEUTRAL respecté : tripwire `704,07 €` resté EXACT.
+- **P0b tripwire sacré multi-lots (#84, 02/06)** — `test_benchmark_multilots_sacred_p0b.py` fige le `prix_vente_ht_eur` sur scénario déterministe `POST /api/devis` multi-lots (1 lot, 100×80mm, 2×3 poses, qté 10 000, `laize_utile=320`). Garde anti-drift fixture : assertion explicite `machine.laize_utile_mm == 320` sur la machine source (échoue FORT si l'ordre/le catalogue change). **Valeur figée : `704,07 €` (pré-L2) → REBASÉE par L2 #114 à `695,36 €`** (le plafond `laize_utile=320` MORD ici : papier brut 330 → cap 320).
+- **Unify `Machine` ↔ `MachineImprimerie` — P1+P2 (#86 + hotfix #87, 02/06)** — fin de la convergence. Migration `b2c3d4e5f6g7` (RÉVERSIBLE, dialect-aware) : (1) bump `machine_id_seq` Postgres défensif AVANT INSERT presses ; (2) INSERT 3 presses catalogue (Mark Andy 2200 / OMET XFlex 330 / Nilpeter FA-22) depuis `MachineImprimerie` dans `Machine`, idempotent par `(nom, entreprise_id)` ; (3) **UPDATE atomique CASE WHEN** des FK `lot_production.machine_id` + `porte_cliche.machine_id` (`machine_imprimerie.id` → `machine.id`) — anti-cascade bug ; (4) DROP `machine_imprimerie` + DROP `configuration_pose` (table jamais peuplée). Code repointé sur `Machine` (`crud/devis`, `services/onboarding_service`, `routers/porte_cliche`, `scripts/seed`). Modèles `machine_imprimerie.py` + `configuration_pose.py` supprimés. **Test PG sous FK strictes** (`test_migration_p1p2_sous_fk_strictes_postgres`) en CI via service `postgres:16` du workflow `backend.yml` — sentinelle scénario réel boot Railway prod. **Parc démo (`entreprise_id=1`) post-migration : 6 machines actives** — Mark Andy P5 + Daco D250 finition + Atelier 2 (parc utilisateur existant) + Mark Andy 2200 + OMET XFlex 330 + Nilpeter FA-22 (catalogue MI réinsérées). **Aucune fiche `Machine` existante touchée** (Daco / Atelier conservés). Principe VALUE-NEUTRAL respecté : tripwire `704,07 €` resté EXACT **à l'époque** (rebasé depuis à `695,36 €` par L2 #114).
 - Hotfix build : fichiers de test exclus du `next build` (`tsconfig.exclude` + `.eslintrc.ignorePatterns`) ; vitest continue de les exécuter via esbuild (#69).
 
 ## En cours / à venir
 
-- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** — ✅ **FERMÉE** post-merge #86 + hotfix #87 (02/06). Récap des étapes : P0a (audit) → P0b (tripwire `704,07 €` #84) → **P1+P2 (#86) + hotfix #87** : migration `b2c3d4e5f6g7` + repoint code + suppression `MachineImprimerie` + `ConfigurationPose`. Tripwire EXACT, V1a 13/13 EXACT.
+- **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** — ✅ **FERMÉE** post-merge #86 + hotfix #87 (02/06). Récap des étapes : P0a (audit) → P0b (tripwire `704,07 €` #84, **rebasé `695,36 €` par L2 #114**) → **P1+P2 (#86) + hotfix #87** : migration `b2c3d4e5f6g7` + repoint code + suppression `MachineImprimerie` + `ConfigurationPose`. Tripwire EXACT, V1a 13/13 EXACT (valeurs pré-L2).
 - **🔴 NOUVEAU follow-up critique** (cf. [`docs/BACKLOG_BUGS_session_2026-06-02.md`](BACKLOG_BUGS_session_2026-06-02.md)) — **les 3 presses migrées (Mark Andy 2200 / OMET / Nilpeter) sont `actif=true` mais n'apparaissent PAS comme candidates dans l'optim** sur le compte démo. Seuls P5 et Atelier 2 ressortent → 0 config viable pour les 3. Pas le flag `actif` (vérifié post-migration). Investiguer `charger_machines_actives` + la génération de candidats : champ NULL requis (`vitesse_max_m_min` / `largeur_max_mm` / `duree_calage_h` défaultés à NULL par la migration ?) ou appariement cylindre ↔ machine. Sprint dédié à planifier prochaine session.
 - **Pattern migrations data à auditer** (leçons P1+P2) :
   - (a) Remap d'ids en boucle = **cascade UPDATE** quand `new_id` coïncide avec un `old_id` futur → toujours faire un **UPDATE atomique CASE WHEN** ou table de mapping temporaire.
@@ -99,29 +122,44 @@
 
 ## Carte multi-instances
 
-### Chantier — Moteur matière : laize papier réelle (séquencé 2 temps) — **L1 COMPLET (front + back) MERGÉ + DÉPLOYÉ PROD ✅**
+### Chantier — Moteur matière : laize papier réelle (séquencé 2 temps) — **L1 + L2 COMPLETS (back) MERGÉS + DÉPLOYÉS PROD ✅**
 
-**Décision Eric validée** : facturer la matière RÉELLE (bords inclus) = rebaser P1 sur `laize_papier`. La **gate read-only** a montré que le rebasage frontal n'est **PAS value-neutral** (V1a 1 449,09 € → ≈ 1 424 €, valeur dépendante de l'intervalle absent de la fixture cost_engine). D'où un **séquençage en 2 temps** :
+**Décision Eric validée** : facturer la matière RÉELLE (bords inclus) = rebaser P1 sur `laize_papier`. La **gate read-only** a montré que le rebasage frontal n'est **PAS value-neutral** (V1a 1 449,09 € → **1 424,31 €**, valeur dépendante de l'intervalle absent de la fixture cost_engine). D'où un **séquençage en 2 temps**, **les deux désormais livrés côté back** :
 
-- **L1 — ✅ COMPLET** : back (#107) + front (#108) **mergés + déployés prod**. Géométrie laize figée + saisie bord latéral (surplus extérieur) + décompo laize côté UI. **P1 INTOUCHÉ** → value-neutral, sacrés EXACTS.
-- **L2 (DÉFINI, PAS ENCORE LANCÉ)** — rebaser P1 sur `laize_papier` + **RE-BASELINE COMPLÈTE des sacrés** (V1a/V1b/V7a/V2-3-4/V8/tripwire) **validée par Eric**. Retirer `marge_confort` du calcul matière (double-compte avec les bords). Plancher `laize_mini_roulable`.
+- **L1 — ✅ COMPLET** : back (#107) + front (#108) **mergés + déployés prod**. Géométrie laize figée + saisie bord latéral (surplus extérieur) + décompo laize côté UI. **P1 INTOUCHÉ** → value-neutral, sacrés EXACTS (à l'époque).
+- **L2 — ✅ COMPLET (back, #114)** : P1 rebasé sur `laize_papier` **plafonnée** `min(arrondi_palier(plaque + 2×bord), laize_utile)`, `marge_confort` **retirée** (double-comptait les bords), plancher `laize_mini_roulable` conservé (appliqué après le plafond). **RE-BASELINE COMPLÈTE des sacrés validée Eric** (V1a 1 424,31 · V1b 1 896,31 · V2 738,88 · V3 8 189,67 · V4 1 672,39 · V7a 6,73 · V8a 3,37 · tripwire P0b 695,36 ; V8b-e ratios inchangés). **P4 calage / Ø diamètre INTOUCHÉS**, zéro migration. Déployé prod (`/` → 200). **CC2 câble le front derrière** : la décompo laize consomme `geometrie_laize.laize_papier_mm` désormais **PLAFONNÉE** → recalibrer les vitest décompo.
 
 **L1 — contrat LIVRÉ (#107 back + #108 front) :**
+
 - Défaut bord : **`bord_lateral_effectif` = `chute_laterale_min_mm` (10 mm)**, PAS intervalle/2. **Symétrique** en L1 ; asymétrie g/d reportée. **Ne PAS toucher** lacets / intervalle interne (concepts séparés).
 - **Entrée** `POST /api/optimisation/calculer` : `bord_lateral_mm` (float, `ge=0 le=100`, NULL → défaut chute_min) **+ `motif_bord_lateral`** (str, Règle 7 → warning non bloquant si surcharge sans motif).
 - **Sortie** : `geometrie_laize = { laize_plaque_mm, bord_lateral_mm (EFFECTIF), laize_papier_mm, intervalle_laize_mm }` sur **`OptimisationConfigOut.geometrie_laize`** + écho `forcage_bord_lateral` / `motif_bord_lateral`. Front consomme + affiche la décompo (#108).
-- Plomberie : `DevisInput.laize_papier_mm` (optionnel, **exposé mais NON consommé par P1**), `LotProduction.bord_lateral_mm` (nullable), `ConfigCouts.laize_mini_roulable_mm` (défaut 0). Migration `f7a8b9c0d1e2`.
-- **Non-régression** : `laize_papier` non surchargé == valeur actuelle → **zéro re-baseline**, V1a/tripwire EXACTS. +7 tests L1 back / +4 vitest front.
+
+**L2 — contrat LIVRÉ (#114 back) :**
+
+- `bat_calculs.calcul_laize_papier` : 5ᵉ param `laize_utile_mm` **OPTIONNEL** (défaut `None` = pas de cap → non-régressif pour les appels positionnels). Plafond appliqué AVANT le plancher.
+- Propagation `laize_utile` : router `_to_config_out` (laize utile du candidat) + crud `_calcul_laize_papier_lot` (machine du lot).
+- `poste_1_matiere` : `surface = laize_papier × ml` quand `DevisInput.laize_papier_mm` fourni (marge_confort retirée) ; fallback legacy `laize_utile + marge_confort` sinon. Clé `details` `laize_machine_mm`→`laize_facturee_mm` + `base_laize_source`.
 
 **Carte qui-fait-quoi :**
+
 - **L1 géométrie laize : COMPLET** (back #107 + front #108, déployés prod).
-- **Lot Souveraineté (forçages Règle 7 non bloquants)** : **back mergé + déployé prod (#112)**. **CC2 câble le front derrière (#111)** : affichage des warnings non bloquants (motif optionnel), champ `warnings` inchangé. CC1 = libre.
+- **L2 rebasage P1 : COMPLET (back #114, déployé prod)**. **CC2 câble le front** : recalibre la décompo laize sur `laize_papier_mm` plafonnée (vitest).
+- **Lot Souveraineté (forçages Règle 7 non bloquants) : COMPLET** — back #112 + front #111 mergés + déployés prod.
 
 **Prochaines étapes** :
-- **#111 (front souveraineté, CC2)** — en cours, derrière #112.
-- **L2** (rebasage P1 sur `laize_papier` + re-baseline complète des sacrés validée Eric + retrait `marge_confort`) — **défini, PAS encore lancé**. Attend le brief L2.
+
+- **CC2 front L2** — recalibrer les tests vitest de décompo laize (`laize_papier_mm` désormais plafonnée) + vérifier l'affichage.
+- Suites Phase 2 (Lot 4b UI Stratégique, cleanup `TarifPoste`, `Machine` override P5) — cf. « En cours / à venir ».
 
 ---
+
+> **⚠️ ARCHIVE HISTORIQUE (snapshots PRÉ-L2).** Les cartes datées ci-dessous
+> citent les sacrés tels qu'ils étaient à la date de chaque PR : `V1a 1 449,09 €`
+> et `tripwire P0b 704,07 €`. **Ces valeurs ont été REBASÉES par L2 #114
+> (2026-06-05) à `1 424,31 €` et `695,36 €`** (P1 sur laize papier réelle
+> plafonnée, `marge_confort` retirée). Ne PAS les reprendre comme sacrés vivants
+> — la baseline sacrée à jour est en tête de doc (§ Baseline tests).
 
 Lots livrés ce 03/06 :
 
@@ -161,7 +199,7 @@ Ne JAMAIS modifier sans validation explicite. Tests verrouillés en CI.
 
 - **Convention métier flexographique — 8 sens d'enroulement** : `SE1`-`SE8` mappés à des rotations VUE A / VUE C figées. Fichier : [`backend/app/services/rotation_se.py`](../backend/app/services/rotation_se.py). Les sens vierges `SE0` / `SE9` (sans impression) sont délégués à une **façade** [`sens_metadata.py`](../backend/app/services/sens_metadata.py) qui laisse `rotation_se` intact ; tests historiques `tests/test_rotation_se.py` continuent d'asserter que 0/9 lèvent `ValueError` côté `rotation_se`.
 - **Benchmark `cost_engine` V1a / V8** : valeurs figées par expertise métier terrain, asserties strictement en CI sur fixture découplée DB. Fichier : [`backend/tests/test_cost_engine_benchmark.py`](../backend/tests/test_cost_engine_benchmark.py) — `EXPECTED_TOTAL_HT = Decimal("1449.09")` · `EXPECTED_COUT_REVIENT = Decimal("1228.04")`.
-- **Benchmark `cost_engine` 5 cas (V1a / V1b / V2 / V3 / V4)** : verrou multi-cas Phase 2 sur fixture in-memory pure (snapshot ICE figé en INSERT Python). Fichier : [`backend/tests/test_cost_engine_5cas_benchmark.py`](../backend/tests/test_cost_engine_5cas_benchmark.py) — 11 tests, V1a 1 449,09 € HT / V1b 1 921,09 € / V2 743,01 € / V3 8 437,47 € / V4 1 697,17 €.
+- **Benchmark `cost_engine` 5 cas (V1a / V1b / V2 / V3 / V4)** : verrou multi-cas Phase 2 sur fixture in-memory pure (snapshot ICE figé en INSERT Python). Fichier : [`backend/tests/test_cost_engine_5cas_benchmark.py`](../backend/tests/test_cost_engine_5cas_benchmark.py) — 11 tests. **Valeurs sacrées L2 (#114)** : V1a **1 424,31 €** HT / V1b **1 896,31 €** / V2 **738,88 €** / V3 **8 189,67 €** / V4 **1 672,39 €** (la fixture injecte la géométrie `laize_papier_mm=210`, plafond `laize_utile 220` ne mord pas).
 - **Multi-tenant strict** : toute lecture `cost_engine` scopée `entreprise_id` via `get_config_couts_or_raise(db, entreprise_id)`. Pas de fallback silencieux (`CostEngineError` si la `ConfigCouts` du tenant manque). Fichier : [`backend/app/services/cost_engine/_config_reader.py`](../backend/app/services/cost_engine/_config_reader.py).
 - **`UNIQUE(devis.numero)` scope tenant** : la contrainte est portée par l'index composite `ix_devis_entreprise_id_numero` (migration `y9n2i3g7d5f0`, fix #77). `generate_next_numero(db, entreprise_id)` lit `MAX(seq)+1` scope tenant (jamais `count+1`). Retry loop borné (5) sur collision dans `crud.create_devis` / `duplicate_devis`. Repro : [`backend/scripts/repro_409_devis_numero.py`](../backend/scripts/repro_409_devis_numero.py).
 - **`update_devis` préserve le `payload_output` recalculé** : quand `lots_in is not None`, `_chiffrer_devis_multilots` enrichit `payload_output` (mode='multi-lots' + `details_par_lot[].details.postes[7]`) ; le pop conditionnel `payload_output`/`payload_input` du `fields` empêche le body de l'écraser (fix #78). Le flux mono-config legacy `DevisSaveBar` (sans `lots`) garde son contrat actuel (le body décrit le payload stocké tel quel). Repro : [`backend/scripts/dump_payload_output_post_put.py`](../backend/scripts/dump_payload_output_post_put.py).
@@ -188,4 +226,4 @@ Ne JAMAIS modifier sans validation explicite. Tests verrouillés en CI.
 - Avant tout push impactant le frontend : `cd frontend && rm -rf .next && npx tsc --noEmit && npx next lint && npm run build && npx vitest run`. Vercel preview est plus strict que le `npm run build` local non-nettoyé (cf. hotfix #69).
 - Aucun merge tant que le preview Vercel et Railway de la PR ne sont pas verts (gate brief explicite, leçon #68).
 - Les fichiers `*.test.{ts,tsx}` et `*.spec.{ts,tsx}` sont exclus du `next build` (tsconfig + eslintrc). Les ajouter au scope vitest, jamais au scope build prod.
-- **Phase 2 cost_engine — pattern de lot** : pour chaque migration de tarif depuis `TarifPoste` vers `ConfigCouts`, (1) migration alembic additive avec `server_default` = template neutre + `UPDATE` scopé `entreprise_id=1` aux valeurs ICE legacy ; (2) seed démo aligné aux mêmes ICE ; (3) `default=` modèle = template neutre (nouveaux tenants via get-or-create) ; (4) `TarifPoste` champs correspondants conservés en base, plus consommés ; (5) fixture benchmark mise à jour aux ICE → V1a 1 449,09 € EXACT préservé.
+- **Phase 2 cost_engine — pattern de lot** : pour chaque migration de tarif depuis `TarifPoste` vers `ConfigCouts`, (1) migration alembic additive avec `server_default` = template neutre + `UPDATE` scopé `entreprise_id=1` aux valeurs ICE legacy ; (2) seed démo aligné aux mêmes ICE ; (3) `default=` modèle = template neutre (nouveaux tenants via get-or-create) ; (4) `TarifPoste` champs correspondants conservés en base, plus consommés ; (5) fixture benchmark mise à jour aux ICE → V1a EXACT préservé (`1 449,09 €` à l'ère Phase 2 ; **rebasé `1 424,31 €` par L2 #114**).
