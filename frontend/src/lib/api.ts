@@ -1177,6 +1177,9 @@ export interface OptimisationCalculerRequest {
   // backend = `entreprise.chute_laterale_min_mm` (non-régression stricte).
   // Concept SÉPARÉ des lacets (intervalle/2, intouchés). Asymétrie g/d hors L1.
   bord_lateral_mm?: number | null;
+  // L1 — motif de surcharge (Règle 7). Si `bord_lateral_mm` posé sans motif
+  // (ou < 10 car.), le backend renvoie un warning NON bloquant.
+  motif_bord_lateral?: string | null;
 }
 
 // L1 — contrat géométrie laize partagé (par candidat). Aligné sur
@@ -1266,6 +1269,10 @@ export interface OptimisationConfigOut {
   // /calculer). Optionnel côté front : les `payload_visuel` des devis legacy
   // (créés avant L1) ne le portent pas → l'affichage décompo se garde dessus.
   geometrie_laize?: GeometrieLaize;
+  // L1 — échos de surcharge bord latéral (Règle 7). `forcage_bord_lateral` =
+  // false quand le bord est au défaut entreprise. Optionnels (legacy).
+  forcage_bord_lateral?: boolean;
+  motif_bord_lateral?: string | null;
 }
 
 export interface OptimisationCalculerResponse {

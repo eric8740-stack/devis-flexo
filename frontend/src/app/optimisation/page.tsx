@@ -285,6 +285,7 @@ function OptimisationPoseSaisie() {
   const [bordDefautMoteur, setBordDefautMoteur] = useState<number | null>(null);
   const [forcerBord, setForcerBord] = useState(false);
   const [bordLateral, setBordLateral] = useState<string>("");
+  const [motifBord, setMotifBord] = useState<string>("");
 
   const [submitting, setSubmitting] = useState(false);
   // Brief #28 : `response` state retiré — l'étape 2 (OptimisationPoseCandidats)
@@ -401,8 +402,10 @@ function OptimisationPoseSaisie() {
             ? parseInt(nbPosesLaizeForce, 10)
             : null,
         // L1 — bord latéral : null si non forcé (backend applique le défaut
-        // entreprise → non-régression stricte), sinon la valeur saisie.
+        // entreprise → non-régression stricte), sinon la valeur saisie + motif
+        // (Règle 7 ; motif manquant/court → warning non bloquant backend).
         bord_lateral_mm: forcerBord ? parseFloat(bordLateral) : null,
+        motif_bord_lateral: forcerBord ? motifBord : null,
       });
       if (r.nb_candidats === 0) {
         toast({
@@ -984,6 +987,18 @@ function OptimisationPoseSaisie() {
                     Surplus de matière de chaque côté de l&apos;impression. La
                     laize papier réelle = laize imprimée + 2 × bord latéral.
                     N&apos;impacte pas le prix en l&apos;état.
+                  </p>
+                  <textarea
+                    className="mt-2 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    rows={2}
+                    placeholder="Motif de la surcharge (10 caractères minimum — Règle 7)"
+                    value={motifBord}
+                    onChange={(e) => setMotifBord(e.target.value)}
+                    data-testid="motif-bord-lateral"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Motif tracé (souveraineté commerciale). Manquant ou trop
+                    court → simple avertissement, le calcul passe quand même.
                   </p>
                 </div>
               )}

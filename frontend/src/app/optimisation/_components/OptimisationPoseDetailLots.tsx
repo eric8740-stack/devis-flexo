@@ -226,6 +226,17 @@ export function OptimisationPoseDetailLots() {
                     </strong>{" "}
                     de laize papier réelle
                   </div>
+                  {lot.candidat.forcage_bord_lateral && (
+                    <div
+                      data-testid={`bord-force-${idx}`}
+                      className="mt-1 text-xs text-amber-800"
+                    >
+                      ⚠ Bord latéral forcé
+                      {lot.candidat.motif_bord_lateral
+                        ? ` — ${lot.candidat.motif_bord_lateral}`
+                        : " (motif manquant)"}
+                    </div>
+                  )}
                 </div>
               )}
 

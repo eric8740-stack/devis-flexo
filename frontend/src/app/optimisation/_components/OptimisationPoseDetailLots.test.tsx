@@ -187,4 +187,38 @@ describe("OptimisationPoseDetailLots — décompo laize (L1)", () => {
     await screen.findByRole("combobox");
     expect(screen.queryByTestId("decompo-laize-0")).toBeNull();
   });
+
+  it("bord forcé : surface l'écho forcage_bord_lateral + motif", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 200,
+          bord_lateral_mm: 15,
+          laize_papier_mm: 230,
+          intervalle_laize_mm: 2,
+        },
+        forcage_bord_lateral: true,
+        motif_bord_lateral: "Contrainte client export",
+      }),
+    );
+    const force = await screen.findByTestId("bord-force-0");
+    expect(force).toHaveTextContent(/Bord latéral forcé/);
+    expect(force).toHaveTextContent("Contrainte client export");
+  });
+
+  it("bord au défaut (forcage false) : pas d'écho forcé", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 200,
+          bord_lateral_mm: 10,
+          laize_papier_mm: 220,
+          intervalle_laize_mm: 2,
+        },
+        forcage_bord_lateral: false,
+      }),
+    );
+    await screen.findByTestId("decompo-laize-0");
+    expect(screen.queryByTestId("bord-force-0")).toBeNull();
+  });
 });
