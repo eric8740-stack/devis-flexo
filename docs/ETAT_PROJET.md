@@ -9,14 +9,16 @@
 
 ## En-tête
 
-- **Date** : 2026-06-03
-- **Branche active** : `main` (après #104 — bugs #5 calage/montage + #6 flux rebobinage CLOS + alerte cohérence fronts↔poses laize)
-- **Sprint en cours** : Aucun. Dette archi « unifier `Machine` ↔ `MachineImprimerie` » **FERMÉE** ; **bug #6 (flux matière↔bobinage, Ø + coût) CLOS** (PRs #93→#100), **bug #5 (1 calage par montage) CLOS** (#102/#103). Prochain : follow-ups UX (cf. `docs/BACKLOG_BUGS_session_2026-06-02.md` — dette UI flux rebobinage, #2/#3/#4).
+- **Date** : 2026-06-05
+- **Branche active** : `main` = **`b38544c`** (après #108 — **L1 géométrie laize COMPLET front+back, déployé prod**)
+- **Sprint en cours** : Aucun. **L1 (géométrie laize / bord latéral, P1 INTOUCHÉ) COMPLET** (#107 back + #108 front, déployés). Bugs #5 (calage/montage) et #6 (flux matière↔bobinage) **CLOS**. **Prochaine étape définie : L2** (rebasage P1 sur `laize_papier` + re-baseline des sacrés validée Eric + retrait `marge_confort`) — **pas encore lancé**.
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- **#108** — feat(optim): **L1-front** (CC2) — saisie **bord latéral (surplus extérieur)** + décompo laize ; consomme `geometrie_laize` + envoie `bord_lateral_mm`/`motif_bord_lateral`. Front pur (back #107 inchangé). vitest 194→198.
+- **#109** — docs(etat-projet): L1-back mergé (#107) + déployé prod — carte + baseline + head alembic.
 - **#107** — feat(optim): **L1 géométrie laize** — `bord_lateral_mm` (surchargeable) + `motif_bord_lateral` + sortie `geometrie_laize` sur `OptimisationConfigOut` + `laize_papier` déterministe (plancher `laize_mini_roulable`). **P1 INTOUCHÉ** (cost_engine) → V1a 1 449,09 € + tripwire 704,07 € EXACTS. Migration `f7a8b9c0d1e2`. Déployé prod (deploy Railway vert).
 - **#106** — docs(etat-projet): chantier L1 laize papier (séquencé L1/L2) + carte qui-fait-quoi + reconcile #105.
 - **#105** — feat(machine): `type_machine` (presse/finition) + filtre loader optim — les finitions (Daco) ne génèrent plus de candidats. Migration `e6f7a8b9c0d1` (re-type par motif daco/rotoflex/finition, tous tenants). Sacrés EXACTS.
@@ -25,12 +27,10 @@
 - **#102** — feat(devis): **1 calage par montage** (dedup calage des lots de même signature) (bug #5)
 - #101 — docs(backlog): clore bug #6 + noter dette UI flux rebobinage
 - **#100** — feat(devis): `ht_total` consomme le coût rebobinage multilots (épaisseur réelle + paroi) (bug #6 6.2e-final ; base `cost_engine` préservée, ligne additive)
-- #99 — fix(devis): apply rebobinage via endpoint multilots (bug #6 6.2e-front)
-- #98 — feat(rebobinage): persister le coût rebobinage par lot — épaisseur réelle + paroi (bug #6 6.2e-back)
 
 ## PRs ouvertes
 
-- **#108** — feat(optim): **L1-front** (CC2) — saisie bord latéral (surplus extérieur) + décompo laize, consomme `geometrie_laize` + envoie `bord_lateral_mm`/`motif_bord_lateral`. À merger **après #107** (mergé) ; câblage front en cours côté CC2.
+Aucune.
 
 ## PRs récemment fermées (non mergées)
 
@@ -46,7 +46,7 @@
 - **pytest CI** (service `postgres:16`) : `1154 passed, 4 skipped, 0 failed` — inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod). Seuls les 4 skips inévitables restent (2 SQLite subprocess + 2 modèles obsolètes).
 - **Benchmark V1a 1 449,09 € + 5 cas (V1b/V2/V3/V4) + V8 : 13/13 EXACT** post-merge.
 - **Tripwire multi-lots P0b (`704,07 €`) : EXACT** post-merge — value-neutral confirmé (la migration `b2c3d4e5f6g7` n'a pas bougé la `laize_utile_mm = 320` pour Mark Andy 2200, principe sacré préservé).
-- **vitest** : `194/194 tests passed` (26/26 fichiers) — +4 sur l'alerte cohérence fronts↔poses laize (#104) ; +2 apply multilots (#99), +2 recalc override (#97), +4 (#96) après +10 (#95). Bug #6 front (6.2b→6.2e) intégralement couvert.
+- **vitest** : `198/198 tests passed` — +4 sur L1-front bord latéral (#108 : saisie surplus extérieur + décompo laize) ; +4 alerte cohérence fronts↔poses laize (#104) ; bug #6 front (6.2b→6.2e) intégralement couvert.
 - **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
 - **alembic** : HEAD = **`f7a8b9c0d1e2`** (L1 géométrie laize, #107 : `config_couts.laize_mini_roulable_mm` défaut 0 + `lot_production.bord_lateral_mm` nullable, additif). **Appliquée en prod Railway** post-merge #107 (deploy vert, `/` → 200). Précédents `e6f7a8b9c0d1` (type_machine) → `d5e6f7a8b9c0` (paroi mandrin) → `c4d5e6f7a8b9` (config_couts ICE) → `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
 
@@ -99,25 +99,24 @@
 
 ## Carte multi-instances
 
-### Chantier — Moteur matière : laize papier réelle (séquencé 2 temps) — **L1-BACK MERGÉ (#107)**
+### Chantier — Moteur matière : laize papier réelle (séquencé 2 temps) — **L1 COMPLET (front + back) MERGÉ + DÉPLOYÉ PROD ✅**
 
 **Décision Eric validée** : facturer la matière RÉELLE (bords inclus) = rebaser P1 sur `laize_papier`. La **gate read-only** a montré que le rebasage frontal n'est **PAS value-neutral** (V1a 1 449,09 € → ≈ 1 424 €, valeur dépendante de l'intervalle absent de la fixture cost_engine). D'où un **séquençage en 2 temps** :
 
-- **L1 — ✅ back MERGÉ (#107, déployé prod)** : géométrie laize figée, **P1 INTOUCHÉ** → value-neutral, sacrés EXACTS. **Front en cours côté CC2 (#108).**
-- **L2 (à venir)** — rebaser P1 sur `laize_papier` + **RE-BASELINE COMPLÈTE des sacrés** (V1a/V1b/V7a/V2-3-4/V8/tripwire) **validée par Eric**. Retirer `marge_confort` du calcul matière (double-compte avec les bords). Plancher `laize_mini_roulable`.
+- **L1 — ✅ COMPLET** : back (#107) + front (#108) **mergés + déployés prod**. Géométrie laize figée + saisie bord latéral (surplus extérieur) + décompo laize côté UI. **P1 INTOUCHÉ** → value-neutral, sacrés EXACTS.
+- **L2 (DÉFINI, PAS ENCORE LANCÉ)** — rebaser P1 sur `laize_papier` + **RE-BASELINE COMPLÈTE des sacrés** (V1a/V1b/V7a/V2-3-4/V8/tripwire) **validée par Eric**. Retirer `marge_confort` du calcul matière (double-compte avec les bords). Plancher `laize_mini_roulable`.
 
-**L1 — contrat LIVRÉ (#107) :**
+**L1 — contrat LIVRÉ (#107 back + #108 front) :**
 - Défaut bord : **`bord_lateral_effectif` = `chute_laterale_min_mm` (10 mm)**, PAS intervalle/2. **Symétrique** en L1 ; asymétrie g/d reportée. **Ne PAS toucher** lacets / intervalle interne (concepts séparés).
 - **Entrée** `POST /api/optimisation/calculer` : `bord_lateral_mm` (float, `ge=0 le=100`, NULL → défaut chute_min) **+ `motif_bord_lateral`** (str, Règle 7 → warning non bloquant si surcharge sans motif).
-- **Sortie** : `geometrie_laize = { laize_plaque_mm, bord_lateral_mm (EFFECTIF), laize_papier_mm, intervalle_laize_mm }` sur **`OptimisationConfigOut.geometrie_laize`** + écho `forcage_bord_lateral` / `motif_bord_lateral`.
+- **Sortie** : `geometrie_laize = { laize_plaque_mm, bord_lateral_mm (EFFECTIF), laize_papier_mm, intervalle_laize_mm }` sur **`OptimisationConfigOut.geometrie_laize`** + écho `forcage_bord_lateral` / `motif_bord_lateral`. Front consomme + affiche la décompo (#108).
 - Plomberie : `DevisInput.laize_papier_mm` (optionnel, **exposé mais NON consommé par P1**), `LotProduction.bord_lateral_mm` (nullable), `ConfigCouts.laize_mini_roulable_mm` (défaut 0). Migration `f7a8b9c0d1e2`.
-- **Non-régression** : `laize_papier` non surchargé == valeur actuelle → **zéro re-baseline**, V1a/tripwire EXACTS. +7 tests L1, baseline **1148**.
+- **Non-régression** : `laize_papier` non surchargé == valeur actuelle → **zéro re-baseline**, V1a/tripwire EXACTS. +7 tests L1 back / +4 vitest front.
 
 **Carte qui-fait-quoi :**
-- **CC1 = L1-back** — ✅ **MERGÉ (#107)** + **déployé prod** (Railway vert, `/` → 200). RAZ côté CC1.
-- **CC2 = L1-front (#108)** — **EN COURS** : câble le bloc géométrie front (saisie `bord_lateral_mm` + `motif`, lecture `geometrie_laize`). Ne PAS toucher #108 côté CC1.
+- **CC1 + CC2 = LIBRES** (RAZ). L1 complet livré + déployé prod ; aucun lot en cours.
 
-**Reprise** : CC2 finalise/merge #108 (front) → puis **L2** (rebasage P1 + re-baseline validée Eric).
+**Prochaine étape** : **L2** (rebasage P1 sur `laize_papier` + re-baseline complète des sacrés validée Eric + retrait `marge_confort`) — **défini, PAS encore lancé**. Attend le brief L2.
 
 ---
 
