@@ -33,8 +33,11 @@ from app.services.cost_engine import MoteurDevis
 
 REPORT_PATH = Path(__file__).resolve().parent.parent / "cost_breakdown.md"
 
-EXPECTED_TOTAL_HT = Decimal("1449.09")
-EXPECTED_COUT_REVIENT = Decimal("1228.04")
+# RE-BASELINE L2 : P1 facturé sur la laize papier réelle (210, plafonnée à
+# laize_utile 220 → ne mord pas), marge_confort retirée. P1 241,50→220,50
+# → cout_revient 1228,04→1207,04 → HT 1449,09→1424,31.
+EXPECTED_TOTAL_HT = Decimal("1424.31")
+EXPECTED_COUT_REVIENT = Decimal("1207.04")
 EXPECTED_PCT_MARGE = Decimal("0.18")
 
 
@@ -42,6 +45,7 @@ def _devis_median() -> DevisInput:
     return DevisInput(
         complexe_id=31,
         laize_utile_mm=220,
+        laize_papier_mm=Decimal("210"),
         ml_total=3000,
         nb_couleurs_par_type={"process_cmj": 4, "pantone": 1},
         machine_id=1,

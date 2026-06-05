@@ -241,7 +241,8 @@ def test_p3b_lit_outil_base_par_trace_et_facteur_forme_speciale(in_memory_db):
 
 
 def test_p1_lit_marge_confort_depuis_config_couts(in_memory_db):
-    """Tenant avec marge_confort_roulage_mm=20 → laize_machine = 240 mm."""
+    """Tenant avec marge_confort_roulage_mm=20, sans laize_papier_mm (fallback
+    legacy L2) → laize facturée = laize_utile + marge = 240 mm."""
     with in_memory_db() as db:
         _seed_tenant_full(
             db, entreprise_id=1, seed_config=True,
@@ -252,7 +253,8 @@ def test_p1_lit_marge_confort_depuis_config_couts(in_memory_db):
         result = CalculateurPoste1Matiere(db, entreprise_id=1).calculer(
             _devis(complexe_id=1, machine_id=1)
         )
-    assert result.details["laize_machine_mm"] == 240
+    assert result.details["laize_facturee_mm"] == 240
+    assert result.details["base_laize_source"] == "laize_utile+marge_confort"
     assert result.details["marge_confort_roulage_mm"] == 20
 
 

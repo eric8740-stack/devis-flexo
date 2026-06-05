@@ -603,7 +603,17 @@ def _calcul_laize_papier_lot(
             laize_plaque = calcul_laize_plaque(
                 lot.nb_poses_laize, float(format_l), interv
             )
-        papier = calcul_laize_papier(laize_plaque, bord, palier, laize_mini)
+        # L2 — plafond laize_utile de la machine du lot : le bord d'échenillage
+        # est rogné quand plaque + 2×bord dépasse la laize utile presse.
+        machine = db.get(Machine, lot.machine_id)
+        laize_utile = (
+            float(machine.laize_utile_mm)
+            if machine is not None and machine.laize_utile_mm is not None
+            else None
+        )
+        papier = calcul_laize_papier(
+            laize_plaque, bord, palier, laize_mini, laize_utile
+        )
         return Decimal(str(papier))
     except Exception:  # noqa: BLE001 — plomberie non-bloquante (P1 ignore)
         return None

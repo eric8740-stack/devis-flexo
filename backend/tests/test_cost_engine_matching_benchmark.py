@@ -37,11 +37,12 @@ REPORT_PATH = Path(__file__).resolve().parent.parent / "cost_breakdown_matching.
 
 # HT V1a SACRÉ — le moteur matching ne doit pas le modifier (postes
 # indépendants du choix de cylindre dans la modélisation actuelle).
-EXPECTED_HT_V1A = Decimal("1449.09")
-# V7a meilleur candidat (Z=134, pas le plus serré) — recalibré Phase 2 fix
-# précision matching 01/05/2026 (avant : 7.00 — surévalué de ~2,2% suite à
-# arrondi nb_etiq_par_metre).
-EXPECTED_PRIX_MILLE_V7A_BEST = Decimal("6.85")
+# RE-BASELINE L2 : P1 sur laize papier réelle (210, sans marge_confort)
+# → HT 1449,09→1424,31.
+EXPECTED_HT_V1A = Decimal("1424.31")
+# V7a meilleur candidat (Z=134, pas le plus serré). RE-BASELINE L2 : le
+# prix_au_mille suit la baisse de HT (×1424,31/1449,09) → 6,85→6,73.
+EXPECTED_PRIX_MILLE_V7A_BEST = Decimal("6.73")
 
 
 def _devis_v1a_matching() -> DevisInput:
@@ -49,10 +50,15 @@ def _devis_v1a_matching() -> DevisInput:
 
     format 60×40 + nb_poses_largeur=3 → largeur_plaque = 60×3 = 180 mm
     (banane Z_mini=96 selon TABLE_EFFET_BANANE).
+
+    RE-BASELINE L2 : `laize_papier_mm=210` injecté (plaque 190 + 2×bord 10,
+    plafond laize_utile 220 → 210) pour que P1 facture la laize papier réelle
+    sans marge_confort.
     """
     return DevisInput(
         complexe_id=31,
         laize_utile_mm=220,
+        laize_papier_mm=Decimal("210"),
         ml_total=3000,
         nb_couleurs_par_type={"process_cmj": 4, "pantone": 1},
         machine_id=1,
@@ -291,8 +297,8 @@ def test_v8a_v1a_matching_poses_d_2_divides_prix_mille_by_2():
         out = MoteurDevis(db, entreprise_id=1).calculer(payload)
     # Z + HT préservés (postes/cylindres indépendants de poses_d)
     assert [c.z for c in out.candidats] == [134, 121, 108]
-    # Meilleur candidat (Z=134) : 3.43 EXACT (= V7a_BEST 6.85 / 2 à l'arrondi près)
-    assert out.candidats[0].prix_au_mille_eur == Decimal("3.43"), (
+    # Meilleur candidat (Z=134) : RE-BASELINE L2 → 3.37 (= V7a_BEST 6.73 / 2 à l'arrondi près)
+    assert out.candidats[0].prix_au_mille_eur == Decimal("3.37"), (
         f"V8a meilleur candidat Z=134 : prix_au_mille={out.candidats[0].prix_au_mille_eur} "
         f"≠ 3.43 attendu (Phase 2). Bug nb_poses_developpement ou précision matching ?"
     )

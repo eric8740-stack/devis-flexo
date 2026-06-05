@@ -70,17 +70,29 @@ class CalculateurPoste1Matiere:
                 "n'a pas de grammage_g_m2 défini, requis pour P1"
             )
 
-        laize_machine_mm = devis.laize_utile_mm + marge_mm
+        # L2 — la matière est facturée sur la LAIZE PAPIER RÉELLE (plaque +
+        # 2×bord, plafonnée à laize_utile, déterministe via L1) quand elle est
+        # fournie par le DevisInput. La `marge_confort` n'est ALORS PLUS
+        # ajoutée (elle double-comptait les bords). Fallback legacy
+        # `laize_utile + marge_confort` pour les appelants qui ne portent pas
+        # encore `laize_papier_mm` (rétro-compat — cf. re-baseline sacrés).
+        if devis.laize_papier_mm is not None:
+            laize_facturee_mm = Decimal(str(devis.laize_papier_mm))
+            base_source = "laize_papier"
+        else:
+            laize_facturee_mm = Decimal(devis.laize_utile_mm + marge_mm)
+            base_source = "laize_utile+marge_confort"
         surface_support_m2 = (
-            Decimal(laize_machine_mm) / Decimal(1000) * Decimal(devis.ml_total)
+            laize_facturee_mm / Decimal(1000) * Decimal(devis.ml_total)
         )
         poids_kg = surface_support_m2 * Decimal(complexe.grammage_g_m2) / Decimal(1000)
         cout = (poids_kg * prix_kg).quantize(Decimal("0.01"))
 
         logger.info(
-            "P1 Matière: %s m² × %s g/m² → %s kg × %s €/kg = %s € (source=%s)",
+            "P1 Matière: %s m² × %s g/m² → %s kg × %s €/kg = %s € "
+            "(laize=%s mm, source=%s, prix_kg_source=%s)",
             surface_support_m2, complexe.grammage_g_m2, poids_kg, prix_kg,
-            cout, prix_kg_source,
+            cout, laize_facturee_mm, base_source, prix_kg_source,
         )
         return PosteResult(
             poste_numero=self.POSTE_NUMERO,
@@ -92,7 +104,13 @@ class CalculateurPoste1Matiere:
                 "grammage_g_m2": int(complexe.grammage_g_m2),
                 "marge_confort_roulage_mm": marge_mm,
                 "laize_utile_mm": devis.laize_utile_mm,
-                "laize_machine_mm": laize_machine_mm,
+                "laize_papier_mm": (
+                    float(devis.laize_papier_mm)
+                    if devis.laize_papier_mm is not None
+                    else None
+                ),
+                "laize_facturee_mm": float(laize_facturee_mm),
+                "base_laize_source": base_source,
                 "surface_support_m2": float(surface_support_m2),
                 "poids_kg": float(poids_kg),
                 "prix_kg_eur": float(prix_kg),

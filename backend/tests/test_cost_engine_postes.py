@@ -49,14 +49,16 @@ def _devis_median() -> DevisInput:
 
 def test_p1_matiere_derive_prix_kg_from_complexe():
     """VELIN_STANDARD_80 : prix_m2=0.35, grammage=80 → prix_kg=4.375 €/kg.
-    laize_machine=230 mm × 3000 ml = 690 m² × 80g/1000 = 55.2 kg × 4.375 = 241.50 €.
+    Sans `laize_papier_mm` (fallback legacy L2) : laize facturée = laize_utile +
+    marge_confort = 230 mm × 3000 ml = 690 m² × 80g/1000 = 55.2 kg × 4.375 = 241.50 €.
     """
     with SessionLocal() as db:
         result = CalculateurPoste1Matiere(db, entreprise_id=1).calculer(_devis_median())
     assert result.poste_numero == 1
     assert result.montant_eur == Decimal("241.50")
     assert result.details["prix_kg_source"] == "complexe_derived"
-    assert result.details["laize_machine_mm"] == 230
+    assert result.details["laize_facturee_mm"] == 230
+    assert result.details["base_laize_source"] == "laize_utile+marge_confort"
     assert result.details["grammage_g_m2"] == 80
 
 
