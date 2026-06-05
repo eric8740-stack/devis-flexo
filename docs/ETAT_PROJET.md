@@ -169,13 +169,31 @@ Sans outil : pas d'outil réel (cylindre/plaque), impression pleine largeur sans
 - **Refente des filles** : réutiliser le **module rebobinage** existant (coût additif `ht_total`) pour le bobinage des bobines filles, sans nouveau poste cost_engine.
 - **Guardrail** : `mode_sans_outil=False` (défaut) → **sacrés L2 EXACTS** (V1a 1 424,31 € … tripwire P0b 695,36 €) ; **`rotation_se` / 8 sens et `bat_calculs` (Ø) INTOUCHÉS** (réutilisation pure, mapping SACRED).
 
-**Questions de cadrage restantes (Eric) :**
+### ⚠️ Réserve architecture (structurante)
 
-1. Laize stock (matière) : nouveau champ explicite `laize_bobine_stock_mm` ou réutiliser `laize_papier_mm` (L2) repointé sur la bobine stock en mode sans outil ?
-2. Déchet latéral V1 : confirmé « inclus dans le coût + affiché » (pas de ligne séparée facturable) ?
-3. P3a clichés impression : confirmé facturé en sans outil (impression réelle) ?
-4. L'optim pose (étape candidats) est-elle court-circuitée en sans outil (pas d'outil → pas de contrainte poses dev) ou conservée pour le calcul des filles en laize ?
-5. Granularité du flag : devis global ou par lot ?
+**Le mode sans outil est un 2ᵉ CHEMIN DE CALCUL back, PAS un masquage front.** Concrètement, le flag `mode_sans_outil` doit déclencher côté serveur :
+
+- **court-circuit de la sélection des candidats cylindre** (pas d'outil → aucune contrainte de poses dev par un développé d'outil) ;
+- **`intervalle_dev = 0`** (impression continue, pas d'échenillage transversal) ;
+- **géométrie laize basculée sur la bobine STOCK** (≠ utile) + calcul du **déchet latéral** (`stock − utile`, utile = filles + intervalles refente) ;
+- **refente des filles** via le module rebobinage additif.
+
+Le front (toggle Card Format + masquages) ne fait que refléter ce chemin ; il ne le crée pas. Toute logique de calcul reste serveur (source de vérité).
+
+### Décisions de cadrage — TRANCHÉES (Eric, 2026-06-05)
+
+1. **Périmètre** : on **IMPRIME pleine largeur PUIS refente**. Donc **presse + clichés (P3a) + calage impression (P4) conservés** ; **découpe outil P3b = 0** (déjà le défaut) ; **refente ajoutée**. Ce n'est NI « refente seule sans presse » (on imprime), NI juste « pas de die neuf » : c'est **aucune découpe outil + impression pleine largeur + refente**.
+2. **P3a clichés** : **facturé** (on imprime → il faut des clichés).
+3. **P4 calage** : **inchangé en V1 = calage IMPRESSION** (1 calage / montage, invariant respecté). Le forfait représente ce calage. **Vérif code (CC1, 2026-06-05)** : `P4` est un **forfait unique opaque** `ConfigCouts.calage_forfait_eur` (`operations_count=0`, `mode="forfait"`, [poste_4_calage.py:1-18,40-42](../backend/app/services/cost_engine/poste_4_calage.py#L40-L42)) — **aucune ventilation impression/découpe** dans le code → pas de ligne découpe distincte qui surfacture. Seule réserve : si la *valeur* (225 € démo) a été calibrée en incluant une part de calage découpe, c'est un sujet **tarif** (non encodé) → **tarif réduit = raffinement futur, non bloquant V1**.
+4. **Flag** : **par lot** — `LotProduction.mode_sans_outil` + `DevisInput.mode_sans_outil` (défaut `False`, value-neutral, **migration Alembic additive**). Toggle front V1 au **niveau format** ; le modèle supporte déjà un mix avec/sans outil dans un même devis (extension future).
+5. **Finisseuse** : **module rebobinage additif existant, PAS de nouveau poste** → `prix_vente_ht` (7 postes) **intouché** → **sacrés L2 EXACTS + cost_engine non modifié** (invariant SACRED). Choix le plus sûr, pris fermement.
+
+**Garde-fou confirmé** : `mode_sans_outil=False` → **sacrés EXACTS**. En sans outil, la géométrie laize bascule sur le **stock** (≠ outil) et alimente P1 différemment — **attendu, et gaté par le flag**.
+
+### Découpage prévisionnel (esquisse — briefs détaillés une fois la spec figée)
+
+- **Lot back** : flag `mode_sans_outil` threadé (mono + optim) + court-circuit candidats cylindre + géométrie laize stock / déchet latéral + `intervalle_dev = 0` + refente via rebobinage additif + migration `LotProduction`. **TDD, sacrés EXACTS.**
+- **Lot front** : toggle Card Format + masquages (carto CC2) + ligne « déchet latéral », consomme le contrat back.
 
 ---
 
