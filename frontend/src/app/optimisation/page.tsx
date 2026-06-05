@@ -28,6 +28,7 @@ import {
 import { BriefClientForm } from "./_components/BriefClientForm";
 import { CoherenceBobineAlerte } from "./_components/CoherenceBobineAlerte";
 import { MatcherOutilButton } from "./_components/MatcherOutilButton";
+import { MotifForcageField } from "./_components/MotifForcageField";
 import { OptimisationChiffrage } from "./_components/OptimisationChiffrage";
 import { OptimisationPoseCandidats } from "./_components/OptimisationPoseCandidats";
 import { OptimisationPoseDetailLots } from "./_components/OptimisationPoseDetailLots";
@@ -823,15 +824,13 @@ function OptimisationPoseSaisie() {
                   onChange={(e) => setForcerEpaisseur(e.target.checked)}
                   disabled={matiereSelectionnee === null}
                 />
-                Forcer une autre valeur (motif obligatoire)
+                Forcer une autre valeur (motif recommandé)
               </label>
               {forcerEpaisseur && (
-                <textarea
-                  className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  rows={2}
-                  placeholder="Motif (10 caractères minimum)"
-                  value={motifEpaisseur}
-                  onChange={(e) => setMotifEpaisseur(e.target.value)}
+                <MotifForcageField
+                  testIdPrefix="motif-epaisseur"
+                  motif={motifEpaisseur}
+                  onChange={setMotifEpaisseur}
                 />
               )}
             </div>
@@ -855,12 +854,10 @@ function OptimisationPoseSaisie() {
                     value={intervalleLaizeForce}
                     onChange={(e) => setIntervalleLaizeForce(e.target.value)}
                   />
-                  <textarea
-                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    rows={2}
-                    placeholder="Motif (10 caractères minimum)"
-                    value={motifIntervalleLaize}
-                    onChange={(e) => setMotifIntervalleLaize(e.target.value)}
+                  <MotifForcageField
+                    testIdPrefix="motif-intervalle-laize"
+                    motif={motifIntervalleLaize}
+                    onChange={setMotifIntervalleLaize}
                   />
                 </>
               )}
@@ -885,12 +882,10 @@ function OptimisationPoseSaisie() {
                     value={intervalleDevForce}
                     onChange={(e) => setIntervalleDevForce(e.target.value)}
                   />
-                  <textarea
-                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    rows={2}
-                    placeholder="Motif (10 caractères minimum)"
-                    value={motifIntervalleDev}
-                    onChange={(e) => setMotifIntervalleDev(e.target.value)}
+                  <MotifForcageField
+                    testIdPrefix="motif-intervalle-dev"
+                    motif={motifIntervalleDev}
+                    onChange={setMotifIntervalleDev}
                   />
                 </>
               )}
@@ -988,18 +983,13 @@ function OptimisationPoseSaisie() {
                     laize papier réelle = laize imprimée + 2 × bord latéral.
                     N&apos;impacte pas le prix en l&apos;état.
                   </p>
-                  <textarea
-                    className="mt-2 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    rows={2}
-                    placeholder="Motif de la surcharge (10 caractères minimum — Règle 7)"
-                    value={motifBord}
-                    onChange={(e) => setMotifBord(e.target.value)}
-                    data-testid="motif-bord-lateral"
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Motif tracé (souveraineté commerciale). Manquant ou trop
-                    court → simple avertissement, le calcul passe quand même.
-                  </p>
+                  <div className="mt-2">
+                    <MotifForcageField
+                      testIdPrefix="motif-bord-lateral"
+                      motif={motifBord}
+                      onChange={setMotifBord}
+                    />
+                  </div>
                 </div>
               )}
             </div>
