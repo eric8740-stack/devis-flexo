@@ -17,6 +17,7 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- **#105** — feat(machine): `type_machine` (presse/finition) + filtre loader optim — les finitions (Daco) ne génèrent plus de candidats. Migration `e6f7a8b9c0d1` (re-type par motif daco/rotoflex/finition, tous tenants). Sacrés EXACTS.
 - **#104** — feat(optim): alerte cohérence **fronts ↔ poses laize** (étape Candidats) — `nb_poses_laize` doit être multiple de `nb_fronts_sortie` ; badge + désactivation sélection des incohérents + toggle « Masquer les incohérents » (front pur, `nb_fronts=1` neutre)
 - **#103** — fix(devis): signature de montage trop stricte — retirer `nb_poses_laize` du calage (bug #5)
 - **#102** — feat(devis): **1 calage par montage** (dedup calage des lots de même signature) (bug #5)
@@ -26,7 +27,6 @@
 - #98 — feat(rebobinage): persister le coût rebobinage par lot — épaisseur réelle + paroi (bug #6 6.2e-back)
 - #97 — fix(rebobinage): recalcul multilots à la saisie override + avant persistance (bug #6 6.2d)
 - #96 — feat(devis): persister le Ø multilots dans `payload_visuel` + rapport le lit (bug #6 6.2c)
-- #95 — feat(rebobinage): UI multi-lots, 1 Ø par lot + épaisseur réelle + paroi (bug #6 6.2b ; voir aussi #94 6.2a + #93 6.1)
 
 ## PRs ouvertes
 
@@ -99,7 +99,31 @@ Aucune.
 
 ## Carte multi-instances
 
-RAZ — aucun lot en cours côté Claude. Lots livrés ce 03/06 :
+### Chantier EN COURS — Moteur matière : laize papier réelle (séquencé 2 temps)
+
+**Décision Eric validée** : facturer la matière RÉELLE (bords inclus) = rebaser P1 sur `laize_papier`. La **gate read-only** a montré que le rebasage frontal n'est **PAS value-neutral** (V1a 1 449,09 € → ≈ 1 424 €, valeur dépendante de l'intervalle absent de la fixture cost_engine). D'où un **séquençage en 2 temps** :
+
+- **L1 (EN COURS, CC1)** — figer la géométrie laize, **P1 INTOUCHÉ** → value-neutral, sacrés EXACTS.
+- **L2 (à venir)** — rebaser P1 sur `laize_papier` + **RE-BASELINE COMPLÈTE des sacrés** (V1a/V1b/V7a/V2-3-4/V8/tripwire) **validée par Eric**. Retirer `marge_confort` du calcul matière (double-compte avec les bords). Plancher `laize_mini_roulable`.
+
+**L1 — décisions figées :**
+- Défaut bord : **`bord_lateral_effectif` = `chute_laterale_min_mm` (10 mm)**, PAS intervalle/2. **Symétrique** en L1 ; asymétrie g/d reportée. SSOT bord = bloc géométrie front. **Ne PAS toucher** lacets / intervalle interne (concepts séparés).
+- **Contrat L1** (à publier dans la PR back) :
+  - Entrée `POST /api/optimisation/calculer` : champ **valeur** `bord_lateral_mm` (float, `ge=0 le=100`, NULL → défaut chute_min) **+ champ motif** (pattern Règle 7, à ajouter avant la PR — *non encore implémenté dans le WIP*).
+  - Sortie : **`geometrie_laize = { laize_plaque_mm, bord_lateral_mm (EFFECTIF), laize_papier_mm, intervalle_laize_mm }`** attaché à **`OptimisationConfigOut.geometrie_laize`** (par candidat/lot).
+  - `bord_lateral_mm` = valeur **EFFECTIVE** (surcharge sinon chute_min) → sert l'affichage décompo + pré-remplissage front (pas d'endpoint config séparé).
+  - Plomberie : `DevisInput.laize_papier_mm` (optionnel, **exposé mais NON consommé par P1**), `LotProduction.bord_lateral_mm` (nullable), `ConfigCouts.laize_mini_roulable_mm` (défaut 0). Migration `f7a8b9c0d1e2`.
+- **Non-régression L1** : `laize_papier` non surchargé == valeur actuelle → **zéro re-baseline**, V1a/tripwire EXACTS (vérifié : 51 tests SACRED/touchés verts sur le WIP).
+
+**Carte qui-fait-quoi :**
+- **CC1 = L1-back** (worktree `devis-flexo` @ `main`) — **EN COURS**. WIP préservé sur branche **`feat/L1-geometrie-laize-bord-lateral`** (commit `1a1da5d`, **NON mergé, NON finalisé** : manque le champ `motif`, les tests L1 dédiés, la suite complète). Livrable attendu : **PR back + noms exacts publiés**.
+- **CC2 = L1-front** (worktree `devis-flexo-ui`, à resync sur `ddd1797`) — **STAND-BY**, attend la PR back + les noms. Sens du merge : **back → front**.
+
+**Reprise** : CC1 finalise/publie la PR back L1 (ajout `motif`, tests, gate) → CC2 câble le bloc géométrie → puis **L2** (rebasage P1 + re-baseline validée Eric).
+
+---
+
+Lots livrés ce 03/06 :
 
 - **#4.3 backend — `type_machine` (presse/finition) + filtrage des candidats optim** — branche `feat/type-machine-presse-finition`. **BACKEND only**. Le modèle `Machine` n'avait aucun champ de rôle → les lignes de finition (Daco) apparaissaient comme presses dans les candidats. Ajout **`Machine.type_machine`** (`String(20)`, NOT NULL, `server_default="presse"` ; validé app-side via `TYPES_MACHINE = {"presse","finition"}`, même idiome que `mode_par_defaut`). Migration **`e6f7a8b9c0d1`** : add column (toutes machines existantes → presse) + **UPDATE finitions par MOTIF robuste** (`lower(nom) LIKE %daco%/%rotoflex%/%finition%`, dialect-safe, **tous tenants** — validé Eric : une Daco/Rotoflex est une finition quel que soit le tenant). ⚠️ **Réconciliation noms** : la `Machine` réelle est `Daco D250 ligne finition` (pas « Daco D Series » = `MachineRebobineuse`, table séparée) ; `ROTOFLEX VSI 330` absent du seed mais couvert par le motif si présent en prod. **Seed mis à jour** (`machine.csv` + `seed_machine`) : Daco typée `finition` pour survivre au re-seed. **Loader optim** `charger_machines_actives` filtre désormais `type_machine="presse"` → les finitions ne génèrent plus de candidats. **SACRED INCHANGÉ** : un filtre de candidats ne touche pas le moteur → V1a 1 449,09 € + tripwire P0b 704,07 € EXACT (la dérivation `vitesse_moyenne_m_h/60` reste lue par le cost_engine sur les presses). +4 tests + 3 asserts B3a basculés (loader = presses uniquement). ZÉRO front (matcher inerte = volet front séparé), pas de modif moteur. Baseline **1141**.
 
