@@ -102,6 +102,35 @@
 - **Phase 2 / `matiere_prix_kg_defaut`** (à arbitrer) — fallback P1 conservé sur `TarifPoste` (Q1 audit Lot 4a) ; migrer vers `ConfigCouts` ou supprimer le fallback.
 - **Dette `payload_output` = donnée serveur** (PR séparé à prévoir) — durcissement intégral : recalcul serveur mono-config OU purge `DevisSaveBar` si `/devis/nouveau` abandonné. Le pop conditionnel actuel (#78) suffit à éteindre la régression sans casser le flux legacy.
 
+### 🆕 Spec backlog — « mode sans outil » (refente / rebobinage finisseuse) — À CADRER, NON LANCÉ
+
+**Besoin métier** : chiffrer un devis SANS fabrication d'un outil de découpe neuf — typiquement une prestation de **refente / rebobinage seule sur finisseuse** (`Machine.type_machine="finition"`, #105 ; ex. Daco D250, Rotoflex), sur matière déjà imprimée. Un toggle « avec / sans outil » au moment du calcul.
+
+**Cartographie back actuelle (read-only, 2026-06-05) :**
+
+- **cost_engine = 7 postes** assemblés par `MoteurDevis` ([orchestrator.py:59-67](../backend/app/services/cost_engine/orchestrator.py#L59-L67)) ; `prix_vente_ht = Σ(postes) × (1 + marge)` ([orchestrator.py:80-87](../backend/app/services/cost_engine/orchestrator.py#L80-L87)).
+- **P3 Outillage/Clichés** ([poste_3_cliches.py:55-107](../backend/app/services/cost_engine/poste_3_cliches.py#L55-L107)) = **P3a clichés** (`nb_couleurs × prix_couleur`, [L58-61](../backend/app/services/cost_engine/poste_3_cliches.py#L58-L61), TOUJOURS facturé) **+ P3b découpe** (0 € si `devis.outil_decoupe_existant=True`, sinon `base + traces×tarif ± forme spé`, [L64-82](../backend/app/services/cost_engine/poste_3_cliches.py#L64-L82)). ⚠️ `outil_decoupe_existant=True` n'annule **que P3b** — **P3a clichés reste facturé**.
+- **P4 Calage** ([poste_4_calage.py:40-42](../backend/app/services/cost_engine/poste_4_calage.py#L40-L42)) = forfait fixe `ConfigCouts.calage_forfait_eur`, **AUCUN paramètre du payload** → non neutralisable par devis aujourd'hui.
+- **Champs `DevisInput` existants** ([schemas/devis.py](../backend/app/schemas/devis.py)) : `forme_speciale` ([L98](../backend/app/schemas/devis.py#L98)), `outil_decoupe_existant` ([L102](../backend/app/schemas/devis.py#L102), default `True`), `nb_traces_complexite` ([L112](../backend/app/schemas/devis.py#L112)). **Aucun champ « sans outil / sans impression » global.**
+- **Flux multi-lots (réel, via `/optimisation`)** : `_construire_devis_input_pour_lot` ([crud/devis.py:622-731](../backend/app/crud/devis.py#L622-L731)) reconstruit le `DevisInput` par lot **sans poser** `outil_decoupe_existant` → défaut `True` → **P3b déjà à 0** dans ce flux (seul P3a clichés + P4 calage restent).
+- **Pas de poste « refente / rebobinage » dans cost_engine** (les 7 postes sont figés). Le **rebobinage est un module ISOLÉ** ([services/rebobinage/](../backend/app/services/rebobinage/)), coût **ADDITIF** : `ht_total = prix_vente_ht (PUR, 7 postes) + contribution_rebobinage` ([devis_total.py:36-50](../backend/app/services/devis_total.py#L36-L50)). `prix_vente_ht_eur` n'est JAMAIS augmenté.
+- **`type_machine="finition"`** est lu **UNIQUEMENT** par le loader optim pour exclure les finisseuses des candidats ([optimisation_loader.py:86](../backend/app/services/optimisation_loader.py#L86)). **Aucune logique cost_engine ne le consulte.**
+
+**Point d'insertion recommandé (à valider) :**
+
+- **Champ** `mode_sans_outil: bool = False` sur **`DevisInput`** ([schemas/devis.py](../backend/app/schemas/devis.py), après [L157](../backend/app/schemas/devis.py#L157)) — point d'entrée unique du cost_engine, value-neutral par défaut.
+- **Threading** : (a) `/api/cost/calculer` (mono-config) → direct sur `DevisInput` ; (b) flux réel `/api/optimisation/calculer` → multi-lots : porter le flag sur le `payload_input` (étape 4 chiffrage) et l'injecter dans `_construire_devis_input_pour_lot` ([crud/devis.py:719](../backend/app/crud/devis.py#L719)). Persistance par lot optionnelle = nouvelle colonne `LotProduction.mode_sans_outil` ([models/lot_production.py](../backend/app/models/lot_production.py), migration additive).
+- **Postes neutralisés quand `True`** : P3 (au moins P3b ; P3a clichés à trancher — cf. questions) et P4 calage presse (→ 0 € ou forfait réduit via nouveau tarif `ConfigCouts`).
+- **Guardrail** : `mode_sans_outil=False` (défaut) → **sacrés L2 EXACTS** (V1a 1 424,31 € … tripwire P0b 695,36 €), aucun impact tant que le flag n'est pas posé.
+
+**Questions ouvertes pour Eric (à cadrer avant lot) :**
+
+1. Périmètre : « sans outil » = juste pas de die neuf (P3b déjà à 0) **ou** « refente / rebobinage seul » = pas d'impression presse du tout (alors P2 encres + P3a clichés + P4 calage + P5 roulage presse → 0, seul le rebobinage additif facture) ?
+2. P3a clichés : facturé ou non en mode sans outil ?
+3. P4 calage : 0 € ou forfait réduit (nouveau tarif `ConfigCouts.calage_forfait_*`) ?
+4. Flag par devis (global) ou par lot (`LotProduction`) ?
+5. Le coût de la prestation finisseuse passe-t-il par le module rebobinage existant (additif `ht_total`) ou faut-il un poste dédié dans `prix_vente_ht` ?
+
 ---
 
 ## Incident prod — 02/06/2026 (boot Railway crash post-merge #86, résolu #87)
