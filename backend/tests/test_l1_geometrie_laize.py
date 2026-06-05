@@ -104,12 +104,19 @@ def test_geometrie_laize_exposee_et_coherente(onboarded):
     body = _calculer()
     cfg = body["configurations"][0]
     g = cfg["geometrie_laize"]
+    # Lot back A : 3 champs sans-outil ajoutés (None en mode avec outil).
     assert set(g.keys()) == {
         "laize_plaque_mm",
         "bord_lateral_mm",
         "laize_papier_mm",
         "intervalle_laize_mm",
+        "laize_stock_mm",
+        "laize_utile_mm",
+        "dechet_lateral_mm",
     }
+    # En mode AVEC outil, les champs sans-outil sont None.
+    assert g["laize_stock_mm"] is None
+    assert g["dechet_lateral_mm"] is None
     # Cohérence interne (L2) : laize_papier == min(arrondi_palier(plaque +
     # 2×bord), laize_utile machine candidate).
     lu = _laize_utile_machine(cfg["machine_id"])
