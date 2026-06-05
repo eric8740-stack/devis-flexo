@@ -11,7 +11,7 @@
 
 - **Date** : 2026-06-05
 - **Branche active** : `main` = **`1061ae5`** (après #114 — **L2 rebasage P1 sur laize papier plafonnée, back déployé prod**)
-- **Sprint en cours** : Aucun. **L2 COMPLET (back) MERGÉ + DÉPLOYÉ PROD (#114)** : P1 rebasé sur la laize papier réelle (plafonnée à `laize_utile`), `marge_confort` retirée → **🔴 RE-BASELINE DES SACRÉS** (cf. Baseline tests). **L1 géométrie laize COMPLET** (#107+#108, déployés) ; **lot Souveraineté (forçages non bloquants) COMPLET** (back #112 + front #111). Bugs #5/#6 **CLOS**. CC2 câble le front L2 derrière (décompo laize sur `laize_papier_mm` désormais **plafonnée**).
+- **Sprint en cours** : Aucun. **L2 COMPLET (back) MERGÉ + DÉPLOYÉ PROD (#114)** : P1 rebasé sur la laize papier réelle (plafonnée à `laize_utile`), `marge_confort` retirée → **🔴 RE-BASELINE DES SACRÉS** (cf. Baseline tests). **L1 géométrie laize COMPLET** (#107+#108, déployés) ; **lot Souveraineté (forçages non bloquants) COMPLET** (back #112 + front #111). Bugs #5/#6 **CLOS**. **Front L2 = NO-OP confirmé CC2** (affichage passif de la décompo, `laize_papier_mm` simplement plus petite → aucun câblage/recalibrage front). **Aucune PR front à attendre.**
 
 ---
 
@@ -69,7 +69,7 @@
 - **pytest CI** (service `postgres:16`) : vert sur #114 (`test` job 6m29s). Inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod).
 - **Benchmark `cost_engine` 13/13 EXACT** post-#114 — re-figés aux valeurs L2 (V1a 1 424,31 / V1b 1 896,31 / V2 738,88 / V3 8 189,67 / V4 1 672,39 / V7a 6,73 / V8a 3,37 ; V8b-e ratios inchangés).
 - **Tripwire multi-lots P0b : `695,36 €` EXACT** post-#114 — le plafond `laize_utile=320` MORD ici (laize_plaque 310, papier brut 330 → cap 320), base P1 330→320 → P1 243,56→236,18. Garde anti-drift fixture `machine.laize_utile_mm == 320` conservée.
-- **vitest** : `198/198 tests passed` (back L2 sans impact front). ⚠️ **CC2 doit recalibrer** la décompo laize : `geometrie_laize.laize_papier_mm` est désormais **plafonnée**.
+- **vitest** : `198/198 tests passed` (back L2 sans impact front — **front L2 = no-op confirmé CC2** : la décompo laize affiche passivement `geometrie_laize.laize_papier_mm`, désormais plafonnée, sans recalibrage de test).
 - **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
 - **alembic** : HEAD = **`f7a8b9c0d1e2`** (L1 géométrie laize, #107 — **L2 #114 n'ajoute AUCUNE migration**, logique seule). `config_couts.laize_mini_roulable_mm` défaut 0 + `lot_production.bord_lateral_mm` nullable, additif. **Appliquée en prod Railway** (deploy vert, `/` → 200). Précédents `e6f7a8b9c0d1` (type_machine) → `d5e6f7a8b9c0` (paroi mandrin) → `c4d5e6f7a8b9` (config_couts ICE) → `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
 
@@ -127,7 +127,7 @@
 **Décision Eric validée** : facturer la matière RÉELLE (bords inclus) = rebaser P1 sur `laize_papier`. La **gate read-only** a montré que le rebasage frontal n'est **PAS value-neutral** (V1a 1 449,09 € → **1 424,31 €**, valeur dépendante de l'intervalle absent de la fixture cost_engine). D'où un **séquençage en 2 temps**, **les deux désormais livrés côté back** :
 
 - **L1 — ✅ COMPLET** : back (#107) + front (#108) **mergés + déployés prod**. Géométrie laize figée + saisie bord latéral (surplus extérieur) + décompo laize côté UI. **P1 INTOUCHÉ** → value-neutral, sacrés EXACTS (à l'époque).
-- **L2 — ✅ COMPLET (back, #114)** : P1 rebasé sur `laize_papier` **plafonnée** `min(arrondi_palier(plaque + 2×bord), laize_utile)`, `marge_confort` **retirée** (double-comptait les bords), plancher `laize_mini_roulable` conservé (appliqué après le plafond). **RE-BASELINE COMPLÈTE des sacrés validée Eric** (V1a 1 424,31 · V1b 1 896,31 · V2 738,88 · V3 8 189,67 · V4 1 672,39 · V7a 6,73 · V8a 3,37 · tripwire P0b 695,36 ; V8b-e ratios inchangés). **P4 calage / Ø diamètre INTOUCHÉS**, zéro migration. Déployé prod (`/` → 200). **CC2 câble le front derrière** : la décompo laize consomme `geometrie_laize.laize_papier_mm` désormais **PLAFONNÉE** → recalibrer les vitest décompo.
+- **L2 — ✅ COMPLET (back, #114)** : P1 rebasé sur `laize_papier` **plafonnée** `min(arrondi_palier(plaque + 2×bord), laize_utile)`, `marge_confort` **retirée** (double-comptait les bords), plancher `laize_mini_roulable` conservé (appliqué après le plafond). **RE-BASELINE COMPLÈTE des sacrés validée Eric** (V1a 1 424,31 · V1b 1 896,31 · V2 738,88 · V3 8 189,67 · V4 1 672,39 · V7a 6,73 · V8a 3,37 · tripwire P0b 695,36 ; V8b-e ratios inchangés). **P4 calage / Ø diamètre INTOUCHÉS**, zéro migration. Déployé prod (`/` → 200). **Front L2 = NO-OP confirmé CC2** : la décompo laize affiche passivement `geometrie_laize.laize_papier_mm` (désormais plafonnée) — aucun câblage ni recalibrage vitest. **Lot L2 = CLOS (back seul).**
 
 **L1 — contrat LIVRÉ (#107 back + #108 front) :**
 
@@ -144,12 +144,12 @@
 **Carte qui-fait-quoi :**
 
 - **L1 géométrie laize : COMPLET** (back #107 + front #108, déployés prod).
-- **L2 rebasage P1 : COMPLET (back #114, déployé prod)**. **CC2 câble le front** : recalibre la décompo laize sur `laize_papier_mm` plafonnée (vitest).
+- **L2 rebasage P1 : COMPLET (back #114, déployé prod) — CLOS**. **Front = no-op confirmé CC2** (affichage passif, rien à câbler).
 - **Lot Souveraineté (forçages Règle 7 non bloquants) : COMPLET** — back #112 + front #111 mergés + déployés prod.
 
 **Prochaines étapes** :
 
-- **CC2 front L2** — recalibrer les tests vitest de décompo laize (`laize_papier_mm` désormais plafonnée) + vérifier l'affichage.
+- Chantier laize papier réelle **CLOS** (L1 + L2 livrés, front L2 no-op). Plus de PR front en attente.
 - Suites Phase 2 (Lot 4b UI Stratégique, cleanup `TarifPoste`, `Machine` override P5) — cf. « En cours / à venir ».
 
 ---
