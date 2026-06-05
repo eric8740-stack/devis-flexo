@@ -104,6 +104,99 @@
 
 ---
 
+## Chantier — Mode « format sans outil » (impression laize entière + refente) — SPEC, NON LANCÉ
+
+> Spec métier rédigée par Eric (2026-06-05). Cadrage à valider avant lot.
+> Cartographie back (read-only) ajoutée en fin de section.
+
+### Principe
+
+Toggle sur le format : « avec outil » (mode actuel) / « sans outil ».
+Sans outil : pas d'outil réel (cylindre/plaque), impression pleine largeur sans découpe par outil, puis refente en bobines filles sur la finisseuse.
+
+### Format
+
+- Format laize × dev TOUJOURS saisi (impératif devis).
+- Sans outil : développé LIBRE / factice (aucun outil ne le contraint).
+- Sans outil : intervalle DEV = 0 (impression continue, pas d'échenillage transversal) → champ masqué/forcé.
+- Intervalle LAIZE conservé = espace entre les filles de refente (lames).
+
+### Matière & unités
+
+- Matière en m² (= laize × ml) ; production en ml.
+- Matière = laize bobine STOCK montée (ex 220), PAS l'utile.
+- Déchet latéral = laize stock − laize utile (utile = filles + intervalles refente) → AFFICHÉ/tracé.
+- V1 : déchet inclus dans le coût (bobine entière consommée) + affiché. « Facturer/absorber » = raffinement futur (cf. surplus planificateur).
+
+### Production & postes
+
+- Impression pleine largeur (sans poses découpées par outil).
+- Calage = calage IMPRESSION (pas de calage découpe).
+- Refente = BOBINAGE des filles sur finisseuse (type_machine=finition, #105) : réutilise planificateur + rotation_se (8 sens) + bat_calculs (Ø). Chaque fille : sens enroulement (int/ext) + sens lecture (déjà encodés).
+- PAS de coût de découpe outil.
+
+### Invariants
+
+- Calage lié à l'outil/cliché (ici clichés d'impression) — 1 calage / montage.
+- rotation_se / 8 sens : SACRED → réutilisation pure, JAMAIS modifier le mapping.
+- bat_calculs (Ø) : SSOT → prudence.
+
+### À cartographier
+
+- Poste refente/bobinage finisseuse : déjà un poste de coût ?
+- Point d'insertion du toggle avec/sans outil (front + back).
+
+### Cartographie back (read-only, 2026-06-05) — réponses
+
+**Le poste refente/bobinage finisseuse N'EXISTE PAS comme poste cost_engine.**
+
+- **cost_engine = 7 postes figés** (P1→P7) assemblés par `MoteurDevis` ([orchestrator.py:59-67](../backend/app/services/cost_engine/orchestrator.py#L59-L67)) ; `prix_vente_ht = Σ(postes) × (1 + marge)` ([orchestrator.py:80-87](../backend/app/services/cost_engine/orchestrator.py#L80-L87)). **Aucun poste « refente/bobinage ».**
+- Le **rebobinage est un module ISOLÉ** ([services/rebobinage/](../backend/app/services/rebobinage/)) — déjà branché sur le **planificateur** (3 scénarios A/B/C), **`rotation_se` (8 sens)** et **`bat_calculs` (Ø)** (cf. #66/#68/#73 et bug #6). Son coût est **ADDITIF, hors `prix_vente_ht`** : `ht_total = prix_vente_ht (PUR, 7 postes) + contribution_rebobinage` ([devis_total.py:36-50](../backend/app/services/devis_total.py#L36-L50)). C'est l'ancrage naturel du **bobinage des filles** sans toucher au cost_engine.
+- **`type_machine="finition"` (#105)** n'est lu QUE par le loader optim pour exclure les finisseuses des candidats ([optimisation_loader.py:86](../backend/app/services/optimisation_loader.py#L86)). **Aucune logique cost_engine ne le consulte** → un mode « sans outil » devra explicitement router le calcul, le rôle parc ne suffit pas.
+
+**Postes presse en mode sans outil (impression conservée, découpe outil supprimée) :**
+
+- **P1 Matière** ([poste_1_matiere.py](../backend/app/services/cost_engine/poste_1_matiere.py)) : facture déjà `laize × ml` (m²). En mode sans outil, brancher la base sur la **laize bobine STOCK** (ex. 220), pas l'utile → cohérent avec « déchet latéral inclus + tracé ». P1 consomme déjà `DevisInput.laize_papier_mm` (L2 #114) — c'est le point d'entrée pour porter la laize stock.
+- **P2 Encres / P5 Roulage / P7 MO** : impression pleine largeur → **conservés** (impression réelle).
+- **P3 Outillage/Clichés** ([poste_3_cliches.py:55-107](../backend/app/services/cost_engine/poste_3_cliches.py#L55-L107)) : **P3a clichés impression = CONSERVÉ** (`nb_couleurs × prix`, [L58-61](../backend/app/services/cost_engine/poste_3_cliches.py#L58-L61)) ; **P3b découpe outil = 0** — déjà le cas si `outil_decoupe_existant=True` ([L64-82](../backend/app/services/cost_engine/poste_3_cliches.py#L64-L82)), et le flux multi-lots `_construire_devis_input_pour_lot` ne pose pas ce champ → **P3b déjà à 0** ([crud/devis.py:622-731](../backend/app/crud/devis.py#L622-L731)).
+- **P4 Calage** ([poste_4_calage.py:40-42](../backend/app/services/cost_engine/poste_4_calage.py#L40-L42)) : forfait fixe `ConfigCouts.calage_forfait_eur`, non paramétrable par payload → en mode sans outil c'est **calage IMPRESSION** (conservé, conforme à l'invariant « 1 calage / montage »). Pas de calage découpe à retirer (P4 ne distingue pas aujourd'hui).
+
+**Point d'insertion du toggle (back) :**
+
+- **Champ** `mode_sans_outil: bool = False` (ou `format_sans_outil`) sur **`DevisInput`** ([schemas/devis.py](../backend/app/schemas/devis.py), après [L157](../backend/app/schemas/devis.py#L157)) — point d'entrée unique cost_engine, value-neutral par défaut.
+- **Schéma optim** : ajouter le toggle sur le **format** côté `OptimisationCalculerRequest` ([schemas/optimisation.py](../backend/app/schemas/optimisation.py)) ; en mode sans outil, forcer `intervalle_dev = 0` (masqué front) et libérer le développé (factice). L'optim pose découpe n'est plus contrainte par un outil → cadrer si l'étape « candidats » est court-circuitée.
+- **Threading** : (a) `/api/cost/calculer` (mono) → direct ; (b) flux réel `/api/optimisation/calculer` → multi-lots : porter le flag sur `payload_input` (étape 4) + l'injecter dans `_construire_devis_input_pour_lot` ([crud/devis.py:719](../backend/app/crud/devis.py#L719)) → `DevisInput`. Persistance par lot = colonne `LotProduction.mode_sans_outil` ([models/lot_production.py](../backend/app/models/lot_production.py), migration additive) si flag historisé.
+- **Refente des filles** : réutiliser le **module rebobinage** existant (coût additif `ht_total`) pour le bobinage des bobines filles, sans nouveau poste cost_engine.
+- **Guardrail** : `mode_sans_outil=False` (défaut) → **sacrés L2 EXACTS** (V1a 1 424,31 € … tripwire P0b 695,36 €) ; **`rotation_se` / 8 sens et `bat_calculs` (Ø) INTOUCHÉS** (réutilisation pure, mapping SACRED).
+
+### ⚠️ Réserve architecture (structurante)
+
+**Le mode sans outil est un 2ᵉ CHEMIN DE CALCUL back, PAS un masquage front.** Concrètement, le flag `mode_sans_outil` doit déclencher côté serveur :
+
+- **court-circuit de la sélection des candidats cylindre** (pas d'outil → aucune contrainte de poses dev par un développé d'outil) ;
+- **`intervalle_dev = 0`** (impression continue, pas d'échenillage transversal) ;
+- **géométrie laize basculée sur la bobine STOCK** (≠ utile) + calcul du **déchet latéral** (`stock − utile`, utile = filles + intervalles refente) ;
+- **refente des filles** via le module rebobinage additif.
+
+Le front (toggle Card Format + masquages) ne fait que refléter ce chemin ; il ne le crée pas. Toute logique de calcul reste serveur (source de vérité).
+
+### Décisions de cadrage — TRANCHÉES (Eric, 2026-06-05)
+
+1. **Périmètre** : on **IMPRIME pleine largeur PUIS refente**. Donc **presse + clichés (P3a) + calage impression (P4) conservés** ; **découpe outil P3b = 0** (déjà le défaut) ; **refente ajoutée**. Ce n'est NI « refente seule sans presse » (on imprime), NI juste « pas de die neuf » : c'est **aucune découpe outil + impression pleine largeur + refente**.
+2. **P3a clichés** : **facturé** (on imprime → il faut des clichés).
+3. **P4 calage** : **inchangé en V1 = calage IMPRESSION** (1 calage / montage, invariant respecté). Le forfait représente ce calage. **Vérif code (CC1, 2026-06-05)** : `P4` est un **forfait unique opaque** `ConfigCouts.calage_forfait_eur` (`operations_count=0`, `mode="forfait"`, [poste_4_calage.py:1-18,40-42](../backend/app/services/cost_engine/poste_4_calage.py#L40-L42)) — **aucune ventilation impression/découpe** dans le code → pas de ligne découpe distincte qui surfacture. Seule réserve : si la *valeur* (225 € démo) a été calibrée en incluant une part de calage découpe, c'est un sujet **tarif** (non encodé) → **tarif réduit = raffinement futur, non bloquant V1**.
+4. **Flag** : **par lot** — `LotProduction.mode_sans_outil` + `DevisInput.mode_sans_outil` (défaut `False`, value-neutral, **migration Alembic additive**). Toggle front V1 au **niveau format** ; le modèle supporte déjà un mix avec/sans outil dans un même devis (extension future).
+5. **Finisseuse** : **module rebobinage additif existant, PAS de nouveau poste** → `prix_vente_ht` (7 postes) **intouché** → **sacrés L2 EXACTS + cost_engine non modifié** (invariant SACRED). Choix le plus sûr, pris fermement.
+
+**Garde-fou confirmé** : `mode_sans_outil=False` → **sacrés EXACTS**. En sans outil, la géométrie laize bascule sur le **stock** (≠ outil) et alimente P1 différemment — **attendu, et gaté par le flag**.
+
+### Découpage prévisionnel (esquisse — briefs détaillés une fois la spec figée)
+
+- **Lot back** : flag `mode_sans_outil` threadé (mono + optim) + court-circuit candidats cylindre + géométrie laize stock / déchet latéral + `intervalle_dev = 0` + refente via rebobinage additif + migration `LotProduction`. **TDD, sacrés EXACTS.**
+- **Lot front** : toggle Card Format + masquages (carto CC2) + ligne « déchet latéral », consomme le contrat back.
+
+---
+
 ## Incident prod — 02/06/2026 (boot Railway crash post-merge #86, résolu #87)
 
 - **Symptôme** : post-merge #86 (P1+P2), Railway prod en boot loop, HTTP 502 sur `devis-flexo-production.up.railway.app/`. Logs Railway : `psycopg2.errors.DatatypeMismatch: column "options" of relation "machine" is of type json but expression is of type text[]` au moment du `alembic upgrade head` lancé par le `CMD` du Dockerfile.
