@@ -221,4 +221,42 @@ describe("OptimisationPoseDetailLots — décompo laize (L1)", () => {
     await screen.findByTestId("decompo-laize-0");
     expect(screen.queryByTestId("bord-force-0")).toBeNull();
   });
+
+  // Lot back A — mode « format sans outil » : déchet latéral + nb filles.
+  it("mode sans outil : déchet latéral (stock − utile) + nb filles affichés", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 300,
+          bord_lateral_mm: 0,
+          laize_papier_mm: 320,
+          intervalle_laize_mm: 0,
+          laize_stock_mm: 330,
+          laize_utile_mm: 320,
+          dechet_lateral_mm: 10,
+          nb_filles: 4,
+        },
+      }),
+    );
+    const d = await screen.findByTestId("dechet-lateral-0");
+    expect(d).toHaveTextContent("330 mm"); // stock
+    expect(d).toHaveTextContent("320 mm"); // utile
+    expect(d).toHaveTextContent("10 mm"); // déchet
+    expect(d).toHaveTextContent(/4 bobine\(s\) fille\(s\)/);
+  });
+
+  it("mode avec outil (dechet null) : pas de ligne déchet latéral", async () => {
+    setupDetail(
+      fakeCandidat({
+        geometrie_laize: {
+          laize_plaque_mm: 200,
+          bord_lateral_mm: 10,
+          laize_papier_mm: 220,
+          intervalle_laize_mm: 2,
+        },
+      }),
+    );
+    await screen.findByTestId("decompo-laize-0");
+    expect(screen.queryByTestId("dechet-lateral-0")).toBeNull();
+  });
 });

@@ -1180,6 +1180,15 @@ export interface OptimisationCalculerRequest {
   // L1 — motif de surcharge (Règle 7). Si `bord_lateral_mm` posé sans motif
   // (ou < 10 car.), le backend renvoie un warning NON bloquant.
   motif_bord_lateral?: string | null;
+  // Lot back A — mode « format sans outil » : impression pleine largeur sur la
+  // bobine STOCK + refente (pas d'outil de découpe). True → court-circuite la
+  // génération cylindre, force intervalle_dev=0, facture la laize stock entière.
+  mode_sans_outil?: boolean;
+  // Laize bobine mère montée (mm). OBLIGATOIRE si `mode_sans_outil` (sinon 422).
+  laize_stock_mm?: number | null;
+  // Souveraineté : force le nb de bobines filles de refente (mode sans outil).
+  // null → dérivation géométrique max. Presse écartée si infaisable.
+  nb_filles_force?: number | null;
 }
 
 // L1 — contrat géométrie laize partagé (par candidat). Aligné sur
@@ -1190,6 +1199,12 @@ export interface GeometrieLaize {
   bord_lateral_mm: number; // bord effectif retenu (surcharge ou défaut)
   laize_papier_mm: number;
   intervalle_laize_mm: number;
+  // Lot back A — mode « sans outil » uniquement (null en mode avec outil) :
+  // facturation matière sur la laize STOCK entière, déchet latéral explicité.
+  laize_stock_mm?: number | null;
+  laize_utile_mm?: number | null;
+  dechet_lateral_mm?: number | null; // = stock − utile
+  nb_filles?: number | null; // nb bobines filles de refente (surchargeable)
 }
 
 export interface OptimisationConfigOut {
@@ -1269,6 +1284,8 @@ export interface OptimisationConfigOut {
   // /calculer). Optionnel côté front : les `payload_visuel` des devis legacy
   // (créés avant L1) ne le portent pas → l'affichage décompo se garde dessus.
   geometrie_laize?: GeometrieLaize;
+  // Lot back A — écho du mode « format sans outil » (false = candidat outil).
+  mode_sans_outil?: boolean;
   // L1 — échos de surcharge bord latéral (Règle 7). `forcage_bord_lateral` =
   // false quand le bord est au défaut entreprise. Optionnels (legacy).
   forcage_bord_lateral?: boolean;

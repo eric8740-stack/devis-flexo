@@ -222,6 +222,12 @@ function OptimisationPoseSaisie() {
   const [rayonAngles, setRayonAngles] = useState<string>("2");
   const [formeCourbe, setFormeCourbe] = useState(false);
   const [intervalleDevMin, setIntervalleDevMin] = useState<string>("2");
+  // Lot back A — mode « format sans outil » (impression pleine largeur sur la
+  // bobine stock + refente). Masque les champs liés à l'outil/découpe
+  // (intervalle dev, rayon angles, forme) et expose laize stock + nb filles.
+  const [modeSansOutil, setModeSansOutil] = useState(false);
+  const [laizeStock, setLaizeStock] = useState<string>("");
+  const [nbFillesForce, setNbFillesForce] = useState<string>("");
   const [nbCouleurs, setNbCouleurs] = useState<string>("4");
   // Pré-remplissage Q ajustée : si l'URL contient ?q=N (venu du
   // bouton « Appliquer cette quantité » d'un scénario C du planificateur
@@ -407,6 +413,17 @@ function OptimisationPoseSaisie() {
         // (Règle 7 ; motif manquant/court → warning non bloquant backend).
         bord_lateral_mm: forcerBord ? parseFloat(bordLateral) : null,
         motif_bord_lateral: forcerBord ? motifBord : null,
+        // Lot back A — mode sans outil : laize stock obligatoire (sinon 422),
+        // nb_filles_force optionnel. Désactivé → champs ignorés (value-neutral).
+        mode_sans_outil: modeSansOutil,
+        laize_stock_mm:
+          modeSansOutil && laizeStock.trim() !== ""
+            ? parseFloat(laizeStock)
+            : null,
+        nb_filles_force:
+          modeSansOutil && nbFillesForce.trim() !== ""
+            ? parseInt(nbFillesForce, 10)
+            : null,
       });
       if (r.nb_candidats === 0) {
         toast({
@@ -488,7 +505,7 @@ function OptimisationPoseSaisie() {
           réaliste dans le champ Épaisseur. */}
       <CoherenceBobineAlerte
         devEtiqMm={parseFloat(dev) || 0}
-        ecartDevMm={parseFloat(intervalleDevMin) || 0}
+        ecartDevMm={modeSansOutil ? 0 : parseFloat(intervalleDevMin) || 0}
         mandrinMm={mandrin}
         epaisseurCatalogueUm={
           parseFloat(epaisseurMatiere) > 0
@@ -507,6 +524,61 @@ function OptimisationPoseSaisie() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Lot back A — mode « format sans outil » : impression pleine
+                largeur sur la bobine stock + refente (pas d'outil de découpe).
+                Masque les champs liés à l'outil ; expose laize stock + nb
+                filles. Réactif : bascule sans rechargement. */}
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-foreground"
+                  checked={modeSansOutil}
+                  onChange={(e) => setModeSansOutil(e.target.checked)}
+                  data-testid="toggle-mode-sans-outil"
+                />
+                Format sans outil (impression pleine largeur + refente)
+              </label>
+              {modeSansOutil && (
+                <div className="mt-3 grid grid-cols-2 items-end gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="laize-stock">
+                      Laize bobine stock (mm) *
+                    </Label>
+                    <Input
+                      id="laize-stock"
+                      data-testid="laize-stock-input"
+                      type="number"
+                      step="0.1"
+                      min={1}
+                      value={laizeStock}
+                      onChange={(e) => setLaizeStock(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nb-filles-force">
+                      Nb bobines filles (optionnel)
+                    </Label>
+                    <Input
+                      id="nb-filles-force"
+                      data-testid="nb-filles-force-input"
+                      type="number"
+                      step="1"
+                      min={1}
+                      value={nbFillesForce}
+                      onChange={(e) => setNbFillesForce(e.target.value)}
+                      placeholder="auto (max géométrique)"
+                    />
+                  </div>
+                  <p className="col-span-2 text-xs text-muted-foreground">
+                    La matière est facturée sur la laize stock entière (déchet
+                    latéral = stock − utile). Vide = nb de filles dérivé du
+                    format ; une presse trop étroite est écartée des candidats.
+                  </p>
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-2 items-end gap-4">
               <div className="space-y-2">
                 <Label htmlFor="laize">Laize (largeur étiquette) — mm</Label>
@@ -533,6 +605,9 @@ function OptimisationPoseSaisie() {
                 />
               </div>
             </div>
+            {/* Rayon angles + forme = géométrie de l'outil de découpe →
+                masqués en mode sans outil (refente pure). */}
+            {!modeSansOutil && (
             <div className="grid grid-cols-2 items-end gap-4">
               <div className="space-y-2">
                 <Label htmlFor="rayon">Rayon angles — mm</Label>
@@ -557,6 +632,7 @@ function OptimisationPoseSaisie() {
                 </label>
               </div>
             </div>
+            )}
             <div className="grid grid-cols-2 items-start gap-4">
               <div className="space-y-2">
                 <Label htmlFor="nbcouleurs">Nb couleurs impression</Label>
@@ -607,6 +683,10 @@ function OptimisationPoseSaisie() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Intervalle dev = pas de répétition lié à l'outil de découpe →
+                masqué en mode sans outil (le back force intervalle_dev=0). */}
+            {!modeSansOutil && (
+            <>
             <div className="space-y-2">
               <Label htmlFor="idmin">
                 Intervalle dev min — imprimerie (mm)
@@ -641,6 +721,8 @@ function OptimisationPoseSaisie() {
                 MAX(min imprimeur, min client) appliqué.
               </p>
             </div>
+            </>
+            )}
 
             {/* Sprint 13 avenant — Nb poses laize Auto/Forcer */}
             <div className="space-y-2">
@@ -1052,17 +1134,20 @@ function OptimisationPoseSaisie() {
         </Card>
 
         {/* Sprint 14 Lot 4.5 — Matcher outil : vérifie si un cylindre du parc
-            convient déjà au format saisi, avant de lancer l'optim complète. */}
-        <div className="lg:col-span-2">
-          <MatcherOutilButton
-            laizeEtiqMm={parseFloat(laize) || 0}
-            devEtiqMm={parseFloat(dev) || 0}
-            intervalleDevMm={parseFloat(intervalleDevMin) || 0}
-            intervalleLaizeMm={
-              forcerIntervalleLaize ? parseFloat(intervalleLaizeForce) || 0 : 0
-            }
-          />
-        </div>
+            convient déjà au format saisi, avant de lancer l'optim complète.
+            Lié à l'outil de découpe → masqué en mode sans outil (refente). */}
+        {!modeSansOutil && (
+          <div className="lg:col-span-2">
+            <MatcherOutilButton
+              laizeEtiqMm={parseFloat(laize) || 0}
+              devEtiqMm={parseFloat(dev) || 0}
+              intervalleDevMm={parseFloat(intervalleDevMin) || 0}
+              intervalleLaizeMm={
+                forcerIntervalleLaize ? parseFloat(intervalleLaizeForce) || 0 : 0
+              }
+            />
+          </div>
+        )}
 
         <div className="lg:col-span-2">
           <Button
