@@ -864,7 +864,9 @@ export interface DevisListResponse {
 // `quantite_totale`, le devis est créé avec N LotProduction (cascade).
 // Validation côté backend : Σ qté lots == quantite_totale (422 sinon).
 export interface LotProductionCreatePayload {
-  cylindre_id: number;
+  // null autorisé en mode « format sans outil » (refente, pas de cylindre) —
+  // back #121. Mode avec outil : cylindre_id du candidat/sélection.
+  cylindre_id: number | null;
   machine_id: number;
   nb_poses_dev: number;
   nb_poses_laize: number;
@@ -876,6 +878,8 @@ export interface LotProductionCreatePayload {
   largeur_plaque_mm?: string | null;
   score_optim?: number | null;
   cout_lot_ht_eur?: string | null;
+  // L1 — bord latéral surchargeable par lot (mm). NULL → défaut entreprise.
+  bord_lateral_mm?: string | null;
   // Brief #33 — snapshot visuel pour rejouer SchemaImplantation (laize
   // papier, liner, chute latérale, diamètre bobine, lacets, rotations).
   payload_visuel?: Json | null;
