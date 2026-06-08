@@ -6,10 +6,10 @@
  * (`/optimisation`, `/devis/nouveau`) reste intact tant que cette page n'est
  * pas validée en preview. Pas de big-bang.
  *
- * Réactivité : à chaque saisie (debounce 300 ms) → `previewDevisLive` (MOCK
- * du contrat `POST /api/devis/preview` tant que le back CC1 n'est pas mergé,
- * cf. devisPreviewMock.ts) → maj hero prix + décompo + indices dérivés.
- * « Valider » → `createDevis` (flux de persistance existant).
+ * Réactivité : à chaque saisie (debounce 250 ms + AbortController) →
+ * `previewDevisLive` (POST /api/devis/preview, #124, read-only cost_engine) →
+ * maj hero prix + €/1000 + marge + décompo + géométrie + alertes. On garde le
+ * dernier résultat pendant le recalcul. « Valider » → `createDevis`.
  *
  * Design FlexoSuite : accent/CTA orange (#E85D2F), gains/refente vert,
  * info/aide bleu, fond papier chaud. La couleur PORTE du sens.
@@ -44,18 +44,19 @@ import {
 } from "@/lib/api";
 
 import {
-  computeDevisPreview,
   cylindresCompatibles,
+  posesPourPersist,
   previewDevisLive,
   type DevisPreviewInput,
   type DevisPreviewResult,
-} from "./devisPreviewMock";
+} from "./devisPreview";
 
 // Palette FlexoSuite : accent/CTA orange #E85D2F (classes Tailwind arbitraires
 // text-[#E85D2F] / bg-[#E85D2F]), gains/refente emerald, info/aide bleu, fond
 // papier chaud #FBF7F0. La couleur porte du sens.
 
-function eur(n: number): string {
+function eur(n: number | null): string {
+  if (n === null) return "—";
   return n.toLocaleString("fr-FR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -176,7 +177,8 @@ export default function DevisPageUnique() {
       quantite: parseInt(quantite, 10) || 0,
       nb_couleurs: parseInt(nbCouleurs, 10) || 0,
       cylindre_id: modeSansOutil ? null : cylindreId,
-      machine_id: modeSansOutil ? null : machineId,
+      // Presse requise pour le chiffrage même en sans outil (refente incluse).
+      machine_id: machineId,
       matiere_id: matiereId,
       epaisseur_um: parseFloat(epaisseur) || null,
       mandrin_mm: parseInt(mandrin, 10) || 76,
@@ -217,9 +219,9 @@ export default function DevisPageUnique() {
     previewInput.dev_mm > 0 &&
     previewInput.quantite > 0;
 
-  // Recalc réactif : premier rendu synchrone (pas de flash), puis debounce
-  // 250 ms + AbortController (annule la requête en vol) ; on GARDE le dernier
-  // résultat affiché pendant le recalcul.
+  // Recalc réactif : 1er rendu = appel immédiat (pas de flash d'attente), puis
+  // debounce 250 ms + AbortController (annule la requête en vol). On GARDE le
+  // dernier résultat affiché pendant le recalcul (pas de clignotement).
   const firstRun = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -229,23 +231,11 @@ export default function DevisPageUnique() {
       setRecomputing(false);
       return;
     }
-    if (firstRun.current) {
-      firstRun.current = false;
-      setPreview(
-        computeDevisPreview(previewInput, {
-          cylindre_developpe_mm: cylindreDeveloppe,
-        }),
-      );
-      return;
-    }
     const controller = new AbortController();
     abortRef.current = controller;
     setRecomputing(true);
-    const handle = setTimeout(() => {
-      previewDevisLive(previewInput, {
-        cylindre_developpe_mm: cylindreDeveloppe,
-        signal: controller.signal,
-      })
+    const run = () => {
+      previewDevisLive(previewInput, { signal: controller.signal })
         .then((res) => {
           if (!controller.signal.aborted) {
             setPreview(res);
@@ -253,17 +243,27 @@ export default function DevisPageUnique() {
           }
         })
         .catch((err) => {
-          // AbortError = recalcul remplacé → on ignore silencieusement.
-          if ((err as DOMException)?.name !== "AbortError") {
+          // AbortError = recalcul remplacé → ignore. Autre erreur → on garde
+          // le dernier résultat et on arrête le spinner.
+          if (
+            (err as DOMException)?.name !== "AbortError" &&
+            !controller.signal.aborted
+          ) {
             setRecomputing(false);
           }
         });
-    }, 250);
+    };
+    if (firstRun.current) {
+      firstRun.current = false;
+      run();
+      return () => controller.abort();
+    }
+    const handle = setTimeout(run, 250);
     return () => {
       clearTimeout(handle);
       controller.abort();
     };
-  }, [previewInput, miniPresents, cylindreDeveloppe]);
+  }, [previewInput, miniPresents]);
 
   const toggleOption = (code: string) =>
     setOptionsCodes((prev) => {
@@ -284,14 +284,10 @@ export default function DevisPageUnique() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!peutValider || machineId === null) return;
-    // Calcul synchrone sur les inputs courants (pas la state debouncée) pour
-    // la persistance — poses dérivées du MOCK tant que /api/devis/preview
-    // (CC1) n'est pas branché. nb_poses (total) = poses_dev × filles.
-    const p = computeDevisPreview(previewInput, {
-      cylindre_developpe_mm: cylindreDeveloppe,
-    });
-    const nbFilles = Math.max(1, p.geometrie.nb_filles);
-    const nbPosesDev = Math.max(1, Math.round(p.geometrie.nb_poses / nbFilles));
+    // Poses pour la persistance — best-effort local (le backend recalcule via
+    // le cost_engine à la création ; même géométrie que /api/devis/preview).
+    const { nb_poses_dev: nbPosesDev, nb_poses_laize: nbFilles } =
+      posesPourPersist(previewInput, cylindreDeveloppe);
     setSubmitting(true);
     try {
       const devis = await createDevis({
@@ -372,12 +368,15 @@ export default function DevisPageUnique() {
               </span>
             )}
           </div>
-          {!miniPresents || !preview ? (
+          {!miniPresents || !preview || preview.prix_ht === null ? (
             <p
               data-testid="hero-incomplet"
               className="mt-1 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800"
             >
-              ⓘ Renseigne laize, développé et quantité pour estimer le prix.
+              ⓘ{" "}
+              {!miniPresents
+                ? "Renseigne laize, développé et quantité pour estimer le prix."
+                : "Complète la sélection (matière, cylindre…) — voir les indications ci-dessous."}
             </p>
           ) : (
             <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
@@ -393,12 +392,14 @@ export default function DevisPageUnique() {
               >
                 {eur(preview.prix_1000)} € / 1000
               </span>
-              <span
-                data-testid="hero-marge"
-                className="rounded bg-emerald-100 px-2 py-0.5 text-sm font-semibold text-emerald-800"
-              >
-                marge {Math.round(preview.marge_pct * 100)} %
-              </span>
+              {preview.marge_pct !== null && (
+                <span
+                  data-testid="hero-marge"
+                  className="rounded bg-emerald-100 px-2 py-0.5 text-sm font-semibold text-emerald-800"
+                >
+                  marge {Math.round(preview.marge_pct)} %
+                </span>
+              )}
               <span className="text-xs text-muted-foreground">
                 revient {eur(preview.cout_revient)} €
               </span>
@@ -411,14 +412,12 @@ export default function DevisPageUnique() {
                   key={i}
                   className={
                     "rounded-md px-2.5 py-1.5 text-xs " +
-                    (a.niveau === "attention"
+                    (a.niveau === "warn"
                       ? "bg-amber-50 text-amber-800"
-                      : a.niveau === "bloquant"
-                        ? "bg-red-50 text-red-800"
-                        : "bg-blue-50 text-blue-800")
+                      : "bg-blue-50 text-blue-800")
                   }
                 >
-                  {a.niveau === "attention" ? "⚠ " : "ⓘ "}
+                  {a.niveau === "warn" ? "⚠ " : "ⓘ "}
                   {a.message}
                 </li>
               ))}
@@ -663,7 +662,7 @@ export default function DevisPageUnique() {
 
         {/* ── Décompo (lecture seule, depuis la preview) ───────────── */}
         <SectionCard title="Décompo coût & géométrie">
-          {preview && geo ? (
+          {preview && geo && preview.decompo.length > 0 ? (
             <div className="space-y-3 text-sm">
               {/* Postes de coût (depuis preview.decompo). */}
               <ul className="space-y-1">
@@ -678,25 +677,34 @@ export default function DevisPageUnique() {
                 ))}
               </ul>
               {/* Refente (mode sans outil) — vert = ligne refente. */}
-              {modeSansOutil && geo.dechet_lateral_mm > 0 && (
-                <p data-testid="decompo-dechet" className="text-emerald-800">
-                  Refente : déchet latéral{" "}
-                  <strong>{geo.dechet_lateral_mm} mm</strong> ·{" "}
-                  <strong>{geo.nb_filles}</strong> bobine(s) fille(s)
-                </p>
-              )}
+              {modeSansOutil &&
+                geo.dechet_lateral_mm !== null &&
+                geo.dechet_lateral_mm > 0 && (
+                  <p data-testid="decompo-dechet" className="text-emerald-800">
+                    Refente : déchet latéral{" "}
+                    <strong>{geo.dechet_lateral_mm} mm</strong>
+                    {geo.nb_filles !== null && (
+                      <>
+                        {" · "}
+                        <strong>{geo.nb_filles}</strong> bobine(s) fille(s)
+                      </>
+                    )}
+                  </p>
+                )}
               <p className="font-mono text-xs text-muted-foreground">
-                {geo.nb_poses} poses · {geo.nb_filles} fille(s) · Ø bobine ≈{" "}
-                {geo.diametre_mm} mm
+                {geo.nb_poses ?? "—"} poses
+                {geo.nb_filles !== null && <> · {geo.nb_filles} fille(s)</>} · Ø
+                bobine ≈ {geo.diametre_mm ?? "—"} mm
               </p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">—</p>
+            <p className="text-sm text-muted-foreground">
+              Renseigne le format et la quantité pour la décompo.
+            </p>
           )}
           <p className="mt-2 text-xs text-blue-700">
-            ⓘ Estimation live (contrat preview mocké tant que l&apos;endpoint
-            backend n&apos;est pas déployé). Les chiffres définitifs viennent du
-            moteur de coût à la validation.
+            ⓘ Recalcul live via le moteur de coût (POST /api/devis/preview,
+            read-only). Le devis définitif est figé à la validation.
           </p>
         </SectionCard>
 

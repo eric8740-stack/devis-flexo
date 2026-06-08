@@ -966,6 +966,85 @@ export const createDevis = (data: DevisCreate) =>
     body: JSON.stringify(data),
   });
 
+// ── POST /api/devis/preview — recalc live read-only (#124) ──────────
+// État PARTIEL (tous champs optionnels) → prix + décompo + géométrie +
+// options (impact marginal) + alertes, sans persistance. Decimal sérialisés
+// en CHAÎNES (nullable) côté backend ; le front parse à l'affichage.
+
+export interface NbCouleursIn {
+  impression: number;
+  pantone: number;
+  blanc: number;
+  vernis: number;
+}
+
+export interface FinitionPreviewIn {
+  montant_eur: string;
+  partenaire_st_id?: number;
+  libelle?: string | null;
+}
+
+export interface DevisPreviewRequest {
+  laize?: number | null;
+  dev?: number | null;
+  forme?: string | null;
+  quantite?: number | null;
+  cylindre_id?: number | null;
+  machine_id?: number | null;
+  matiere_id?: number | null;
+  epaisseur_um?: number | null;
+  mandrin_mm?: number | null;
+  diam_max_mm?: number | null;
+  nb_filles_force?: number | null;
+  mode_sans_outil: boolean;
+  laize_stock_mm?: number | null;
+  nb_couleurs?: NbCouleursIn | null;
+  finitions: FinitionPreviewIn[];
+}
+
+export interface GeometriePreviewOut {
+  diametre_mm: number | null;
+  nb_poses: number | null;
+  nb_filles: number | null;
+  dechet_lateral_mm: number | null;
+}
+
+export interface DecompoLignePreviewOut {
+  poste: string;
+  montant: string; // Decimal sérialisé
+}
+
+export interface OptionDeltaPreviewOut {
+  code: string;
+  delta_eur: string; // Decimal sérialisé
+}
+
+export interface AlertePreviewOut {
+  niveau: "info" | "warn";
+  message: string;
+}
+
+export interface DevisPreviewOut {
+  prix_ht: string | null;
+  cout_revient: string | null;
+  marge_pct: string | null; // pourcentage (ex. "30.00"), pas une fraction
+  prix_1000: string | null;
+  geometrie: GeometriePreviewOut;
+  decompo: DecompoLignePreviewOut[];
+  options: OptionDeltaPreviewOut[];
+  alertes: AlertePreviewOut[];
+}
+
+export const previewDevis = (
+  body: DevisPreviewRequest,
+  signal?: AbortSignal,
+) =>
+  apiFetch<DevisPreviewOut>("/api/devis/preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal,
+  });
+
 export const updateDevis = (id: number, data: DevisUpdate) =>
   apiFetch<DevisDetail>(`/api/devis/${id}`, {
     method: "PUT",

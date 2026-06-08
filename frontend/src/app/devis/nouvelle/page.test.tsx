@@ -60,6 +60,41 @@ function installFetchMock() {
     if (url.includes("/api/entreprise")) {
       return ok({ chute_laterale_min_mm: "10" });
     }
+    if (url.endsWith("/api/devis/preview") && method === "POST") {
+      const body = JSON.parse((init?.body as string) ?? "{}");
+      const sansOutil = body.mode_sans_outil === true;
+      // Réponse wire : Decimal sérialisés en CHAÎNES, nullables.
+      return ok({
+        prix_ht: "123.45",
+        cout_revient: "80.00",
+        marge_pct: "30.00",
+        prix_1000: "12.35",
+        geometrie: sansOutil
+          ? {
+              diametre_mm: 250,
+              nb_poses: 3,
+              nb_filles: 3,
+              dechet_lateral_mm: 24.0,
+            }
+          : {
+              diametre_mm: 250,
+              nb_poses: 12,
+              nb_filles: null,
+              dechet_lateral_mm: null,
+            },
+        decompo: sansOutil
+          ? [
+              { poste: "Matière", montant: "40.00" },
+              { poste: "Refente (rebobinage)", montant: "8.00" },
+            ]
+          : [
+              { poste: "Matière", montant: "40.00" },
+              { poste: "Encres", montant: "20.00" },
+            ],
+        options: [{ code: "couleur_plus", delta_eur: "5.50" }],
+        alertes: sansOutil ? [] : [],
+      });
+    }
     if (url.endsWith("/api/devis") && method === "POST") {
       return ok({ id: 999, numero: "DEV-2026-0999" }, 201);
     }
