@@ -12,31 +12,71 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    # P1+P2 : service Postgres pour le test FK strictes
-    # (test_migration_unify_machine_p1p2_postgres.py). Sans ce service,
-    # le test est skip et la migration P1+P2 n'est pas validee sous FK
-    # strictes (scenario reel du boot Railway prod).
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # P1+P2 : Postgres requis pour le test FK strictes
+    # (test_migration_unify_machine_p1p2_postgres.py). Sans lui, le test est
+    # skip et la migration P1+P2 n'est pas validee sous FK strictes (scenario
+    # reel du boot Railway prod).
+    #
+    # Anti-flaky (lot CI) : postgres N'EST PLUS un `services:` container (pulle
+    # par le runner AVANT les steps -> ni cache ni retry possibles -> timeouts
+    # registry-1.docker.io = CI rouge alors que pytest n'a pas tourne). On le
+    # gere en STEP : image mise en cache (docker save + actions/cache) puis
+    # chargee localement ; le 1er run (cache miss) pull avec RETRY, ensuite plus
+    # aucun acces a Docker Hub. Comportement des tests INCHANGE : meme PG sur
+    # localhost:5432, meme PG_TEST_URL.
     env:
-      # Le test postgres FK strictes le lit pour cibler le service ci-dessus.
+      # Le test postgres FK strictes le lit pour cibler le conteneur ci-dessous.
       # Le reste des tests continue d'utiliser SQLite (DATABASE_URL non set
       # -> fallback sqlite:///./devis_flexo.db de app/db.py).
       PG_TEST_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
+
+      # --- Anti-flaky postgres : cache image + retry pull + start en step ---
+      - name: Cache postgres:16 image
+        id: pgcache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/pg16-image.tar
+          key: docker-image-postgres-16
+
+      - name: Load (cache) ou pull postgres:16 avec retry
+        run: |
+          set -e
+          if [ -f /tmp/pg16-image.tar ]; then
+            echo "Cache hit -> docker load (zero acces Docker Hub)"
+            docker load -i /tmp/pg16-image.tar
+          else
+            echo "Cache miss -> docker pull avec retry (anti-timeout registry)"
+            for i in 1 2 3 4 5; do
+              docker pull postgres:16 && break
+              echo "pull tentative $i echouee, retry dans 15s..."
+              sleep 15
+            done
+            docker image inspect postgres:16 >/dev/null
+            docker save postgres:16 -o /tmp/pg16-image.tar
+          fi
+
+      - name: Demarre postgres:16 (localhost:5432) + attente health
+        run: |
+          set -e
+          docker run -d --name pg16 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=postgres \
+            -p 5432:5432 \
+            --health-cmd "pg_isready -U postgres" \
+            --health-interval 5s \
+            --health-timeout 5s \
+            --health-retries 20 \
+            postgres:16
+          echo "Attente postgres healthy..."
+          for i in $(seq 1 40); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' pg16 2>/dev/null || echo starting)
+            if [ "$status" = "healthy" ]; then echo "postgres healthy"; exit 0; fi
+            echo "  ... ($status)"; sleep 3
+          done
+          echo "postgres pas healthy a temps"; docker logs pg16; exit 1
 
       - name: Setup Python 3.13.5
         uses: actions/setup-python@v5
