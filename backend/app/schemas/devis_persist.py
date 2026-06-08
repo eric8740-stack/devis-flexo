@@ -394,7 +394,12 @@ class DevisPreviewIn(BaseModel):
     laize_stock_mm: float | None = Field(None, gt=0)
     # nb_couleurs → P2 Encres + P3a clichés (réutilise NbCouleursIn + mapping).
     nb_couleurs: NbCouleursIn | None = None
-    # finitions → P6 (forfaits sous-traitance). Chaque entrée fait bouger le prix.
+    # options_codes : ENTRÉE CANONIQUE des options (le front a les codes via
+    # /options-disponibles, jamais les montants). Le serveur résout le € depuis
+    # OptionFabrication (catalogue tenant+global) → forfaits_st → P6.
+    options_codes: list[str] = Field(default_factory=list)
+    # DÉPRÉCIÉ (rétro-compat A1 en prod qui envoie []) : forfaits ST saisis à la
+    # volée avec montant explicite. Préférer `options_codes`.
     finitions: list[FinitionPreviewIn] = Field(default_factory=list)
 
 
@@ -416,12 +421,18 @@ class DecompoLignePreview(BaseModel):
 
 class OptionDeltaPreview(BaseModel):
     """Impact marginal d'un levier activable (prix avec − prix sans, état
-    courant). Calculé serveur, même réponse — pas d'appel séparé."""
+    courant). Calculé serveur, même réponse — pas d'appel séparé.
+
+    `impact_production=True` + `delta_eur=None` : option à impact production
+    (coef vitesse/gâche/temps calage) SANS forfait → pas encore chiffrée (le
+    cost_engine ne price pas ces impacts en V1). Le front affiche « impact
+    production (chiffré bientôt) », jamais un faux « +0 € »."""
 
     model_config = ConfigDict(extra="forbid")
 
     code: str
-    delta_eur: Decimal
+    delta_eur: Decimal | None = None
+    impact_production: bool = False
 
 
 class AlertePreview(BaseModel):

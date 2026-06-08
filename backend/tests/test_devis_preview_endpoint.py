@@ -231,28 +231,80 @@ def test_prix_et_geometrie_bougent_sans_outil():
     assert all("Refente" not in d["poste"] for d in avec["decompo"])
 
 
-def test_options_deltas_finitions_et_couleur():
-    """`options` expose l'impact marginal serveur : 1 entrée par finition
-    (delta = son coût) + 1 entrée `couleur_plus` (delta d'une couleur en plus)."""
+def _seed_options() -> None:
+    """Ajoute 2 options catalogue pour ent 1 : une à forfait (€), une à impact
+    production sans tarif (coef vitesse). Idempotent."""
+    from decimal import Decimal
+    from app.models import OptionFabrication
+    with SessionLocal() as db:
+        db.query(OptionFabrication).filter(
+            OptionFabrication.entreprise_id == 1,
+            OptionFabrication.code.in_(["OPT_LAM_T", "OPT_VIT_T"]),
+        ).delete(synchronize_session=False)
+        db.add(OptionFabrication(
+            entreprise_id=1, code="OPT_LAM_T", libelle="Laminage test",
+            forfait_eur=Decimal("100.00"), actif=True,
+        ))
+        db.add(OptionFabrication(
+            entreprise_id=1, code="OPT_VIT_T", libelle="Vitesse reduite test",
+            coef_vitesse_impact=Decimal("0.90"), actif=True,
+        ))
+        db.commit()
+
+
+def test_options_codes_pricing_serveur_et_deltas_par_code():
+    """`options_codes` (CODES, pas de montant front) → € serveur via catalogue
+    → P6 → prix monte ; `options[]` expose un delta PAR CODE + couleur_plus ;
+    l'option impact-production renvoie delta None + flag (pas de faux +0 €)."""
+    from decimal import Decimal
+    _seed_options()
+    _, mat_id, cyl_id = _ids()  # re-seed efface OptionFabrication -> re-add
+    _seed_options()
+    base = _prix(_base(cyl_id, mat_id))
+    avec = _prix({**_base(cyl_id, mat_id), "options_codes": ["OPT_LAM_T"]})
+    # Option forfait sélectionnée → prix HT monte (P6 via forfaits_st).
+    assert Decimal(avec) > Decimal(base)
+
+    body = client.post("/api/devis/preview", json={
+        **_base(cyl_id, mat_id), "options_codes": ["OPT_LAM_T"],
+    }).json()
+    opts = {o["code"]: o for o in body["options"]}
+    # Delta par code pour l'option forfait (€ × (1+marge) > 0, pas impact prod).
+    assert "OPT_LAM_T" in opts
+    assert opts["OPT_LAM_T"]["impact_production"] is False
+    assert Decimal(opts["OPT_LAM_T"]["delta_eur"]) > Decimal("0")
+    # Option impact production : delta None + flag (jamais faux +0 €).
+    assert "OPT_VIT_T" in opts
+    assert opts["OPT_VIT_T"]["impact_production"] is True
+    assert opts["OPT_VIT_T"]["delta_eur"] is None
+    # couleur_plus toujours présent.
+    assert "couleur_plus" in opts and Decimal(opts["couleur_plus"]["delta_eur"]) > 0
+    # Décompo : ligne option distincte (label « Option · ... »).
+    assert any(d["poste"].startswith("Option · ") for d in body["decompo"])
+
+
+def test_finitions_retrocompat_sans_casse():
+    """`finitions:[{montant_eur}]` (déprécié) fait toujours monter le prix
+    (P6) ; A1 en prod envoie [] → comportement inchangé."""
     from decimal import Decimal
     _, mat_id, cyl_id = _ids()
-    payload = {
-        **_base(cyl_id, mat_id),
-        "nb_couleurs": {"impression": 2},
-        "finitions": [
-            {"montant_eur": "100.00", "libelle": "laminage"},
-            {"montant_eur": "30.00", "libelle": "dorure"},
-        ],
-    }
-    body = client.post("/api/devis/preview", json=payload).json()
-    opts = {o["code"]: Decimal(o["delta_eur"]) for o in body["options"]}
-    # 2 finitions + couleur_plus.
-    assert "laminage" in opts and "dorure" in opts and "couleur_plus" in opts
-    # Delta marginal d'une finition = son forfait × (1 + marge) > 0.
-    assert opts["laminage"] > Decimal("0")
-    assert opts["laminage"] > opts["dorure"]  # 100 > 30
-    # +1 couleur process coûte quelque chose (encres + 1 cliché).
-    assert opts["couleur_plus"] > Decimal("0")
+    base = _prix(_base(cyl_id, mat_id))
+    avec = _prix({**_base(cyl_id, mat_id), "finitions": [{"montant_eur": "40.00"}]})
+    assert Decimal(avec) > Decimal(base)
+    # finitions=[] (cas A1 prod) → identique à pas de finitions.
+    assert _prix({**_base(cyl_id, mat_id), "finitions": []}) == base
+
+
+def test_options_disponibles_n_expose_pas_les_montants():
+    """Garde-fou : OptionDisponiblePublic ne fuit pas forfait_eur / prix.
+    Le front reste sur les codes (ConfigCouts/catalogue = source de coût)."""
+    _seed_options()
+    r = client.get("/api/optimisation/options-disponibles")
+    assert r.status_code == 200, r.text
+    for o in r.json():
+        assert "forfait_eur" not in o
+        assert "prix_au_m2_eur" not in o
+        assert "prix_au_mille_eur" not in o
 
 
 def test_machine_id_respecte_et_best_effort():
