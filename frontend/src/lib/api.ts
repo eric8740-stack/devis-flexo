@@ -864,7 +864,9 @@ export interface DevisListResponse {
 // `quantite_totale`, le devis est créé avec N LotProduction (cascade).
 // Validation côté backend : Σ qté lots == quantite_totale (422 sinon).
 export interface LotProductionCreatePayload {
-  cylindre_id: number;
+  // null autorisé en mode « format sans outil » (refente, pas de cylindre) —
+  // back #121. Mode avec outil : cylindre_id du candidat/sélection.
+  cylindre_id: number | null;
   machine_id: number;
   nb_poses_dev: number;
   nb_poses_laize: number;
@@ -876,6 +878,8 @@ export interface LotProductionCreatePayload {
   largeur_plaque_mm?: string | null;
   score_optim?: number | null;
   cout_lot_ht_eur?: string | null;
+  // L1 — bord latéral surchargeable par lot (mm). NULL → défaut entreprise.
+  bord_lateral_mm?: string | null;
   // Brief #33 — snapshot visuel pour rejouer SchemaImplantation (laize
   // papier, liner, chute latérale, diamètre bobine, lacets, rotations).
   payload_visuel?: Json | null;
@@ -960,6 +964,85 @@ export const createDevis = (data: DevisCreate) =>
   apiFetch<DevisDetail>("/api/devis", {
     method: "POST",
     body: JSON.stringify(data),
+  });
+
+// ── POST /api/devis/preview — recalc live read-only (#124) ──────────
+// État PARTIEL (tous champs optionnels) → prix + décompo + géométrie +
+// options (impact marginal) + alertes, sans persistance. Decimal sérialisés
+// en CHAÎNES (nullable) côté backend ; le front parse à l'affichage.
+
+export interface NbCouleursIn {
+  impression: number;
+  pantone: number;
+  blanc: number;
+  vernis: number;
+}
+
+export interface FinitionPreviewIn {
+  montant_eur: string;
+  partenaire_st_id?: number;
+  libelle?: string | null;
+}
+
+export interface DevisPreviewRequest {
+  laize?: number | null;
+  dev?: number | null;
+  forme?: string | null;
+  quantite?: number | null;
+  cylindre_id?: number | null;
+  machine_id?: number | null;
+  matiere_id?: number | null;
+  epaisseur_um?: number | null;
+  mandrin_mm?: number | null;
+  diam_max_mm?: number | null;
+  nb_filles_force?: number | null;
+  mode_sans_outil: boolean;
+  laize_stock_mm?: number | null;
+  nb_couleurs?: NbCouleursIn | null;
+  finitions: FinitionPreviewIn[];
+}
+
+export interface GeometriePreviewOut {
+  diametre_mm: number | null;
+  nb_poses: number | null;
+  nb_filles: number | null;
+  dechet_lateral_mm: number | null;
+}
+
+export interface DecompoLignePreviewOut {
+  poste: string;
+  montant: string; // Decimal sérialisé
+}
+
+export interface OptionDeltaPreviewOut {
+  code: string;
+  delta_eur: string; // Decimal sérialisé
+}
+
+export interface AlertePreviewOut {
+  niveau: "info" | "warn";
+  message: string;
+}
+
+export interface DevisPreviewOut {
+  prix_ht: string | null;
+  cout_revient: string | null;
+  marge_pct: string | null; // pourcentage (ex. "30.00"), pas une fraction
+  prix_1000: string | null;
+  geometrie: GeometriePreviewOut;
+  decompo: DecompoLignePreviewOut[];
+  options: OptionDeltaPreviewOut[];
+  alertes: AlertePreviewOut[];
+}
+
+export const previewDevis = (
+  body: DevisPreviewRequest,
+  signal?: AbortSignal,
+) =>
+  apiFetch<DevisPreviewOut>("/api/devis/preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal,
   });
 
 export const updateDevis = (id: number, data: DevisUpdate) =>

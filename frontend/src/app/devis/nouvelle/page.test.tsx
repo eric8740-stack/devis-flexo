@@ -1,0 +1,210 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import DevisPageUnique from "./page";
+
+const routerPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush }),
+}));
+
+let fetchSpy: ReturnType<typeof vi.fn>;
+
+function installFetchMock() {
+  fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    const ok = (body: unknown, status = 200) =>
+      ({ ok: true, status, statusText: "OK", json: async () => body }) as Response;
+
+    if (url.includes("/api/matieres")) {
+      return ok([
+        {
+          id: 1,
+          code: "PET50",
+          libelle: "PET",
+          categorie: null,
+          sous_type: null,
+          grammage_gm2: null,
+          epaisseur_microns: 50,
+          est_transparent: false,
+          opacite_pct: null,
+          certifications_sanitaires: null,
+          certifications_env: null,
+          adhesifs_compatibles: null,
+          actif: true,
+        },
+      ]);
+    }
+    if (url.includes("/api/cylindres")) {
+      return ok([
+        {
+          id: 1,
+          nb_dents: 104,
+          developpe_mm: "330.20",
+          actif: true,
+          notes: null,
+          date_creation: "",
+        },
+      ]);
+    }
+    if (url.includes("/api/machines")) {
+      return ok([
+        { id: 1, nom: "Mark Andy P5", actif: true, laize_max_mm: "330" },
+      ]);
+    }
+    if (url.includes("/api/optimisation/options-disponibles")) {
+      return ok([]);
+    }
+    if (url.includes("/api/entreprise")) {
+      return ok({ chute_laterale_min_mm: "10" });
+    }
+    if (url.endsWith("/api/devis/preview") && method === "POST") {
+      const body = JSON.parse((init?.body as string) ?? "{}");
+      const sansOutil = body.mode_sans_outil === true;
+      // Réponse wire : Decimal sérialisés en CHAÎNES, nullables.
+      return ok({
+        prix_ht: "123.45",
+        cout_revient: "80.00",
+        marge_pct: "30.00",
+        prix_1000: "12.35",
+        geometrie: sansOutil
+          ? {
+              diametre_mm: 250,
+              nb_poses: 3,
+              nb_filles: 3,
+              dechet_lateral_mm: 24.0,
+            }
+          : {
+              diametre_mm: 250,
+              nb_poses: 12,
+              nb_filles: null,
+              dechet_lateral_mm: null,
+            },
+        decompo: sansOutil
+          ? [
+              { poste: "Matière", montant: "40.00" },
+              { poste: "Refente (rebobinage)", montant: "8.00" },
+            ]
+          : [
+              { poste: "Matière", montant: "40.00" },
+              { poste: "Encres", montant: "20.00" },
+            ],
+        options: [{ code: "couleur_plus", delta_eur: "5.50" }],
+        alertes: sansOutil ? [] : [],
+      });
+    }
+    if (url.endsWith("/api/devis") && method === "POST") {
+      return ok({ id: 999, numero: "DEV-2026-0999" }, 201);
+    }
+    throw new Error(`No mock for ${method} ${url}`);
+  });
+  global.fetch = fetchSpy as unknown as typeof fetch;
+}
+
+function postDevisBody() {
+  const call = fetchSpy.mock.calls.find(
+    (c) =>
+      String(c[0]).endsWith("/api/devis") &&
+      (c[1] as RequestInit)?.method === "POST",
+  );
+  return JSON.parse((call?.[1] as RequestInit).body as string);
+}
+
+describe("DevisPageUnique — page devis réactive", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    routerPush.mockReset();
+    installFetchMock();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("hero prix rendu en direct dès le montage (estimation live)", async () => {
+    render(<DevisPageUnique />);
+    const valeur = await screen.findByTestId("hero-prix-valeur");
+    expect(valeur).toHaveTextContent("€");
+  });
+
+  it("toggle sans outil : masque la carte Outil, expose la laize stock", async () => {
+    render(<DevisPageUnique />);
+    // Avec outil par défaut → select cylindre présent.
+    expect(await screen.findByTestId("o-cylindre")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("toggle-sans-outil"));
+    expect(screen.queryByTestId("o-cylindre")).toBeNull();
+    expect(screen.getByTestId("laize-stock")).toBeInTheDocument();
+  });
+
+  it("décompo refente affichée en sans outil (déchet latéral)", async () => {
+    render(<DevisPageUnique />);
+    await screen.findByTestId("toggle-sans-outil");
+    await userEvent.click(screen.getByTestId("toggle-sans-outil"));
+    await userEvent.type(screen.getByTestId("laize-stock"), "330");
+    await waitFor(() =>
+      expect(screen.getByTestId("decompo-dechet")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("decompo-dechet")).toHaveTextContent(/déchet/i);
+  });
+
+  it("Valider (avec outil) → POST /api/devis avec le cylindre_id sélectionné", async () => {
+    const { container } = render(<DevisPageUnique />);
+    // Attendre le chargement (option cylindre dispo).
+    await screen.findByRole("option", { name: /104 dents/ });
+    await userEvent.selectOptions(screen.getByTestId("m-matiere"), "1");
+    await userEvent.selectOptions(screen.getByTestId("o-cylindre"), "1");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("valider")).not.toBeDisabled(),
+    );
+    // jsdom : submit via le form (le click sur bouton submit ne déclenche pas
+    // toujours l'événement submit en environnement de test).
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/api/devis") &&
+            (c[1] as RequestInit)?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const body = postDevisBody();
+    expect(body.lots[0].cylindre_id).toBe(1);
+    expect(body.lots[0].machine_id).toBe(1);
+    expect(body.lots[0].matiere_id).toBe(1);
+    expect(body.payload_input.mode_sans_outil).toBe(false);
+    expect(routerPush).toHaveBeenCalledWith("/devis/999");
+  });
+
+  it("Valider (sans outil) → cylindre_id null + mode_sans_outil true", async () => {
+    const { container } = render(<DevisPageUnique />);
+    await screen.findByTestId("toggle-sans-outil");
+    await userEvent.click(screen.getByTestId("toggle-sans-outil"));
+    await userEvent.type(screen.getByTestId("laize-stock"), "330");
+    // Attendre le chargement des matières (Promise.all au mount).
+    await screen.findByRole("option", { name: "PET" });
+    await userEvent.selectOptions(screen.getByTestId("m-matiere"), "1");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("valider")).not.toBeDisabled(),
+    );
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/api/devis") &&
+            (c[1] as RequestInit)?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const body = postDevisBody();
+    expect(body.lots[0].cylindre_id).toBeNull();
+    expect(body.payload_input.mode_sans_outil).toBe(true);
+    expect(body.payload_input.laize_stock_mm).toBe(330);
+  });
+});
