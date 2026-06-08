@@ -699,6 +699,14 @@ def _construire_devis_input_pour_lot(
             else laize_presse
         )
         interv_laize = float(lot.intervalle_laize_reel_mm or 0)
+        # Le lot porte le nb de filles CHOISI dans `nb_poses_laize` (= nb_filles
+        # en sans outil) → on l'impose pour que la ml/déchet reflètent la config
+        # retenue (y compris un override opérateur). 0/absent → dérivation auto.
+        nb_filles_lot = (
+            int(lot.nb_poses_laize)
+            if lot.nb_poses_laize and lot.nb_poses_laize > 0
+            else None
+        )
         geo = calculer_geometrie_sans_outil(
             laize_stock_mm=laize_stock,
             laize_utile_presse_mm=laize_presse,
@@ -706,6 +714,7 @@ def _construire_devis_input_pour_lot(
             format_hauteur_mm=float(format_h),
             intervalle_laize_mm=interv_laize,
             quantite=lot.quantite,
+            nb_filles_force=nb_filles_lot,
         )
         if geo is None:
             raise ValueError(

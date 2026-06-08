@@ -203,6 +203,16 @@ class OptimisationCalculerRequest(BaseModel):
         le=2000,
         description="Laize bobine mère montée (mm). Requis si mode_sans_outil.",
     )
+    # Souveraineté : force le nb de bobines filles de refente (sinon = valeur
+    # géométrique max dérivée). Ex. 1 = pas de refente / pistes regroupées.
+    # Skippé en mode avec outil. Infaisable (ne tient pas dans la laize) →
+    # la presse est écartée des candidats.
+    nb_filles_force: int | None = Field(
+        None,
+        ge=1,
+        le=100,
+        description="Force le nb de bobines filles de refente (mode sans outil).",
+    )
 
     @model_validator(mode="after")
     def _valider_forcages_et_lacets(self) -> "OptimisationCalculerRequest":
@@ -258,6 +268,11 @@ class GeometrieLaize(BaseModel):
     laize_stock_mm: float | None = None
     laize_utile_mm: float | None = None
     dechet_lateral_mm: float | None = None
+    # Nombre de bobines filles de refente. CHAMP EXPLICITE distinct du
+    # `nb_poses_laize` du candidat : par défaut = valeur géométrique dérivée,
+    # mais surchargeable (cf. `nb_filles_force` requête — ex. 1 fille =
+    # plusieurs pistes regroupées / pas de refente). None en mode avec outil.
+    nb_filles: int | None = None
 
 
 class OptimisationConfigOut(BaseModel):

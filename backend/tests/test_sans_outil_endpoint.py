@@ -131,8 +131,11 @@ def test_calculer_sans_outil_contrat(onboarded):
     )
     assert g["dechet_lateral_mm"] >= 0.0
 
-    # nb_filles = nb_poses_laize ; utile = filles + intervalles refente.
-    nb_filles = cfg["nb_poses_laize"]
+    # nb_filles : champ EXPLICITE dans geometrie_laize, cohérent avec
+    # nb_poses_laize du candidat (dérivé géométrique par défaut).
+    assert g["nb_filles"] is not None
+    nb_filles = g["nb_filles"]
+    assert nb_filles == cfg["nb_poses_laize"]
     assert nb_filles >= 1
     assert g["laize_utile_mm"] == pytest.approx(
         nb_filles * 30 + (nb_filles - 1) * g["intervalle_laize_mm"], abs=0.01
@@ -140,6 +143,25 @@ def test_calculer_sans_outil_contrat(onboarded):
 
     # Warning métier non bloquant (déchet facturé).
     assert any("sans outil" in w.lower() for w in body["warnings"])
+
+
+def test_calculer_sans_outil_nb_filles_force(onboarded):
+    """Override nb_filles_force=1 (pas de refente / pistes regroupées) :
+    geometrie_laize.nb_filles == 1, déchet recalculé sur 1 fille."""
+    r = client.post(
+        "/api/optimisation/calculer",
+        json=_payload(mode_sans_outil=True, laize_stock_mm=220, nb_filles_force=1),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["configurations"]
+    cfg = body["configurations"][0]
+    g = cfg["geometrie_laize"]
+    assert g["nb_filles"] == 1
+    assert cfg["nb_poses_laize"] == 1
+    # 1 fille de 30 mm → utile 30, déchet = 220 − 30 = 190.
+    assert g["laize_utile_mm"] == pytest.approx(30.0)
+    assert g["dechet_lateral_mm"] == pytest.approx(190.0)
 
 
 def test_calculer_avec_outil_non_regression(onboarded):
@@ -156,3 +178,4 @@ def test_calculer_avec_outil_non_regression(onboarded):
     assert g["dechet_lateral_mm"] is None
     assert g["laize_stock_mm"] is None
     assert g["laize_utile_mm"] is None
+    assert g["nb_filles"] is None

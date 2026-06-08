@@ -46,6 +46,7 @@ def calculer_geometrie_sans_outil(
     format_hauteur_mm: float,
     intervalle_laize_mm: float,
     quantite: int,
+    nb_filles_force: int | None = None,
 ) -> GeometrieSansOutil | None:
     """Géométrie d'une impression pleine largeur suivie d'une refente.
 
@@ -54,31 +55,47 @@ def calculer_geometrie_sans_outil(
     puis on refend en `nb_filles` colonnes d'étiquettes espacées de
     `intervalle_laize` (lames de refente).
 
+    `nb_filles_force` (souveraineté opérateur) : impose le nb de filles au lieu
+    de la valeur géométrique max. Cas d'usage : 1 fille = plusieurs pistes
+    regroupées / pas de refente. La valeur forcée doit rester FAISABLE (tenir
+    dans la laize imprimable) — sinon `None`. `None` = dérivation auto
+    (comportement inchangé).
+
     Returns `None` si aucune fille ne tient (format plus large que la laize
-    imprimable) — le caller skippe cette machine.
+    imprimable, ou `nb_filles_force` infaisable) — le caller skippe.
 
     Formules :
-      laize_imprimable   = min(laize_stock, laize_utile_presse)
-      nb_filles          = floor((laize_imprimable + interv) / (largeur + interv))
+      laize_imprimable    = min(laize_stock, laize_utile_presse)
+      nb_filles (dérivé)  = floor((laize_imprimable + interv) / (largeur + interv))
+      nb_filles           = nb_filles_force si fourni (sinon dérivé)
       laize_utile_refente = nb_filles × largeur + (nb_filles − 1) × interv
-      dechet_lateral     = max(0, laize_stock − laize_utile_refente)
-      ml_total           = ceil(quantite × hauteur / (nb_filles × 1000))
-                           (intervalle_dev = 0, impression continue)
+      dechet_lateral      = max(0, laize_stock − laize_utile_refente)
+      ml_total            = ceil(quantite × hauteur / (nb_filles × 1000))
+                            (intervalle_dev = 0, impression continue)
     """
     if format_largeur_mm <= 0 or format_hauteur_mm <= 0:
         raise ValueError("format_largeur_mm et format_hauteur_mm doivent être > 0")
     if intervalle_laize_mm < 0:
         raise ValueError("intervalle_laize_mm doit être >= 0")
+    if nb_filles_force is not None and nb_filles_force <= 0:
+        raise ValueError("nb_filles_force doit être > 0")
 
     laize_imprimable = min(laize_stock_mm, laize_utile_presse_mm)
     pas = format_largeur_mm + intervalle_laize_mm
-    nb_filles = math.floor((laize_imprimable + intervalle_laize_mm) / pas)
+    nb_filles_derive = math.floor((laize_imprimable + intervalle_laize_mm) / pas)
+
+    nb_filles = nb_filles_force if nb_filles_force is not None else nb_filles_derive
     if nb_filles <= 0:
         return None
 
     laize_utile_refente = (
         nb_filles * format_largeur_mm + (nb_filles - 1) * intervalle_laize_mm
     )
+    # Faisabilité : la laize utile ne peut pas dépasser la laize imprimable
+    # (tolérance flottante). Protège contre un `nb_filles_force` trop grand.
+    if laize_utile_refente > laize_imprimable + 1e-9:
+        return None
+
     dechet_lateral = max(0.0, laize_stock_mm - laize_utile_refente)
     ml_total = math.ceil(quantite * format_hauteur_mm / (nb_filles * 1000))
 

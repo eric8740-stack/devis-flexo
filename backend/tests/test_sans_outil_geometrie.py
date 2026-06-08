@@ -94,3 +94,53 @@ def test_format_invalide_leve_valueerror():
         calculer_geometrie_sans_outil(220.0, 330.0, 0.0, 40.0, 3.0, 1_000)
     with pytest.raises(ValueError):
         calculer_geometrie_sans_outil(220.0, 330.0, 50.0, 40.0, -1.0, 1_000)
+
+
+# ---------------------------------------------------------------------------
+# Override nb_filles (souveraineté opérateur)
+# ---------------------------------------------------------------------------
+
+
+def test_nb_filles_force_une_seule_fille():
+    """Force 1 fille (pas de refente / pistes regroupées) : utile = largeur,
+    déchet = stock − largeur, ml recalculé sur 1 fille."""
+    g = calculer_geometrie_sans_outil(
+        laize_stock_mm=220.0,
+        laize_utile_presse_mm=330.0,
+        format_largeur_mm=50.0,
+        format_hauteur_mm=40.0,
+        intervalle_laize_mm=3.0,
+        quantite=10_000,
+        nb_filles_force=1,
+    )
+    assert g is not None
+    assert g.nb_filles == 1
+    assert g.laize_utile_refente_mm == pytest.approx(50.0)
+    assert g.dechet_lateral_mm == pytest.approx(170.0)
+    # ml = ceil(10000×40 / (1×1000)) = 400.
+    assert g.ml_total == pytest.approx(400.0)
+
+
+def test_nb_filles_force_infaisable_retourne_none():
+    """Forcer plus de filles que la laize imprimable ne permet → None."""
+    # dérivé = 4 filles ; forcer 10 → utile 10×50+9×3 = 527 > 220 → None.
+    g = calculer_geometrie_sans_outil(
+        220.0, 330.0, 50.0, 40.0, 3.0, 10_000, nb_filles_force=10
+    )
+    assert g is None
+
+
+def test_nb_filles_force_egal_derive_inchange():
+    """Forcer la valeur dérivée ne change rien (comportement inchangé)."""
+    base = calculer_geometrie_sans_outil(220.0, 330.0, 50.0, 40.0, 3.0, 10_000)
+    forced = calculer_geometrie_sans_outil(
+        220.0, 330.0, 50.0, 40.0, 3.0, 10_000, nb_filles_force=base.nb_filles
+    )
+    assert forced == base
+
+
+def test_nb_filles_force_zero_leve_valueerror():
+    with pytest.raises(ValueError):
+        calculer_geometrie_sans_outil(
+            220.0, 330.0, 50.0, 40.0, 3.0, 1_000, nb_filles_force=0
+        )

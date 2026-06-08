@@ -691,6 +691,7 @@ def _reponse_sans_outil(
             format_hauteur_mm=payload.format.hauteur_mm,
             intervalle_laize_mm=intervalle_laize,
             quantite=payload.quantite,
+            nb_filles_force=payload.nb_filles_force,
         )
         if geo is None:
             continue
@@ -783,6 +784,7 @@ def _reponse_sans_outil(
                     laize_stock_mm=round(geo.laize_stock_mm, 2),
                     laize_utile_mm=round(geo.laize_utile_refente_mm, 2),
                     dechet_lateral_mm=round(geo.dechet_lateral_mm, 2),
+                    nb_filles=geo.nb_filles,
                 ),
                 forcage_bord_lateral=False,
                 motif_bord_lateral=None,
