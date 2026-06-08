@@ -10,7 +10,7 @@
 ## En-tête
 
 - **Date** : 2026-06-08
-- **Branche active** : `main` = **`5c96a03`** (après #124 — **endpoint `/api/devis/preview` LIVE**).
+- **Branche active** : `main` = **`30b4ca7`** (après #126 — **CI backend anti-flaky postgres**).
 - **Sprint en cours** : **Chantier « devis page unique »** (page réactive + recalc live). **CC1 = endpoint `/api/devis/preview` ✅ MERGÉ** (#124, contrat final : prix + déltas par option + `machine_id`). **CC2 = front A1** — page `/devis/nouvelle` réactive (**PR #123 OPEN — held**). Chantier précédent **« format sans outil » end-to-end CLOS** (back A #118 + back B #121 + front #120). Autres CLOS : **L1**, **L2** (sacrés re-baselinés), **Souveraineté**. Bugs #5/#6 **CLOS**.
 - **Carte qui-fait-quoi** : **CC1** → endpoint preview LIVE ✅. **CC2** → front page unique (A1, #123 held).
 
@@ -18,6 +18,7 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- **#126** — ci(backend): **anti-flaky pull postgres** — `postgres:16` sort de `services:` (pullé avant les steps, source du flaky `registry-1.docker.io`) → géré en **step** : cache image (`docker save`+`actions/cache`) + retry ×5 sur le pull, zéro Docker Hub dès le 2ᵉ run. `backend.yml` uniquement, comportement des tests INCHANGÉ (CI 1201 passed, test FK strictes Postgres tourne).
 - **#124** — feat(devis): **endpoint `POST /api/devis/preview`** (recalc live page unique, read-only). État partiel → prix + déltas/option en **1 appel**. Réutilise `MoteurDevis` + `bat_calculs` (Ø) + module refente via `LotProduction` transitoire + `_construire_devis_input_pour_lot` (moteur **non modifié**). Wiring : `nb_couleurs`→P2+P3a, `finitions[]`→`forfaits_st` (vrai P6), `machine_id`→P5, `options[].delta_eur` = impact marginal serveur (finition / +1 couleur). Sortie `{prix_ht (7 postes purs), cout_revient, marge_pct, prix_1000, geometrie, decompo (+Refente si sans outil), options, alertes}`. Read-only/idempotent/scopé/best-effort (jamais 500). **Sacrés L2 EXACTS**. Baseline **1195**.
 - **#120** — feat(optim): **UI « mode sans outil »** (lot front, CC2) — toggle Card Format avec/sans outil + masquage des champs outil (intervalle dev, développé) + ligne « déchet latéral », consomme le contrat back A. Front pur. vitest 202→**204**.
 - **#121** — feat(devis): **lot back B — coût de refente ADDITIF** + persist mode sans outil. Réutilise le moteur rebobinage Sprint-16 (axe Ø) × `nb_filles` résolu (axe largeur), gâche raccord, coût `temps × ConfigCouts.cout_exploitation_rebobineuse_eur_h`. Émis AUTO au chiffrage, porté par `ht_total` (`prix_vente_ht` 7 postes + calage INTOUCHÉS). Champs FR + migration `b3c5d7e9f1a2`. `LotProductionCreate/Read` : `cylindre_id` nullable + persist `mode_sans_outil`/`laize_stock_mm`/`nb_filles_force` (POST sans-outil ne 422 plus). **Sacrés L2 EXACTS** (config neutre par défaut). Baseline **1183**.
@@ -71,7 +72,8 @@
 > `laize_utile + marge_confort`, vérifiés verts).
 
 - **pytest local — `main`** (SQLite, `PG_TEST_URL` absent) : `1195 passed, 10 skipped, 0 failed` — inclut le chantier sans outil complet (back A #118 + back B #121) + l'endpoint **`/api/devis/preview`** (#124, **+12** tests : contrat, best-effort sans 500, 7 postes + Ø, read-only, sans outil, **prix bouge** nb_couleurs/finitions/quantité/sans-outil, **déltas options**, `machine_id`). Sacrés L2 EXACTS (préview read-only, moteur intouché). Skips : 2 tests subprocess SQLite migration P1+P2, 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
-- **pytest CI** (service `postgres:16`) : vert sur #114 (`test` job 6m29s). Inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod).
+- **pytest CI** (Postgres réel) : **`1201 passed, 4 skipped, 0 failed`**. ⚠️ **Ne pas confondre baseline locale (1195) et CI (1201)** : en CI, `test_migration_p1p2_sous_fk_strictes_postgres` **tourne** (valide la migration P1+P2 sous **FK strictes Postgres**, scénario réel boot Railway prod) et certains skips SQLite-only ne s'appliquent pas → +6 vs local. **Référence locale = 1195** (SQLite, `PG_TEST_URL` absent).
+- **CI backend anti-flaky (#126, 2026-06-08)** : `postgres:16` n'est plus un `services:` container (pullé avant les steps, sans cache/retry → un timeout `registry-1.docker.io` rendait la CI rouge alors que pytest n'avait pas tourné). Il passe en **step** : **cache image** (`docker save` + `actions/cache`) + **retry ×5** sur le pull → **zéro accès Docker Hub dès le 2ᵉ run**. **`backend.yml` uniquement**, comportement des tests INCHANGÉ (même PG `localhost:5432`, même `PG_TEST_URL`, test FK strictes tourne).
 - **Benchmark `cost_engine` 13/13 EXACT** post-#114 — re-figés aux valeurs L2 (V1a 1 424,31 / V1b 1 896,31 / V2 738,88 / V3 8 189,67 / V4 1 672,39 / V7a 6,73 / V8a 3,37 ; V8b-e ratios inchangés).
 - **Tripwire multi-lots P0b : `695,36 €` EXACT** post-#114 — le plafond `laize_utile=320` MORD ici (laize_plaque 310, papier brut 330 → cap 320), base P1 330→320 → P1 243,56→236,18. Garde anti-drift fixture `machine.laize_utile_mm == 320` conservée.
 - **vitest** : `204/204 tests passed` (27 fichiers) — +2 sur le lot front « mode sans outil » (#120 : toggle Card Format + masquages + ligne déchet latéral).
