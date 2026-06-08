@@ -55,7 +55,24 @@ function installFetchMock() {
       ]);
     }
     if (url.includes("/api/optimisation/options-disponibles")) {
-      return ok([]);
+      return ok([
+        {
+          id: 1,
+          code: "VERNIS",
+          libelle: "Vernis",
+          categorie: null,
+          coef_vitesse_impact: 0,
+          coef_gache_impact: 0,
+        },
+        {
+          id: 2,
+          code: "DORURE",
+          libelle: "Dorure",
+          categorie: null,
+          coef_vitesse_impact: 0,
+          coef_gache_impact: 0,
+        },
+      ]);
     }
     if (url.includes("/api/clients")) {
       return ok([
@@ -117,7 +134,11 @@ function installFetchMock() {
               { poste: "Matière", montant: "40.00" },
               { poste: "Encres", montant: "20.00" },
             ],
-        options: [{ code: "couleur_plus", delta_eur: "5.50" }],
+        options: [
+          { code: "VERNIS", delta_eur: "12.00", impact_production: false },
+          { code: "DORURE", delta_eur: null, impact_production: true },
+          { code: "couleur_plus", delta_eur: "5.50", impact_production: false },
+        ],
         alertes: sansOutil ? [] : [],
       });
     }
@@ -189,6 +210,22 @@ describe("DevisPageUnique — page devis réactive", () => {
     );
     expect(screen.getByTestId("b-diametre-max")).toHaveValue(400);
     expect(screen.getByTestId("b-sens")).toHaveValue(3);
+  });
+
+  it("chips finitions : « +X € » par code, aria-pressed au toggle, impact production", async () => {
+    render(<DevisPageUnique />);
+    const vernis = await screen.findByTestId("fin-VERNIS");
+    // Coût marginal serveur affiché (options[].delta_eur par code).
+    await waitFor(() => expect(vernis).toHaveTextContent("+12,00 €"));
+    expect(vernis).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(vernis);
+    expect(vernis).toHaveAttribute("aria-pressed", "true");
+    // Option à impact production sans forfait → jamais « +0 € ».
+    expect(screen.getByTestId("fin-DORURE")).toHaveTextContent(
+      /impact production/i,
+    );
+    // couleur_plus rendu de la même façon.
+    expect(screen.getByTestId("couleur-plus")).toHaveTextContent("+5,50 €");
   });
 
   it("décompo refente affichée en sans outil (déchet latéral)", async () => {

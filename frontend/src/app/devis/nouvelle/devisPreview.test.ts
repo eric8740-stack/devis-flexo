@@ -26,14 +26,14 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     nb_filles_force: null,
     mode_sans_outil: false,
     laize_stock_mm: null,
-    finitions: [],
+    options_codes: [],
     ...over,
   };
 }
 
 describe("buildPreviewRequest — état page → body wire", () => {
   it("mappe nb_couleurs en objet et passe la machine", () => {
-    const r = buildPreviewRequest(baseInput());
+    const r = buildPreviewRequest(baseInput({ options_codes: ["VERNIS"] }));
     expect(r.laize).toBe(100);
     expect(r.dev).toBe(80);
     expect(r.quantite).toBe(10000);
@@ -45,7 +45,8 @@ describe("buildPreviewRequest — état page → body wire", () => {
       blanc: 0,
       vernis: 0,
     });
-    // A1 : pas de finitions live (montant ST = A2).
+    // Options par CODE (#130) ; finitions ST ad-hoc inutilisées.
+    expect(r.options_codes).toEqual(["VERNIS"]);
     expect(r.finitions).toEqual([]);
   });
 
@@ -87,7 +88,11 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
         { poste: "Matière", montant: "40.00" },
         { poste: "Encres", montant: "20.00" },
       ],
-      options: [{ code: "couleur_plus", delta_eur: "5.50" }],
+      options: [
+        { code: "VERNIS", delta_eur: "12.00", impact_production: false },
+        { code: "DORURE", delta_eur: null, impact_production: true },
+        { code: "couleur_plus", delta_eur: "5.50", impact_production: false },
+      ],
       alertes: [{ niveau: "info", message: "ok" }],
     };
     const r = parsePreview(wire);
@@ -95,7 +100,17 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
     expect(r.marge_pct).toBe(30);
     expect(r.geometrie.nb_filles).toBeNull();
     expect(r.decompo[0]).toEqual({ poste: "Matière", montant: 40 });
-    expect(r.options[0]).toEqual({ code: "couleur_plus", delta_eur: 5.5 });
+    expect(r.options[0]).toEqual({
+      code: "VERNIS",
+      delta_eur: 12,
+      impact_production: false,
+    });
+    // Impact production sans forfait → delta null préservé + flag.
+    expect(r.options[1]).toEqual({
+      code: "DORURE",
+      delta_eur: null,
+      impact_production: true,
+    });
     expect(r.alertes[0].niveau).toBe("info");
   });
 

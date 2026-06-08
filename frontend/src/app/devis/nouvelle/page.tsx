@@ -221,7 +221,7 @@ export default function DevisPageUnique() {
         modeSansOutil && laizeStock.trim() !== ""
           ? parseFloat(laizeStock)
           : null,
-      finitions: Array.from(optionsCodes),
+      options_codes: Array.from(optionsCodes),
     }),
     [
       laize,
@@ -372,6 +372,25 @@ export default function DevisPageUnique() {
   };
 
   const geo = preview?.geometrie;
+
+  // Delta marginal par code (depuis preview.options) pour les chips finitions
+  // + couleur_plus. Le serveur price ; le front ne fait qu'afficher.
+  const optionByCode = useMemo(() => {
+    const m = new Map<string, DevisPreviewResult["options"][number]>();
+    for (const o of preview?.options ?? []) m.set(o.code, o);
+    return m;
+  }, [preview]);
+  const couleurPlus = optionByCode.get("couleur_plus") ?? null;
+
+  // Libellé « + X € » d'un levier (option/couleur) : impact production sans
+  // forfait → « chiffré bientôt », jamais « +0 € ».
+  const coutLevier = (o: DevisPreviewResult["options"][number] | null): string => {
+    if (o === null) return "";
+    if (o.delta_eur === null || o.impact_production) {
+      return "impact production (chiffré bientôt)";
+    }
+    return `+${eur(o.delta_eur)} €`;
+  };
 
   return (
     <main className="min-h-screen bg-[#FBF7F0]">
@@ -690,30 +709,52 @@ export default function DevisPageUnique() {
           </div>
         </SectionCard>
 
-        {/* ── Finitions ────────────────────────────────────────────── */}
+        {/* ── Finitions (chips) ─────────────────────────────────────── */}
         <SectionCard title="Finitions">
           {optionsDispo.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Aucune option de fabrication configurée.
             </p>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {optionsDispo.map((o) => (
-                <label
-                  key={o.code}
-                  className="flex cursor-pointer items-center gap-2 rounded-md border border-border p-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[#E85D2F]"
-                    checked={optionsCodes.has(o.code)}
-                    onChange={() => toggleOption(o.code)}
+            <div className="flex flex-wrap gap-2">
+              {optionsDispo.map((o) => {
+                const actif = optionsCodes.has(o.code);
+                const delta = optionByCode.get(o.code) ?? null;
+                const label = coutLevier(delta);
+                return (
+                  <button
+                    key={o.code}
+                    type="button"
+                    aria-pressed={actif ? "true" : "false"}
+                    onClick={() => toggleOption(o.code)}
                     data-testid={`fin-${o.code}`}
-                  />
-                  {o.libelle}
-                </label>
-              ))}
+                    className={
+                      "rounded-full border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D2F]/60 " +
+                      (actif
+                        ? "border-[#E85D2F] bg-[#E85D2F] text-white"
+                        : "border-border bg-white text-foreground hover:border-[#E85D2F]/50")
+                    }
+                  >
+                    {o.libelle}
+                    {label && (
+                      <span
+                        className={
+                          "ml-2 text-xs " +
+                          (actif ? "text-white/90" : "text-muted-foreground")
+                        }
+                      >
+                        {label}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+          )}
+          {couleurPlus && (
+            <p data-testid="couleur-plus" className="text-xs text-muted-foreground">
+              + 1 couleur d&apos;impression : {coutLevier(couleurPlus)}
+            </p>
           )}
         </SectionCard>
 
