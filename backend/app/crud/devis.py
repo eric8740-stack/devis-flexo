@@ -33,6 +33,7 @@ from app.services.optimisation.bat_calculs import (
     calcul_laize_papier,
     calcul_laize_plaque,
 )
+from app.services.optimisation.sans_outil import calculer_geometrie_sans_outil
 from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.devis_total import ht_total_avec_rebobinage
 from app.services.numero_devis_service import generate_next_numero
@@ -667,28 +668,76 @@ def _construire_devis_input_pour_lot(
             f"Aucune machine legacy pour entreprise_id={entreprise_id}."
         )
 
-    # Données depuis le cylindre magnétique du lot (développé) + machine
-    # d'impression (laize utile). P1+P2 : repoint sur Machine (parc unique
-    # post-fusion MI -> Machine, cf migration b2c3d4e5f6g7).
-    cyl = db.get(CylindreMagnetique, lot.cylindre_id)
+    # Machine d'impression (laize utile). P1+P2 : repoint sur Machine (parc
+    # unique post-fusion MI -> Machine, cf migration b2c3d4e5f6g7).
     machine = db.get(Machine, lot.machine_id)
-    if cyl is None or machine is None:
+    if machine is None:
         raise ValueError(
-            f"Cyl ({lot.cylindre_id}) ou machine ({lot.machine_id}) "
-            "introuvable — FK cassée."
+            f"Machine ({lot.machine_id}) introuvable — FK cassée."
         )
-
-    nb_poses_total = lot.nb_poses_dev * lot.nb_poses_laize
-    # ml_total = nombre de tours nécessaires × développé cyl. On considère
-    # 1 tour = nb_poses_total étiquettes (pas d'assouplissement gâche ici,
-    # le cost_engine ajoutera sa marge de roulage).
-    nb_tours = math.ceil(lot.quantite / nb_poses_total)
-    developpe_m = float(cyl.developpe_mm) / 1000.0
-    ml_total = max(1, math.ceil(nb_tours * developpe_m))
 
     # Format étiquette : depuis payload_input ou defaults DevisInput.
     format_l = int(payload_input.get("format_etiquette_largeur_mm", 60))
     format_h = int(payload_input.get("format_etiquette_hauteur_mm", 40))
+
+    # Lot back A — laize papier consommée par P1 (None par défaut → P1 retombe
+    # sur la plomberie L1/L2 ci-dessous). En mode sans outil, P1 facture la
+    # laize STOCK entière (déchet inclus).
+    laize_papier_sans_outil: Decimal | None = None
+
+    if lot.mode_sans_outil:
+        # 2ᵉ chemin de calcul — impression pleine largeur + refente. PAS de
+        # cylindre (développé libre), ml cylinder-free, intervalle_dev=0.
+        laize_presse = float(
+            machine.laize_utile_mm
+            if machine.laize_utile_mm is not None
+            else machine.laize_max_mm
+        )
+        laize_stock = (
+            float(lot.laize_stock_mm)
+            if lot.laize_stock_mm is not None
+            else laize_presse
+        )
+        interv_laize = float(lot.intervalle_laize_reel_mm or 0)
+        # Le lot porte le nb de filles CHOISI dans `nb_poses_laize` (= nb_filles
+        # en sans outil) → on l'impose pour que la ml/déchet reflètent la config
+        # retenue (y compris un override opérateur). 0/absent → dérivation auto.
+        nb_filles_lot = (
+            int(lot.nb_poses_laize)
+            if lot.nb_poses_laize and lot.nb_poses_laize > 0
+            else None
+        )
+        geo = calculer_geometrie_sans_outil(
+            laize_stock_mm=laize_stock,
+            laize_utile_presse_mm=laize_presse,
+            format_largeur_mm=float(format_l),
+            format_hauteur_mm=float(format_h),
+            intervalle_laize_mm=interv_laize,
+            quantite=lot.quantite,
+            nb_filles_force=nb_filles_lot,
+        )
+        if geo is None:
+            raise ValueError(
+                "Lot sans outil : format plus large que la laize imprimable "
+                f"(stock={laize_stock} mm, presse={laize_presse} mm)."
+            )
+        ml_total = max(1, int(geo.ml_total))
+        # P1 facture la laize STOCK entière (déchet latéral inclus, spec V1).
+        laize_papier_sans_outil = Decimal(str(laize_stock))
+    else:
+        # Développé du cylindre magnétique du lot (chemin standard avec outil).
+        cyl = db.get(CylindreMagnetique, lot.cylindre_id)
+        if cyl is None:
+            raise ValueError(
+                f"Cyl ({lot.cylindre_id}) introuvable — FK cassée."
+            )
+        nb_poses_total = lot.nb_poses_dev * lot.nb_poses_laize
+        # ml_total = nombre de tours nécessaires × développé cyl. On considère
+        # 1 tour = nb_poses_total étiquettes (pas d'assouplissement gâche ici,
+        # le cost_engine ajoutera sa marge de roulage).
+        nb_tours = math.ceil(lot.quantite / nb_poses_total)
+        developpe_m = float(cyl.developpe_mm) / 1000.0
+        ml_total = max(1, math.ceil(nb_tours * developpe_m))
 
     # Brief #33 — marge override globale du devis lue depuis payload_input
     # (étape 4 chiffrage). None = utiliser le default entreprise.
@@ -709,12 +758,15 @@ def _construire_devis_input_pour_lot(
         else machine.laize_max_mm
     )
 
-    # L1 — laize papier déterministe (plaque + 2×bord, arrondi palier, plancher
-    # roulable), EXPOSÉE au DevisInput mais NON consommée par P1 (cost_engine
-    # intouché). Gardée : tout défaut laisse `laize_papier_mm=None` (P1 ignore).
-    laize_papier_val = _calcul_laize_papier_lot(
-        db, entreprise_id, lot, format_l
-    )
+    # Laize papier consommée par P1 (L2). En mode sans outil : laize STOCK
+    # entière (déchet inclus). Sinon : laize papier déterministe L1/L2
+    # (plaque + 2×bord, arrondi palier, plancher roulable, plafond laize utile).
+    if lot.mode_sans_outil:
+        laize_papier_val = laize_papier_sans_outil
+    else:
+        laize_papier_val = _calcul_laize_papier_lot(
+            db, entreprise_id, lot, format_l
+        )
 
     return DevisInput(
         complexe_id=complexe.id,
@@ -732,6 +784,12 @@ def _construire_devis_input_pour_lot(
         forme_speciale=False,
         mode_calcul="manuel",
         pct_marge_override=pct_marge_override,
+        # Lot back A — écho du mode sans outil dans le DevisInput (audit). P1
+        # consomme la laize stock via `laize_papier_mm` ci-dessus. `bool(...)`
+        # car un lot transient (preview, non flush) porte `None` (le
+        # server_default ne s'applique qu'à l'INSERT).
+        mode_sans_outil=bool(lot.mode_sans_outil),
+        laize_stock_mm=lot.laize_stock_mm,
     )
 
 

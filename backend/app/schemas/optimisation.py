@@ -182,6 +182,38 @@ class OptimisationCalculerRequest(BaseModel):
     # forçages intervalle laize/dev.
     motif_bord_lateral: str | None = Field(None, max_length=500)
 
+    # Lot back A — mode « format sans outil » : impression pleine largeur sur la
+    # bobine STOCK puis refente en bobines filles (pas d'outil de découpe).
+    # `False` (défaut) = comportement actuel value-neutral. Si `True`, le moteur
+    # cylinder-based est court-circuité (cf. router : 2ᵉ chemin de calcul).
+    mode_sans_outil: bool = Field(
+        default=False,
+        description=(
+            "True → impression pleine largeur sans découpe outil + refente. "
+            "Court-circuite la génération de candidats cylindre, force "
+            "intervalle_dev=0, facture la laize stock entière (déchet inclus)."
+        ),
+    )
+    # Laize de la bobine STOCK montée (mm). OBLIGATOIRE en mode sans outil
+    # (la matière est facturée dessus, déchet latéral = stock − utile). Aucun
+    # champ « bobine mère » n'existant en base, c'est une saisie explicite.
+    laize_stock_mm: float | None = Field(
+        None,
+        gt=0,
+        le=2000,
+        description="Laize bobine mère montée (mm). Requis si mode_sans_outil.",
+    )
+    # Souveraineté : force le nb de bobines filles de refente (sinon = valeur
+    # géométrique max dérivée). Ex. 1 = pas de refente / pistes regroupées.
+    # Skippé en mode avec outil. Infaisable (ne tient pas dans la laize) →
+    # la presse est écartée des candidats.
+    nb_filles_force: int | None = Field(
+        None,
+        ge=1,
+        le=100,
+        description="Force le nb de bobines filles de refente (mode sans outil).",
+    )
+
     @model_validator(mode="after")
     def _valider_forcages_et_lacets(self) -> "OptimisationCalculerRequest":
         # Souveraineté commerciale (Règle 7) : TOUS les motifs de forçage
@@ -199,6 +231,14 @@ class OptimisationCalculerRequest(BaseModel):
                 raise ValueError(
                     "Lacets asymétriques : lacet_droit_mm et lacet_gauche_mm obligatoires."
                 )
+        # Lot back A — mode sans outil : la laize stock est la base de
+        # facturation matière + le calcul du déchet. STRUCTUREL (pas un motif
+        # souveraineté) → bloquant si absente.
+        if self.mode_sans_outil and self.laize_stock_mm is None:
+            raise ValueError(
+                "mode_sans_outil : laize_stock_mm obligatoire "
+                "(laize de la bobine mère montée, base de facturation matière)."
+            )
         return self
 
 
@@ -221,6 +261,18 @@ class GeometrieLaize(BaseModel):
     bord_lateral_mm: float
     laize_papier_mm: float
     intervalle_laize_mm: float
+
+    # Lot back A — mode « sans outil » uniquement (None en mode avec outil) :
+    # la matière est facturée sur la laize STOCK entière, le déchet latéral
+    # (stock − utile de refente) est explicité pour affichage/traçabilité.
+    laize_stock_mm: float | None = None
+    laize_utile_mm: float | None = None
+    dechet_lateral_mm: float | None = None
+    # Nombre de bobines filles de refente. CHAMP EXPLICITE distinct du
+    # `nb_poses_laize` du candidat : par défaut = valeur géométrique dérivée,
+    # mais surchargeable (cf. `nb_filles_force` requête — ex. 1 fille =
+    # plusieurs pistes regroupées / pas de refente). None en mode avec outil.
+    nb_filles: int | None = None
 
 
 class OptimisationConfigOut(BaseModel):
@@ -321,6 +373,10 @@ class OptimisationConfigOut(BaseModel):
     # (chute_min). Le motif est purement informatif (jamais bloquant).
     forcage_bord_lateral: bool = False
     motif_bord_lateral: str | None = None
+
+    # Lot back A — écho du mode « format sans outil » (impression pleine largeur
+    # + refente). False = candidat outil standard (cylinder-based).
+    mode_sans_outil: bool = False
 
 
 class OptimisationCalculerResponse(BaseModel):

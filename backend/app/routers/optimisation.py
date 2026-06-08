@@ -48,6 +48,7 @@ from app.services.optimisation.bat_calculs import (
     calcul_rendement,
 )
 from app.services.optimisation.moteur import optimiser_pose
+from app.services.optimisation.sans_outil import calculer_geometrie_sans_outil
 from app.services.optimisation.types import (
     ConfigurationPose,
     ContrainteClient,
@@ -253,6 +254,35 @@ def post_calculer(
     cylindres = charger_cylindres_actifs(db, user.entreprise_id)
     machines = charger_machines_actives(db, user.entreprise_id)
     baremes = charger_baremes(db, user.entreprise_id)
+
+    # Lot back A — 2ᵉ chemin de calcul : « mode sans outil » (impression pleine
+    # largeur + refente). Court-circuit TOTAL du moteur cylinder-based : aucun
+    # candidat cylindre, intervalle_dev=0, laize facturée = STOCK. On émet une
+    # config par presse viable et on retourne avant toute logique outil.
+    if payload.mode_sans_outil:
+        if not machines:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Aucune machine active dans votre catalogue. "
+                    "Avez-vous complété l'onboarding ?"
+                ),
+            )
+        matiere_out_so = (
+            MatiereOut.model_validate(matiere_obj)
+            if matiere_obj is not None
+            else None
+        )
+        return _reponse_sans_outil(
+            db=db,
+            user=user,
+            payload=payload,
+            machines=machines,
+            options_dc=options_dc,
+            matiere_out=matiere_out_so,
+            epaisseur_appliquee_um=epaisseur_appliquee_um,
+            forcage_epaisseur=forcage_epaisseur,
+        )
 
     # Bug #6 point de calcul unique : le Ø candidat part du MÊME Ø de départ
     # (mandrin + 2 × paroi) que le Ø final rebobinage, via le résolveur
@@ -601,6 +631,185 @@ def _to_config_out(
         ),
         forcage_bord_lateral=forcage_bord_lateral,
         motif_bord_lateral=motif_bord_lateral,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lot back A — mode « format sans outil » (impression pleine largeur + refente)
+# ---------------------------------------------------------------------------
+
+# Espace de refente par défaut entre filles (mm) quand l'opérateur ne force pas
+# d'intervalle laize. Lames de refente — raffinable côté UI/forçage.
+DEFAULT_INTERVALLE_REFENTE_MM = 3.0
+
+
+def _reponse_sans_outil(
+    *,
+    db: Session,
+    user: User,
+    payload: OptimisationCalculerRequest,
+    machines: list,
+    options_dc: list,
+    matiere_out: MatiereOut | None,
+    epaisseur_appliquee_um: int,
+    forcage_epaisseur: bool,
+) -> OptimisationCalculerResponse:
+    """2ᵉ chemin de calcul : impression pleine largeur + refente, sans outil.
+
+    Émet une `OptimisationConfigOut` par presse viable (capacité couleurs OK).
+    Pas de cylindre (`cylindre_id=0` sentinelle), `intervalle_dev=0`, laize
+    facturée = STOCK, déchet latéral (stock − utile refente) explicité dans
+    `geometrie_laize`. Le coût de refente/finisseuse + le Ø bobine = lot back B
+    (ici `diametre_bobine_mm=0`). `rotation_se` / `bat_calculs` INTOUCHÉS.
+    """
+    from app.services.optimisation.regles.capacite_couleurs import (
+        verifier_capacite,
+    )
+
+    entreprise = db.query(Entreprise).filter_by(id=user.entreprise_id).one()
+    marge_liner = float(entreprise.marge_liner_mm)
+    # laize_stock garanti non-None par le validateur du schéma (mode_sans_outil).
+    laize_stock = float(payload.laize_stock_mm)  # type: ignore[arg-type]
+    intervalle_laize = (
+        float(payload.intervalle_laize_force_mm)
+        if payload.intervalle_laize_force_mm is not None
+        else DEFAULT_INTERVALLE_REFENTE_MM
+    )
+    forcage_intervalle_laize = payload.intervalle_laize_force_mm is not None
+    sens_int = _sens_int(payload.sens_enroulement)
+
+    configs: list[OptimisationConfigOut] = []
+    for m in machines:
+        if not verifier_capacite(
+            m, payload.nb_couleurs_impression, options_dc
+        ).ok:
+            continue
+        geo = calculer_geometrie_sans_outil(
+            laize_stock_mm=laize_stock,
+            laize_utile_presse_mm=float(m.laize_utile_mm),
+            format_largeur_mm=payload.format.largeur_mm,
+            format_hauteur_mm=payload.format.hauteur_mm,
+            intervalle_laize_mm=intervalle_laize,
+            quantite=payload.quantite,
+            nb_filles_force=payload.nb_filles_force,
+        )
+        if geo is None:
+            continue
+
+        m2 = calcul_m2_consomme(geo.ml_total, laize_stock)
+        rendement = calcul_rendement(
+            payload.quantite,
+            payload.format.largeur_mm,
+            payload.format.hauteur_mm,
+            m2,
+        )
+        laize_liner = calcul_laize_liner(payload.format.largeur_mm, marge_liner)
+
+        # Lacets refente (liner de chaque côté de la fille) : symétriques sauf
+        # forçage asymétrique explicite.
+        if (
+            payload.lacets_asymetriques
+            and payload.lacet_droit_mm is not None
+            and payload.lacet_gauche_mm is not None
+        ):
+            lacet_d = float(payload.lacet_droit_mm)
+            lacet_g = float(payload.lacet_gauche_mm)
+        else:
+            lacet_d = lacet_g = intervalle_laize / 2
+
+        configs.append(
+            OptimisationConfigOut(
+                cylindre_id=0,  # sentinelle : pas d'outil/cylindre
+                machine_id=m.id,
+                nb_poses_dev=1,  # impression continue (pas de répétition outil)
+                nb_poses_laize=geo.nb_filles,
+                nb_poses_total=geo.nb_filles,
+                intervalle_dev_reel_mm=0.0,
+                intervalle_laize_reel_mm=round(geo.intervalle_laize_mm, 2),
+                largeur_plaque_mm=round(geo.laize_utile_refente_mm, 2),
+                z_mini_effet_banane=0.0,
+                qualite_echenillage="sans_objet",
+                consolidation_atteinte=False,
+                intervalle_laize_souhaitable_mm=None,
+                disposition_poses="pleine_largeur",
+                coef_vitesse_echenillage=1.0,
+                coef_gache_echenillage=1.0,
+                coef_confort_rayon=1.0,
+                coef_quinconce=1.0,
+                coef_consolidation=1.0,
+                coef_vitesse_options=1.0,
+                coef_gache_options=1.0,
+                coef_vitesse_final=1.0,
+                coef_gache_final=1.0,
+                score=0.0,
+                laize_plaque_mm=round(geo.laize_utile_refente_mm, 2),
+                laize_papier_mm=round(geo.laize_stock_mm, 2),
+                chute_laterale_reelle_mm=round(geo.dechet_lateral_mm / 2, 2),
+                z_cylindre_mm=0.0,
+                nb_dents_cylindre=0,
+                ml_total_m=round(geo.ml_total, 2),
+                m2_consomme=round(m2, 2),
+                rendement_pct=round(rendement, 2),
+                diametre_bobine_mm=0,  # Ø bobine = lot back B (refente)
+                laize_liner_mm=round(laize_liner, 2),
+                sens_enroulement=payload.sens_enroulement,
+                sens_enroulement_libelle=get_libelle_officiel(sens_int),
+                rotation_vue_a_deg=get_rotation_vue_a(sens_int),
+                rotation_vue_c_deg=get_rotation_vue_c(sens_int),
+                machines_compatibles=[m.id],
+                noms_machines_compatibles=[m.nom],
+                petit_cylindre=False,
+                intervalle_laize_recommande_mm=round(intervalle_laize, 2),
+                intervalle_laize_applique_mm=round(intervalle_laize, 2),
+                forcage_intervalle_laize=forcage_intervalle_laize,
+                motif_forcage_intervalle_laize=(
+                    payload.motif_forcage_intervalle_laize
+                ),
+                intervalle_dev_recommande_mm=0.0,
+                intervalle_dev_applique_mm=0.0,
+                forcage_intervalle_dev=False,
+                motif_forcage_intervalle_dev=None,
+                lacet_droit_mm=round(lacet_d, 2),
+                lacet_gauche_mm=round(lacet_g, 2),
+                lacets_asymetriques=payload.lacets_asymetriques,
+                matiere=matiere_out,
+                epaisseur_appliquee_um=int(epaisseur_appliquee_um),
+                forcage_epaisseur=forcage_epaisseur,
+                motif_forcage_epaisseur=payload.motif_forcage_epaisseur,
+                geometrie_laize=GeometrieLaize(
+                    laize_plaque_mm=round(geo.laize_utile_refente_mm, 2),
+                    bord_lateral_mm=0.0,
+                    laize_papier_mm=round(geo.laize_stock_mm, 2),
+                    intervalle_laize_mm=round(geo.intervalle_laize_mm, 2),
+                    laize_stock_mm=round(geo.laize_stock_mm, 2),
+                    laize_utile_mm=round(geo.laize_utile_refente_mm, 2),
+                    dechet_lateral_mm=round(geo.dechet_lateral_mm, 2),
+                    nb_filles=geo.nb_filles,
+                ),
+                forcage_bord_lateral=False,
+                motif_bord_lateral=None,
+                mode_sans_outil=True,
+            )
+        )
+
+    warnings = [
+        "Mode sans outil : impression pleine largeur + refente. La laize stock "
+        f"({laize_stock:g} mm) est facturée en entier (déchet latéral inclus). "
+        "Coût de refente / Ø bobine non chiffrés ici (lot suivant)."
+    ]
+    message = None
+    if not configs:
+        message = (
+            "Aucune presse compatible (capacité couleurs insuffisante ou "
+            "format plus large que la laize imprimable)."
+        )
+    return OptimisationCalculerResponse(
+        configurations=configs,
+        nb_candidats=len(configs),
+        message_filtrage=message,
+        intervalle_dev_min_applique_mm=0.0,
+        message_contrainte_client=None,
+        warnings=warnings,
     )
 
 

@@ -163,6 +163,20 @@ class DevisInput(BaseModel):
         "Le rebasage de P1 sur ce champ est l'étape 2.",
     )
 
+    # --- Lot back A : mode « format sans outil » (impression pleine largeur) ---
+    mode_sans_outil: bool = Field(
+        default=False,
+        description="True → impression pleine largeur sans découpe outil + "
+        "refente. P1 facture la laize STOCK entière (déchet inclus). Le flag "
+        "agit en AMONT (géométrie) ; la logique des 7 postes est intouchée.",
+    )
+    laize_stock_mm: Decimal | None = Field(
+        default=None,
+        gt=0,
+        description="Laize bobine mère montée (mm). En mode sans outil, P1 la "
+        "consomme via `laize_papier_mm` (= laize stock). None sinon.",
+    )
+
     @model_validator(mode="after")
     def _check_intervalle_coherent_avec_mode(self) -> Self:
         """Sprint 7 Lot 7b — interdit intervalle_mm en mode matching.

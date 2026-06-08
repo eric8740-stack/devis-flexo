@@ -20,6 +20,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -66,8 +68,10 @@ class LotProduction(Base):
     ordre: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Config production (issue d'un candidat moteur optim).
-    cylindre_id: Mapped[int] = mapped_column(
-        ForeignKey("cylindre_magnetique.id"), nullable=False
+    # Lot back A : NULLABLE — un lot « mode sans outil » n'a PAS d'outil de
+    # découpe (cylindre), il imprime pleine largeur puis refend.
+    cylindre_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cylindre_magnetique.id"), nullable=True
     )
     # P1+P2 : FK rebascule vers `machine.id` (parc unique post-fusion
     # MI -> Machine, cf migration b2c3d4e5f6g7).
@@ -98,6 +102,16 @@ class LotProduction(Base):
     # Concept SÉPARÉ des lacets (intervalle/2) qui restent intouchés. Asymétrie
     # g/d hors L1. NON consommé par P1 (cost_engine intouché).
     bord_lateral_mm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+
+    # Lot back A — mode « format sans outil » (impression pleine largeur +
+    # refente). Défaut False (server_default) → tout lot existant reste un lot
+    # avec outil (value-neutral). `laize_stock_mm` = bobine mère facturée par
+    # P1 quand le mode est actif (NULL sinon).
+    mode_sans_outil: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    laize_stock_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+
     score_optim: Mapped[float | None] = mapped_column(Float)
     cout_lot_ht_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
