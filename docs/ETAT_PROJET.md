@@ -10,7 +10,7 @@
 ## En-tête
 
 - **Date** : 2026-06-08
-- **Branche active** : `main` = **`13a579d`** (après #123 — **front A1 « devis page unique » mergé**).
+- **Branche active** : `main` = **`663c194`** (après #130 — **`/preview` options par CODE LIVE**).
 - **Sprint en cours** : **Aucun**. **🎉 Chantier « devis page unique » end-to-end CLOS** : **CC1 endpoint `/api/devis/preview`** (#124, contrat final prix + déltas/option + `machine_id`) + **CC2 front A1** `/devis/nouvelle` réactive (#123, recalc live debounce/AbortController, contrat preview complet). Chantier précédent **« format sans outil » end-to-end CLOS** (#118 + #121 + #120). Autres CLOS : **L1**, **L2** (sacrés re-baselinés), **Souveraineté**. Bugs #5/#6 **CLOS**.
 - **Carte qui-fait-quoi** : **CC1 / CC2 = libres**. Chantiers sans-outil + devis-page-unique terminés.
 
@@ -18,6 +18,7 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- **#130** — feat(devis): **`/preview` options par CODE** — `options_codes: list[str]` (entrée canonique, le front n'envoie que les codes) → € résolu serveur via `OptionFabrication` (catalogue tenant+global) → `forfaits_st` → P6 (moteur intouché). `options[].delta_eur` par code (`€×(1+marge)`) + flag `impact_production` (option coef/temps sans forfait → `delta_eur:null`, pas de faux +0 €) ; décompo ligne `Option · <libelle>` distincte. `finitions:[{montant_eur}]` déprécié (rétro-compat). `OptionDisponiblePublic` inchangé. **Sacrés L2 EXACTS**. Baseline **1197**.
 - **#123** — feat(devis): **front A1 « devis page unique »** (CC2) — page `/devis/nouvelle` réactive consommant `POST /api/devis/preview` live (swap mock → endpoint #124). Recalc live (debounce 250ms, AbortController, keep-last), contrat preview complet (€/1000, géométrie, décompo, options/déltas, alertes info/warn, `couleur_plus`), select presse masqué si tenant mono-machine. Front pur. vitest 204→**218**. → **chantier devis page unique CLOS end-to-end**.
 - **#126** — ci(backend): **anti-flaky pull postgres** — `postgres:16` sort de `services:` (pullé avant les steps, source du flaky `registry-1.docker.io`) → géré en **step** : cache image (`docker save`+`actions/cache`) + retry ×5 sur le pull, zéro Docker Hub dès le 2ᵉ run. `backend.yml` uniquement, comportement des tests INCHANGÉ (CI 1201 passed, test FK strictes Postgres tourne).
 - **#124** — feat(devis): **endpoint `POST /api/devis/preview`** (recalc live page unique, read-only). État partiel → prix + déltas/option en **1 appel**. Réutilise `MoteurDevis` + `bat_calculs` (Ø) + module refente via `LotProduction` transitoire + `_construire_devis_input_pour_lot` (moteur **non modifié**). Wiring : `nb_couleurs`→P2+P3a, `finitions[]`→`forfaits_st` (vrai P6), `machine_id`→P5, `options[].delta_eur` = impact marginal serveur (finition / +1 couleur). Sortie `{prix_ht (7 postes purs), cout_revient, marge_pct, prix_1000, geometrie, decompo (+Refente si sans outil), options, alertes}`. Read-only/idempotent/scopé/best-effort (jamais 500). **Sacrés L2 EXACTS**. Baseline **1195**.
@@ -72,7 +73,7 @@
 > V8b-e : **ratios inchangés** (non re-figés — passent par le fallback legacy
 > `laize_utile + marge_confort`, vérifiés verts).
 
-- **pytest local — `main`** (SQLite, `PG_TEST_URL` absent) : `1195 passed, 10 skipped, 0 failed` — inclut le chantier sans outil complet (back A #118 + back B #121) + l'endpoint **`/api/devis/preview`** (#124, **+12** tests : contrat, best-effort sans 500, 7 postes + Ø, read-only, sans outil, **prix bouge** nb_couleurs/finitions/quantité/sans-outil, **déltas options**, `machine_id`). Sacrés L2 EXACTS (préview read-only, moteur intouché). Skips : 2 tests subprocess SQLite migration P1+P2, 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
+- **pytest local — `main`** (SQLite, `PG_TEST_URL` absent) : `1197 passed, 10 skipped, 0 failed` — inclut le chantier sans outil (#118 + #121), l'endpoint **`/api/devis/preview`** (#124) et son **option pricing par CODE** (#130 : `options_codes` → € catalogue → P6, deltas par code + `impact_production`, rétro-compat finitions). Sacrés L2 EXACTS (preview read-only, moteur intouché). Skips : 2 tests subprocess SQLite migration P1+P2, 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent. **(CI = +6 : test FK strictes Postgres + skips SQLite-only non comptés.)**
 - **pytest CI** (Postgres réel) : **`1201 passed, 4 skipped, 0 failed`**. ⚠️ **Ne pas confondre baseline locale (1195) et CI (1201)** : en CI, `test_migration_p1p2_sous_fk_strictes_postgres` **tourne** (valide la migration P1+P2 sous **FK strictes Postgres**, scénario réel boot Railway prod) et certains skips SQLite-only ne s'appliquent pas → +6 vs local. **Référence locale = 1195** (SQLite, `PG_TEST_URL` absent).
 - **CI backend anti-flaky (#126, 2026-06-08)** : `postgres:16` n'est plus un `services:` container (pullé avant les steps, sans cache/retry → un timeout `registry-1.docker.io` rendait la CI rouge alors que pytest n'avait pas tourné). Il passe en **step** : **cache image** (`docker save` + `actions/cache`) + **retry ×5** sur le pull → **zéro accès Docker Hub dès le 2ᵉ run**. **`backend.yml` uniquement**, comportement des tests INCHANGÉ (même PG `localhost:5432`, même `PG_TEST_URL`, test FK strictes tourne).
 - **Benchmark `cost_engine` 13/13 EXACT** post-#114 — re-figés aux valeurs L2 (V1a 1 424,31 / V1b 1 896,31 / V2 738,88 / V3 8 189,67 / V4 1 672,39 / V7a 6,73 / V8a 3,37 ; V8b-e ratios inchangés).
@@ -103,6 +104,7 @@
   - **`cylindre_id` : validator conditionnel** « obligatoire si `mode_sans_outil = False` » (au lieu de juste nullable) — durcir `LotProductionCreate`.
   - **Tracer les hypothèses de sourcing refente** (rebobineuse retenue, Ø mandrin défaut 76, Ø max client→rebobineuse) → motif visible / auditable, façon planner bobine.
 - **Backlog horizon (non lancé)** :
+  - **🔴 Pricing options PRODUCTION dans le cost_engine** (coef vitesse/gâche, temps calage) — sacred-sensitive : touche P3/P4/P5, **benchmarks à revérifier EXACTS sous contrôle**. Validation Eric requise. (`/preview` renvoie déjà `impact_production:true` pour ces options en attendant.)
   - **Lot 3** — renommages config coûts (P7 → `cout_operateur_eur_h`, P5 → `cout_exploitation_machine_eur_h`).
   - **Lot 4** — 7 champs coût manquants + UI Stratégique (recoupe « Phase 2 / Lot 4b » ci-dessous).
   - **Dette UI rebobinage** — bloc mono-lot périmé · double saisie matière · double saisie mandrin.
@@ -127,11 +129,13 @@
 > prix se recalcule à chaque changement via un **endpoint serveur** (SSOT, zéro
 > calcul dupliqué côté front). **CLOS** : endpoint #124 + front A1 #123, mergés.
 
-- **CC1 — endpoint `POST /api/devis/preview` : ✅ MERGÉ (#124, `5c96a03`).** Read-only, scopé `entreprise_id`, best-effort (jamais 500).
-  - **Input** (tous optionnels) : `laize, dev, forme, quantite, cylindre_id, machine_id, matiere_id, epaisseur_um, mandrin_mm, diam_max_mm, nb_filles_force, mode_sans_outil, laize_stock_mm, nb_couleurs, finitions[]`.
-  - **Output** : `prix_ht` (7 postes PUR, sacré) `, cout_revient, marge_pct, prix_1000, geometrie {diametre_mm, nb_poses, nb_filles, dechet_lateral_mm}, decompo [{poste, montant}]` (+ ligne **Refente** additive si sans outil) `, options [{code, delta_eur}]` (impact marginal serveur de chaque finition + d'une couleur en plus) `, alertes [{niveau, message}]`.
-  - **Wiring (réutilisation pure)** : `nb_couleurs`→`nb_couleurs_par_type` (P2+P3a) ; `finitions[]`→`forfaits_st` (vrai P6) ; `machine_id`→P5 (défaut 1ère presse) ; tout via `LotProduction` transitoire + `_construire_devis_input_pour_lot` + `MoteurDevis` (moteur INTOUCHÉ).
-  - **Backlog preview** (best-effort V1) : `diam_max_mm`/`finitions` sourcing fin ; `machine_id` deviendra le contrat de l'optim (front B).
+- **CC1 — endpoint `POST /api/devis/preview` : ✅ MERGÉ (#124 + #130).** Read-only, scopé `entreprise_id`, idempotent, best-effort (jamais 500). **Contrat CANONIQUE (référence front)** :
+  - **Input** (tous optionnels) : `laize, dev, forme, quantite, cylindre_id, machine_id, matiere_id, epaisseur_um, mandrin_mm, diam_max_mm, nb_filles_force, mode_sans_outil, laize_stock_mm, nb_couleurs` + **`options_codes: list[str]`** (**CANONIQUE**). ⚠️ **Écart #130** : `finitions:[{montant_eur}]` est **DÉPRÉCIÉ** (rétro-compat — A1 prod envoie `[]`). Le front envoie des **codes** (`/options-disponibles`), JAMAIS des montants.
+  - **Output** : `prix_ht` (**7 postes PUR**, sacré) `, cout_revient, marge_pct, prix_1000, geometrie {diametre_mm, nb_poses, nb_filles, dechet_lateral_mm}, decompo [{poste, montant}]` (+ ligne **Refente** additive si sans outil, + lignes **`Option · <libelle>`** distinctes de la sous-traitance) `, options [{code, delta_eur, impact_production}]` `, alertes [{niveau, message}]`.
+    - `options[]` = delta marginal **PAR CODE** sur le catalogue tenant (`€ × (1+marge)`, additif) + `couleur_plus`. **Garde-fou** : option à impact production sans forfait → `impact_production:true` + `delta_eur:null` (front : « impact production (chiffré bientôt) », jamais un faux +0 €).
+  - **Wiring (réutilisation pure, moteur INTOUCHÉ)** : `nb_couleurs`→`nb_couleurs_par_type` (P2+P3a) ; `options_codes`→€ catalogue `OptionFabrication`→`forfaits_st`→**P6** (`OptionDisponiblePublic` inchangé, pas de fuite `forfait_eur`) ; `machine_id`→P5 (défaut 1ère presse) ; tout via `LotProduction` transitoire + `_construire_devis_input_pour_lot` + `MoteurDevis`.
+  - **Pointeur front** : client typé [`frontend/src/app/devis/nouvelle/devisPreview.ts`](../frontend/src/app/devis/nouvelle/devisPreview.ts) + [`frontend/src/lib/api.ts`](../frontend/src/lib/api.ts).
+  - **🔴 Backlog (chantier séparé, sacred-sensitive, validation Eric)** : **pricing options PRODUCTION** (coef vitesse/gâche, temps calage) **dans le cost_engine** — touche P3/P4/P5 → **benchmarks à revérifier EXACTS sous contrôle**. + best-effort V1 : `diam_max_mm` sourcing fin ; `machine_id` ← contrat optim (front B).
 - **CC2 — front A1 : ✅ MERGÉ (#123, `13a579d`).** Page `/devis/nouvelle` réactive + design FlexoSuite, consomme `/api/devis/preview` (swap mock → endpoint live). Recalc live debounce 250ms + AbortController + keep-last ; parse le contrat complet (€/1000, géométrie, décompo, options/déltas, alertes) ; select presse masqué si tenant mono-machine. vitest **218**.
 
 ---
