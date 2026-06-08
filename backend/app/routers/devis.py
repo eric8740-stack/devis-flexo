@@ -21,6 +21,8 @@ from app.schemas.devis_persist import (
     DevisCreate,
     DevisDetail,
     DevisListResponse,
+    DevisPreviewIn,
+    DevisPreviewOut,
     DevisUpdate,
     PlanBobinesSelectionIn,
     PlanBobinesSelectionOut,
@@ -71,6 +73,23 @@ def preview_couts_devis(
         nb_couleurs_par_type=crud._mapper_nb_couleurs(payload.nb_couleurs),
     )
     return PreviewCoutsOut(**result)
+
+
+@router.post("/preview", response_model=DevisPreviewOut)
+def preview_devis_live(
+    payload: DevisPreviewIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> DevisPreviewOut:
+    """Recalc live READ-ONLY de la page unique de devis.
+
+    Reçoit l'état PARTIEL du devis (tous champs optionnels), renvoie les
+    valeurs dérivées + prix + décompo + alertes, SANS persister. Réutilise le
+    cost_engine + bat_calculs (SSOT). Scopé `entreprise_id`, idempotent,
+    best-effort sur les champs manquants (jamais de 500).
+    """
+    result = crud.preview_devis(db, user.entreprise_id, payload.model_dump())
+    return DevisPreviewOut(**result)
 
 
 @router.get("", response_model=DevisListResponse)

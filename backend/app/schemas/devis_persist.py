@@ -352,6 +352,108 @@ class PreviewCoutsOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/devis/preview — recalc live read-only de la page unique
+# ---------------------------------------------------------------------------
+
+
+class FinitionPreviewIn(BaseModel):
+    """Une finition sous-traitance du preview → mappée sur `forfaits_st` (P6).
+
+    Réutilise la mécanique P6 existante (somme des forfaits ST). `montant_eur`
+    pilote le coût ; chaque finition fait donc bouger le prix.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    montant_eur: Decimal = Field(ge=0)
+    partenaire_st_id: int = Field(default=1, gt=0)
+    libelle: str | None = None
+
+
+class DevisPreviewIn(BaseModel):
+    """État PARTIEL du devis pour le recalc live (tous champs optionnels).
+
+    Read-only : aucune persistance. Champs manquants → calcul best-effort,
+    jamais de 500. Scopé `entreprise_id` côté router.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    laize: float | None = Field(None, gt=0, description="Largeur étiquette (mm)")
+    dev: float | None = Field(None, gt=0, description="Développé / hauteur (mm)")
+    forme: str | None = Field(None, description="Forme (rectangle/spéciale/courbe)")
+    quantite: int | None = Field(None, gt=0)
+    cylindre_id: int | None = Field(None, gt=0)
+    machine_id: int | None = Field(None, gt=0, description="Presse (P5). Défaut = 1ère active.")
+    matiere_id: int | None = Field(None, gt=0)
+    epaisseur_um: int | None = Field(None, gt=0)
+    mandrin_mm: int | None = Field(None, gt=0)
+    diam_max_mm: int | None = Field(None, gt=0)
+    nb_filles_force: int | None = Field(None, ge=1)
+    mode_sans_outil: bool = False
+    laize_stock_mm: float | None = Field(None, gt=0)
+    # nb_couleurs → P2 Encres + P3a clichés (réutilise NbCouleursIn + mapping).
+    nb_couleurs: NbCouleursIn | None = None
+    # finitions → P6 (forfaits sous-traitance). Chaque entrée fait bouger le prix.
+    finitions: list[FinitionPreviewIn] = Field(default_factory=list)
+
+
+class GeometriePreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    diametre_mm: int | None = None
+    nb_poses: int | None = None
+    nb_filles: int | None = None
+    dechet_lateral_mm: float | None = None
+
+
+class DecompoLignePreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    poste: str
+    montant: Decimal
+
+
+class OptionDeltaPreview(BaseModel):
+    """Impact marginal d'un levier activable (prix avec − prix sans, état
+    courant). Calculé serveur, même réponse — pas d'appel séparé."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    delta_eur: Decimal
+
+
+class AlertePreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    niveau: Literal["info", "warn"]
+    message: str
+
+
+class DevisPreviewOut(BaseModel):
+    """Réponse POST /api/devis/preview.
+
+    `prix_ht` = prix de vente HT des 7 postes (base PURE cost_engine, sacrée).
+    `decompo` liste les 7 postes + une ligne « Refente » ADDITIVE en mode sans
+    outil (le coût refente n'entre PAS dans `prix_ht`). Montants None quand
+    l'état est trop partiel pour chiffrer (jamais un 0 € trompeur).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    prix_ht: Decimal | None = None
+    cout_revient: Decimal | None = None
+    marge_pct: Decimal | None = None
+    prix_1000: Decimal | None = None
+    geometrie: GeometriePreview
+    decompo: list[DecompoLignePreview] = Field(default_factory=list)
+    # Impact marginal serveur de chaque levier activable (finition, +1 couleur).
+    options: list[OptionDeltaPreview] = Field(default_factory=list)
+    alertes: list[AlertePreview] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Cohérence Ø ext ↔ nb étiquettes/bobine — endpoint stateless live UI
 # ---------------------------------------------------------------------------
 
