@@ -25,6 +25,7 @@ from app.models import (
     Entreprise,
     LotProduction,
     Machine,
+    OptionFabrication,
 )
 from app.schemas.devis import DevisInput, PartenaireSTForfait
 from app.schemas.devis_persist import DevisCreate, DevisUpdate, NbCouleursIn
@@ -485,6 +486,68 @@ def preview_couts_multilots(
     }
 
 
+def _catalogue_options(
+    db: Session, entreprise_id: int
+) -> dict[str, OptionFabrication]:
+    """Options actives du tenant + catalogue global, mergées par code (tenant
+    prioritaire) — MÊME logique que GET /api/optimisation/options-disponibles.
+    Source unique de coût : le front n'a que les codes."""
+    rows = (
+        db.query(OptionFabrication)
+        .filter(OptionFabrication.actif.is_(True))
+        .filter(
+            (OptionFabrication.entreprise_id == entreprise_id)
+            | (OptionFabrication.entreprise_id.is_(None))
+        )
+        .all()
+    )
+    by_code: dict[str, OptionFabrication] = {}
+    for r in rows:
+        ex = by_code.get(r.code)
+        if ex is None or (ex.entreprise_id is None and r.entreprise_id is not None):
+            by_code[r.code] = r
+    return by_code
+
+
+def _option_cout_eur(
+    opt: OptionFabrication, surface_m2: Decimal, quantite: int
+) -> tuple[Decimal | None, bool]:
+    """Coût € d'une option depuis `OptionFabrication` (3 modes cumulables :
+    forfait + m²×surface + mille×milliers + consommable). Retourne
+    `(€ ou None, impact_production)`.
+
+    `€ is None` + `impact_production=True` : option à impact PRODUCTION (coef
+    vitesse/gâche / temps calage) sans tarif € → non chiffrée en V1 (le
+    cost_engine ne price pas ces impacts). Le caller renvoie un flag, jamais
+    un faux « +0 € »."""
+    total = Decimal("0")
+    has_price = False
+    if opt.forfait_eur is not None:
+        total += Decimal(str(opt.forfait_eur))
+        has_price = True
+    if opt.prix_au_m2_eur is not None:
+        total += Decimal(str(opt.prix_au_m2_eur)) * surface_m2
+        has_price = True
+    if opt.prix_au_mille_eur is not None:
+        total += Decimal(str(opt.prix_au_mille_eur)) * (
+            Decimal(quantite) / Decimal(1000)
+        )
+        has_price = True
+    if opt.cout_consommable_eur is not None:
+        total += Decimal(str(opt.cout_consommable_eur))
+        has_price = True
+    if has_price:
+        return total.quantize(Decimal("0.01")), False
+    impact = (
+        Decimal(str(opt.coef_vitesse_impact)) != Decimal("1")
+        or Decimal(str(opt.coef_gache_impact)) != Decimal("1")
+        or int(opt.ajoute_temps_calage_min or 0) > 0
+        or int(opt.ajoute_cliches or 0) > 0
+        or int(opt.ajoute_couleurs or 0) > 0
+    )
+    return None, impact
+
+
 def preview_devis(
     db: Session, entreprise_id: int, p: dict[str, Any]
 ) -> dict:
@@ -605,8 +668,10 @@ def preview_devis(
         if p.get("nb_couleurs")
         else None
     )
-    # finitions → P6 (forfaits sous-traitance). Chaque entrée fait bouger le prix.
-    forfaits_st = [
+    # Catalogue options du tenant (codes -> OptionFabrication, source unique de
+    # coût). `finitions:[{montant_eur}]` reste accepté (DÉPRÉCIÉ, rétro-compat).
+    catalogue = _catalogue_options(db, entreprise_id)
+    forfaits_finitions = [
         PartenaireSTForfait(
             partenaire_st_id=int(f.get("partenaire_st_id") or 1),
             montant_eur=Decimal(str(f["montant_eur"])),
@@ -628,51 +693,85 @@ def preview_devis(
     devis_input = None
     if machine is not None and quantite:
         try:
-            res, devis_input = _run(nb_couleurs_par_type, forfaits_st)
+            # 1er run (finitions ST seules) -> surface pour le pricing m²/mille.
+            res0, devis_input = _run(nb_couleurs_par_type, forfaits_finitions)
+            surface_m2 = (
+                Decimal(devis_input.laize_utile_mm) / Decimal(1000)
+                * Decimal(devis_input.ml_total)
+            )
+
+            # Options SÉLECTIONNÉES (codes) -> € serveur -> forfaits P6. Les
+            # options sans € (impact production) sont ignorées du prix (rendues
+            # dans `options[]` avec le flag, jamais en faux « +0 € »).
+            options_appliquees: list[tuple[str, Decimal]] = []
+            forfaits_options: list[PartenaireSTForfait] = []
+            for code in (p.get("options_codes") or []):
+                opt = catalogue.get(code)
+                if opt is None:
+                    alertes.append(
+                        {"niveau": "warn", "message": f"Option inconnue : {code}."}
+                    )
+                    continue
+                cout, _impact = _option_cout_eur(opt, surface_m2, quantite)
+                if cout is not None and cout > 0:
+                    forfaits_options.append(
+                        PartenaireSTForfait(partenaire_st_id=1, montant_eur=cout)
+                    )
+                    options_appliquees.append((opt.libelle, cout))
+
+            forfaits_all = forfaits_finitions + forfaits_options
+            res = res0
+            if forfaits_options:
+                res, devis_input = _run(nb_couleurs_par_type, forfaits_all)
+
             base_prix = res.prix_vente_ht_eur
+            marge = res.pct_marge_appliquee
             out["prix_ht"] = base_prix
             out["cout_revient"] = res.cout_revient_eur
-            out["marge_pct"] = (
-                res.pct_marge_appliquee * Decimal(100)
-            ).quantize(Decimal("0.01"))
+            out["marge_pct"] = (marge * Decimal(100)).quantize(Decimal("0.01"))
             out["prix_1000"] = res.prix_au_mille_eur
-            out["decompo"] = [
-                {"poste": pst.libelle, "montant": pst.montant_eur}
-                for pst in res.postes
-            ]
 
-            # === options : impact marginal (prix avec − prix sans), même
-            # réponse (calcul serveur, pas d'appel séparé). ===
-            for idx, f in enumerate(p.get("finitions") or []):
-                try:
-                    forfaits_wo = [
-                        ff for j, ff in enumerate(forfaits_st) if j != idx
-                    ]
-                    res_wo, _ = _run(nb_couleurs_par_type, forfaits_wo)
-                    code = f.get("libelle") or (
-                        f"finition_{f.get('partenaire_st_id') or 1}"
-                    )
+            # Décompo : 7 postes ; on ISOLE les options de la ligne Finitions
+            # (label distinct, pas mélangées avec la sous-traitance).
+            cout_options = sum((c for _, c in options_appliquees), Decimal("0"))
+            for pst in res.postes:
+                montant = pst.montant_eur
+                if pst.poste_numero == 6 and cout_options > 0:
+                    montant = (montant - cout_options).quantize(Decimal("0.01"))
+                out["decompo"].append({"poste": pst.libelle, "montant": montant})
+            for libelle, c in options_appliquees:
+                out["decompo"].append({"poste": f"Option · {libelle}", "montant": c})
+
+            # === options[] : delta marginal PAR CODE sur le catalogue tenant.
+            # Additif (€) -> delta direct = € × (1 + marge) (pas de re-run du
+            # moteur). Impact production (sans €) -> delta None + flag.
+            facteur = Decimal(1) + marge
+            for code, opt in catalogue.items():
+                cout, impact = _option_cout_eur(opt, surface_m2, quantite)
+                if cout is not None and cout > 0:
                     out["options"].append(
                         {
                             "code": code,
-                            "delta_eur": (
-                                base_prix - res_wo.prix_vente_ht_eur
-                            ).quantize(Decimal("0.01")),
+                            "delta_eur": (cout * facteur).quantize(Decimal("0.01")),
+                            "impact_production": False,
                         }
                     )
-                except (CostEngineError, ValueError):
-                    continue
-            # Delta d'une couleur process en plus (impression + 1 cliché).
+                elif impact:
+                    out["options"].append(
+                        {"code": code, "delta_eur": None, "impact_production": True}
+                    )
+            # Delta d'une couleur process en plus (re-run : touche P2 + P3a).
             try:
                 ncpt_plus = dict(nb_couleurs_par_type or {})
                 ncpt_plus["process_cmj"] = ncpt_plus.get("process_cmj", 0) + 1
-                res_plus, _ = _run(ncpt_plus, forfaits_st)
+                res_plus, _ = _run(ncpt_plus, forfaits_all)
                 out["options"].append(
                     {
                         "code": "couleur_plus",
                         "delta_eur": (
                             res_plus.prix_vente_ht_eur - base_prix
                         ).quantize(Decimal("0.01")),
+                        "impact_production": False,
                     }
                 )
             except (CostEngineError, ValueError):
