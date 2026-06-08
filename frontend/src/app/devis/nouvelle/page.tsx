@@ -34,9 +34,11 @@ import {
   createDevis,
   getEntreprise,
   getOptionsDisponibles,
+  listClients,
   listCylindres,
   listMachines,
   listMatieres,
+  type Client,
   type CylindreParc,
   type Machine,
   type MatiereOut,
@@ -72,8 +74,11 @@ export default function DevisPageUnique() {
   const [cylindres, setCylindres] = useState<CylindreParc[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [optionsDispo, setOptionsDispo] = useState<OptionDisponible[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
 
   // ── Saisie (état local de la page) ────────────────────────────────
+  // Client (optionnel) : sa sélection pré-remplit le profil bobine.
+  const [clientId, setClientId] = useState<number | null>(null);
   const [laize, setLaize] = useState("100");
   const [dev, setDev] = useState("80");
   const [quantite, setQuantite] = useState("10000");
@@ -107,12 +112,13 @@ export default function DevisPageUnique() {
     let cancelled = false;
     (async () => {
       try {
-        const [mats, cyls, machs, opts, ent] = await Promise.all([
+        const [mats, cyls, machs, opts, ent, clis] = await Promise.all([
           listMatieres(),
           listCylindres(true),
           listMachines(),
           getOptionsDisponibles(),
           getEntreprise(),
+          listClients(),
         ]);
         if (cancelled) return;
         setMatieres(mats);
@@ -121,6 +127,7 @@ export default function DevisPageUnique() {
         setMachines(actives);
         if (actives.length >= 1) setMachineId(actives[0]!.id);
         setOptionsDispo(opts);
+        setClients(clis);
         const chute = parseFloat(ent.chute_laterale_min_mm);
         if (Number.isFinite(chute)) setBordLateral(String(chute));
       } catch (err) {
@@ -148,6 +155,28 @@ export default function DevisPageUnique() {
     }
   }, [matiereSel]);
 
+  // Client sélectionné → pré-remplit le profil bobine (Sprint 16, mêmes
+  // champs que l'étape rebobinage du wizard). On n'écrase qu'au CHANGEMENT de
+  // client (ref `lastClient`) pour ne pas reclober les saisies manuelles ; les
+  // champs null du client laissent le défaut tracé (mandrin 76). Les
+  // intervalles ne font pas partie du profil client (constantes cost_engine).
+  const lastClientApplied = useRef<number | null>(null);
+  useEffect(() => {
+    if (clientId === lastClientApplied.current) return;
+    lastClientApplied.current = clientId;
+    const cli = clients.find((c) => c.id === clientId) ?? null;
+    if (cli === null) return;
+    if (cli.diametre_mandrin_mm !== null) {
+      setMandrin(String(cli.diametre_mandrin_mm));
+    }
+    if (cli.diametre_max_bobine_mm !== null) {
+      setDiametreMax(String(cli.diametre_max_bobine_mm));
+    }
+    if (cli.sens_enroulement !== null) {
+      setSens(String(cli.sens_enroulement));
+    }
+  }, [clientId, clients]);
+
   // Cylindres compatibles avec le format (filtre géométrique front).
   const cylindresOk = useMemo(
     () => cylindresCompatibles(cylindres, parseFloat(dev) || 0, 2),
@@ -160,9 +189,9 @@ export default function DevisPageUnique() {
     }
   }, [cylindresOk, cylindreId]);
 
-  // ── Preview live (contrat /api/devis/preview, mocké) ──────────────
-  // Développé du cylindre choisi (mock-only : le vrai endpoint le résout
-  // côté serveur depuis cylindre_id).
+  // ── Preview live (POST /api/devis/preview) ────────────────────────
+  // Développé du cylindre choisi — sert uniquement aux poses de persistance
+  // (le endpoint résout cylindre_id côté serveur pour la preview).
   const cylindreDeveloppe = useMemo(() => {
     if (cylindreId === null) return null;
     const c = cylindres.find((x) => x.id === cylindreId);
@@ -291,6 +320,7 @@ export default function DevisPageUnique() {
     setSubmitting(true);
     try {
       const devis = await createDevis({
+        client_id: clientId,
         payload_input: {
           format_etiquette_largeur_mm: parseFloat(laize),
           format_etiquette_hauteur_mm: parseFloat(dev),
@@ -425,6 +455,26 @@ export default function DevisPageUnique() {
           )}
         </div>
 
+        {/* ── Client (optionnel) — pré-remplit le profil bobine ────── */}
+        <SectionCard title="Client">
+          <Field label="Client (pré-remplit Ø mandrin, Ø max, sens)">
+            <select
+              className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={clientId ?? ""}
+              onChange={(e) => setClientId(Number(e.target.value) || null)}
+              data-testid="d-client"
+              aria-label="Client"
+            >
+              <option value="">— Aucun (saisie manuelle) —</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.raison_sociale}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </SectionCard>
+
         {/* ── Format ───────────────────────────────────────────────── */}
         <SectionCard title="Format & impression" accent>
           <div className="rounded-md border border-border bg-muted/30 p-3">
@@ -438,7 +488,8 @@ export default function DevisPageUnique() {
               />
               Format sans outil (impression pleine largeur + refente)
             </label>
-            {modeSansOutil && (
+            {/* Champs sans-outil : apparition/disparition en transition douce. */}
+            <Collapsible open={modeSansOutil} testId="sans-outil-fields">
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <Field label="Laize bobine stock (mm) *">
                   <Input
@@ -448,6 +499,7 @@ export default function DevisPageUnique() {
                     value={laizeStock}
                     onChange={(e) => setLaizeStock(e.target.value)}
                     data-testid="laize-stock"
+                    tabIndex={modeSansOutil ? undefined : -1}
                   />
                 </Field>
                 <Field label="Nb bobines filles (optionnel)">
@@ -458,10 +510,11 @@ export default function DevisPageUnique() {
                     onChange={(e) => setNbFillesForce(e.target.value)}
                     placeholder="auto"
                     data-testid="nb-filles"
+                    tabIndex={modeSansOutil ? undefined : -1}
                   />
                 </Field>
               </div>
-            )}
+            </Collapsible>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Laize (mm)">
@@ -508,8 +561,10 @@ export default function DevisPageUnique() {
           </div>
         </SectionCard>
 
-        {/* ── Outil ────────────────────────────────────────────────── */}
-        {!modeSansOutil && (
+        {/* ── Outil ──────────────────────────────────────────────────
+            Replié (transition douce) en mode sans outil plutôt que démonté :
+            les contrôles passent hors tab-order (tabIndex -1) + aria-hidden. */}
+        <Collapsible open={!modeSansOutil} testId="outil-section">
           <SectionCard title="Outil de découpe">
             <div className="grid grid-cols-2 gap-3">
               {/* Machine : select seulement si le tenant en a plusieurs ;
@@ -524,6 +579,7 @@ export default function DevisPageUnique() {
                     }
                     data-testid="o-machine"
                     aria-label="Machine"
+                    tabIndex={modeSansOutil ? -1 : undefined}
                   >
                     {machines.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -549,6 +605,7 @@ export default function DevisPageUnique() {
                   onChange={(e) => setCylindreId(Number(e.target.value) || null)}
                   data-testid="o-cylindre"
                   aria-label="Cylindre compatible"
+                  tabIndex={modeSansOutil ? -1 : undefined}
                 >
                   <option value="">— Choisir un cylindre —</option>
                   {cylindresOk.map((c) => (
@@ -565,7 +622,7 @@ export default function DevisPageUnique() {
               au lot suivant.
             </p>
           </SectionCard>
-        )}
+        </Collapsible>
 
         {/* ── Matière ──────────────────────────────────────────────── */}
         <SectionCard title="Matière">
@@ -732,6 +789,34 @@ export default function DevisPageUnique() {
 }
 
 // ── Petits composants de présentation ───────────────────────────────
+
+/** Section repliable en transition douce (hauteur + opacité) sans mesure JS :
+ * grille `grid-rows-[0fr→1fr]` + overflow caché. Le contenu reste monté (les
+ * transitions enter ET exit s'animent) ; `aria-hidden` le retire de l'arbre
+ * d'accessibilité, et l'appelant met ses contrôles hors tab-order (tabIndex
+ * -1) à l'état fermé. `motion-reduce` respecte prefers-reduced-motion. */
+function Collapsible({
+  open,
+  testId,
+  children,
+}: {
+  open: boolean;
+  testId?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      aria-hidden={!open ? "true" : undefined}
+      className={
+        "grid transition-all duration-300 ease-in-out motion-reduce:transition-none " +
+        (open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")
+      }
+    >
+      <div className="overflow-hidden">{children}</div>
+    </div>
+  );
+}
 
 function SectionCard({
   title,

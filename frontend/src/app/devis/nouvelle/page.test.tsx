@@ -57,6 +57,32 @@ function installFetchMock() {
     if (url.includes("/api/optimisation/options-disponibles")) {
       return ok([]);
     }
+    if (url.includes("/api/clients")) {
+      return ok([
+        {
+          id: 7,
+          raison_sociale: "ACME Étiquettes",
+          siret: null,
+          adresse_fact: null,
+          cp_fact: null,
+          ville_fact: null,
+          contact: null,
+          email: null,
+          tel: null,
+          segment: null,
+          date_creation: null,
+          marquage_bobine_requis: false,
+          mandrin_fourni_par_client: false,
+          film_protection_requis: false,
+          diametre_mandrin_mm: 152,
+          diametre_max_bobine_mm: 400,
+          nb_etiq_par_bobine_fixe: null,
+          sens_enroulement: 3,
+          marquage_bobine_format: null,
+          conditionnement_souhaite: null,
+        },
+      ]);
+    }
     if (url.includes("/api/entreprise")) {
       return ok({ chute_laterale_min_mm: "10" });
     }
@@ -128,13 +154,41 @@ describe("DevisPageUnique — page devis réactive", () => {
     expect(valeur).toHaveTextContent("€");
   });
 
-  it("toggle sans outil : masque la carte Outil, expose la laize stock", async () => {
+  it("toggle sans outil : replie la carte Outil (transition), expose la laize stock", async () => {
     render(<DevisPageUnique />);
-    // Avec outil par défaut → select cylindre présent.
-    expect(await screen.findByTestId("o-cylindre")).toBeInTheDocument();
+    // Avec outil par défaut → section Outil ouverte (aria-hidden absent).
+    await screen.findByTestId("o-cylindre");
+    expect(screen.getByTestId("outil-section")).not.toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByTestId("sans-outil-fields")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     await userEvent.click(screen.getByTestId("toggle-sans-outil"));
-    expect(screen.queryByTestId("o-cylindre")).toBeNull();
+    // La carte Outil reste montée mais repliée (aria-hidden true) ; les champs
+    // sans-outil s'ouvrent.
+    expect(screen.getByTestId("outil-section")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByTestId("sans-outil-fields")).not.toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     expect(screen.getByTestId("laize-stock")).toBeInTheDocument();
+  });
+
+  it("sélection client → pré-remplit le profil bobine (mandrin, Ø max, sens)", async () => {
+    render(<DevisPageUnique />);
+    await screen.findByRole("option", { name: "ACME Étiquettes" });
+    await userEvent.selectOptions(screen.getByTestId("d-client"), "7");
+    await waitFor(() =>
+      expect(screen.getByTestId("b-mandrin")).toHaveValue(152),
+    );
+    expect(screen.getByTestId("b-diametre-max")).toHaveValue(400);
+    expect(screen.getByTestId("b-sens")).toHaveValue(3);
   });
 
   it("décompo refente affichée en sans outil (déchet latéral)", async () => {
