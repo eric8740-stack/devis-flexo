@@ -9,14 +9,16 @@
 
 ## En-tête
 
-- **Date** : 2026-06-05
-- **Branche active** : `main` = **`1061ae5`** (après #114 — **L2 rebasage P1 sur laize papier plafonnée, back déployé prod**)
-- **Sprint en cours** : Aucun. **L2 COMPLET (back) MERGÉ + DÉPLOYÉ PROD (#114)** : P1 rebasé sur la laize papier réelle (plafonnée à `laize_utile`), `marge_confort` retirée → **🔴 RE-BASELINE DES SACRÉS** (cf. Baseline tests). **L1 géométrie laize COMPLET** (#107+#108, déployés) ; **lot Souveraineté (forçages non bloquants) COMPLET** (back #112 + front #111). Bugs #5/#6 **CLOS**. **Front L2 = NO-OP confirmé CC2** (affichage passif de la décompo, `laize_papier_mm` simplement plus petite → aucun câblage/recalibrage front). **Aucune PR front à attendre.**
+- **Date** : 2026-06-06
+- **Branche active** : `main` = **`137249f`** (après #118 — **lot back A « mode sans outil » MERGÉ + déployé**).
+- **Sprint en cours** : **Chantier « format sans outil »** (cf. section dédiée). **Lot back A MERGÉ + déployé** (#118) : 2ᵉ chemin de calcul impression pleine largeur + refente, contrat `/calculer` livré (`mode_sans_outil`, `geometrie_laize` + `nb_filles`/`laize_stock`/`dechet_lateral`). Chantiers CLOS mergés+déployés : **L1** (géométrie laize), **L2** (rebasage P1 + plafond, sacrés re-baselinés), **Souveraineté** (forçages Règle 7 non bloquants). Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1** → **lot back B** (coût refente / Ø bobines filles via module rebobinage additif). **CC2** → **lot front « mode sans outil »** (toggle Card Format + masquages + ligne déchet latéral, consomme le contrat back A).
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- **#118** — feat(optim): **lot back A « mode sans outil »** — 2ᵉ chemin de calcul (impression pleine largeur + refente). `mode_sans_outil` + `laize_stock_mm` (+ `nb_filles_force`) sur requête/`DevisInput`/`LotProduction` ; court-circuit candidats cylindre (`optimiser_pose` bypassé), `intervalle_dev=0`, P1 facture la laize STOCK entière (déchet inclus). `geometrie_laize` +4 clés (`laize_stock_mm`/`laize_utile_mm`/`dechet_lateral_mm`/`nb_filles`) + écho `mode_sans_outil`. Migration `a2b4c6d8e0f1` (additive). **cost_engine / `rotation_se` / `bat_calculs` INTOUCHÉS → sacrés L2 EXACTS.** Baseline **1167**.
 - **#114** — feat(cost-engine): **L2 rebasage P1 sur laize papier plafonnée** — P1 (matière) facture la laize papier RÉELLE `min(arrondi_palier(plaque + 2×bord), laize_utile)` au lieu de `laize_utile + marge_confort` (retirée, double-comptait les bords). 5ᵉ param `laize_utile_mm` OPTIONNEL sur `calcul_laize_papier` (cap) ; propagation router + crud (machine du lot) ; `poste_1_matiere` consomme `DevisInput.laize_papier_mm`. **🔴 TOUCHE LES SACRÉS → RE-BASELINE validée Eric** (cf. Baseline tests). Clé `details` `laize_machine_mm`→`laize_facturee_mm`+`base_laize_source`. **P4 calage / Ø diamètre INTOUCHÉS**, zéro migration. CI verte, déployé prod (`/` → 200). Baseline **1148**.
 - **#111** — feat(optim): **front souveraineté** (CC2) — motif de forçage recommandé (non bloquant) + note discrète ; consomme `warnings` (inchangé). Câblé derrière #112. → **lot Souveraineté COMPLET**.
 - **#112** — feat(optim): **forçages Règle 7 NON BLOQUANTS** — motif optionnel (warning `warnings[]`, plus de 422) pour forçage intervalle dev + épaisseur (laize déjà non bloquant). Bornes `ge/le` conservées ; check structurel lacets asymétriques gardé. **Validation seule, calcul intouché → sacrés EXACTS au moment du merge** (V1a 1 449,09 / tripwire 704,07 ; **rebasés depuis par L2 #114 → 1 424,31 / 695,36**). Déployé prod.
@@ -32,7 +34,7 @@
 
 ## PRs ouvertes
 
-- _(aucune)_ — #111 (front souveraineté) mergé ; #114 (L2 back) mergé.
+- **Aucune** — #118 (lot back A « mode sans outil ») mergé + déployé.
 
 ## PRs récemment fermées (non mergées)
 
@@ -65,13 +67,13 @@
 > V8b-e : **ratios inchangés** (non re-figés — passent par le fallback legacy
 > `laize_utile + marge_confort`, vérifiés verts).
 
-- **pytest local** (SQLite, `PG_TEST_URL` absent) : `1148 passed, 10 skipped, 0 failed` — inclut L2 (#114) : 2 tests unitaires P1 recalibrés (clé `laize_facturee_mm` + `base_laize_source`) + sacrés re-figés (5cas / benchmark / matching / tripwire P0b). Skips : 2 tests subprocess SQLite migration P1+P2, 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
+- **pytest local — `main`** (SQLite, `PG_TEST_URL` absent) : `1167 passed, 10 skipped, 0 failed` — inclut lot back A « mode sans outil » (#118, **+19** tests : géométrie pure + override `nb_filles`, validateur, endpoint sans/avec outil + `nb_filles_force`, pont cost). Sacrés L2 EXACTS (flag `mode_sans_outil=False` par défaut → value-neutral). Skips : 2 tests subprocess SQLite migration P1+P2, 2 tests obsolètes `ConfigurationPose` / `MachineImprimerie`-spec (tables droppées), 1 test PG sous FK strictes (skip si `PG_TEST_URL` absent → tourne en CI uniquement), 5 autres skip historiques env-dependent.
 - **pytest CI** (service `postgres:16`) : vert sur #114 (`test` job 6m29s). Inclut `test_migration_p1p2_sous_fk_strictes_postgres` qui valide la migration P1+P2 sous **FK strictes Postgres** (scénario réel boot Railway prod).
 - **Benchmark `cost_engine` 13/13 EXACT** post-#114 — re-figés aux valeurs L2 (V1a 1 424,31 / V1b 1 896,31 / V2 738,88 / V3 8 189,67 / V4 1 672,39 / V7a 6,73 / V8a 3,37 ; V8b-e ratios inchangés).
 - **Tripwire multi-lots P0b : `695,36 €` EXACT** post-#114 — le plafond `laize_utile=320` MORD ici (laize_plaque 310, papier brut 330 → cap 320), base P1 330→320 → P1 243,56→236,18. Garde anti-drift fixture `machine.laize_utile_mm == 320` conservée.
-- **vitest** : `198/198 tests passed` (back L2 sans impact front — **front L2 = no-op confirmé CC2** : la décompo laize affiche passivement `geometrie_laize.laize_papier_mm`, désormais plafonnée, sans recalibrage de test).
+- **vitest** : `202/202 tests passed` (27 fichiers) — front inchangé par le lot back A (back only). Lot front « sans outil » à venir (CC2).
 - **next build** : ✓ compiled successfully (gate Vercel preview vert avant chaque merge).
-- **alembic** : HEAD = **`f7a8b9c0d1e2`** (L1 géométrie laize, #107 — **L2 #114 n'ajoute AUCUNE migration**, logique seule). `config_couts.laize_mini_roulable_mm` défaut 0 + `lot_production.bord_lateral_mm` nullable, additif. **Appliquée en prod Railway** (deploy vert, `/` → 200). Précédents `e6f7a8b9c0d1` (type_machine) → `d5e6f7a8b9c0` (paroi mandrin) → `c4d5e6f7a8b9` (config_couts ICE) → `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
+- **alembic** : HEAD `main` = **`a2b4c6d8e0f1`** (lot back A #118 — `lot_production.mode_sans_outil` + `laize_stock_mm` + `cylindre_id` nullable, additive/réversible/dialect-aware). Précédents `f7a8b9c0d1e2` (L1 géométrie laize) → `e6f7a8b9c0d1` (type_machine) → `d5e6f7a8b9c0` (paroi mandrin) → `c4d5e6f7a8b9` (config_couts ICE) → `b2c3d4e5f6g7` (P1+P2 unify). Application prod auto via `CMD` Dockerfile.
 
 ---
 
@@ -90,6 +92,12 @@
 
 ## En cours / à venir
 
+- **▶ Prochaines étapes** (lot back A mergé, `nb_filles` explicité) : **lot back B** (coût refente / Ø bobines filles via module rebobinage additif — `prix_vente_ht` 7 postes intouché) ; **lot front « mode sans outil »** (toggle Card Format + masquages intervalle dev/développé + ligne déchet latéral, consomme le contrat back A — CC2).
+- **Backlog horizon (non lancé)** :
+  - **Lot 3** — renommages config coûts (P7 → `cout_operateur_eur_h`, P5 → `cout_exploitation_machine_eur_h`).
+  - **Lot 4** — 7 champs coût manquants + UI Stratégique (recoupe « Phase 2 / Lot 4b » ci-dessous).
+  - **Dette UI rebobinage** — bloc mono-lot périmé · double saisie matière · double saisie mandrin.
+  - **#1 « Outils compatibles » inerte** (matcher front non câblé) · **#2 « 0,00 € » cosmétique**.
 - **Dette archi : unifier `Machine` ↔ `MachineImprimerie`** — ✅ **FERMÉE** post-merge #86 + hotfix #87 (02/06). Récap des étapes : P0a (audit) → P0b (tripwire `704,07 €` #84, **rebasé `695,36 €` par L2 #114**) → **P1+P2 (#86) + hotfix #87** : migration `b2c3d4e5f6g7` + repoint code + suppression `MachineImprimerie` + `ConfigurationPose`. Tripwire EXACT, V1a 13/13 EXACT (valeurs pré-L2).
 - **🔴 NOUVEAU follow-up critique** (cf. [`docs/BACKLOG_BUGS_session_2026-06-02.md`](BACKLOG_BUGS_session_2026-06-02.md)) — **les 3 presses migrées (Mark Andy 2200 / OMET / Nilpeter) sont `actif=true` mais n'apparaissent PAS comme candidates dans l'optim** sur le compte démo. Seuls P5 et Atelier 2 ressortent → 0 config viable pour les 3. Pas le flag `actif` (vérifié post-migration). Investiguer `charger_machines_actives` + la génération de candidats : champ NULL requis (`vitesse_max_m_min` / `largeur_max_mm` / `duree_calage_h` défaultés à NULL par la migration ?) ou appariement cylindre ↔ machine. Sprint dédié à planifier prochaine session.
 - **Pattern migrations data à auditer** (leçons P1+P2) :
@@ -104,10 +112,11 @@
 
 ---
 
-## Chantier — Mode « format sans outil » (impression laize entière + refente) — SPEC, NON LANCÉ
+## Chantier — Mode « format sans outil » (impression laize entière + refente) — EN COURS
 
-> Spec métier rédigée par Eric (2026-06-05). Cadrage à valider avant lot.
-> Cartographie back (read-only) ajoutée en fin de section.
+> Spec métier rédigée par Eric (2026-06-05), **figée** (5 décisions tranchées).
+> **Lot back A MERGÉ + déployé** (#118). RESTE : lot back B (coût refente) + lot
+> front (CC2). Cartographie back + décisions + découpage en fin de section.
 
 ### Principe
 
@@ -190,10 +199,14 @@ Le front (toggle Card Format + masquages) ne fait que refléter ce chemin ; il n
 
 **Garde-fou confirmé** : `mode_sans_outil=False` → **sacrés EXACTS**. En sans outil, la géométrie laize bascule sur le **stock** (≠ outil) et alimente P1 différemment — **attendu, et gaté par le flag**.
 
-### Découpage prévisionnel (esquisse — briefs détaillés une fois la spec figée)
+### Découpage — état des lots
 
-- **Lot back** : flag `mode_sans_outil` threadé (mono + optim) + court-circuit candidats cylindre + géométrie laize stock / déchet latéral + `intervalle_dev = 0` + refente via rebobinage additif + migration `LotProduction`. **TDD, sacrés EXACTS.**
-- **Lot front** : toggle Card Format + masquages (carto CC2) + ligne « déchet latéral », consomme le contrat back.
+- **Lot back A — ✅ MERGÉ + DÉPLOYÉ (PR #118, merge `137249f`).** Baseline **1167 passed / 10 skipped / 0 failed** (+19 tests sans outil). Définit le **contrat /calculer** que le front consomme.
+  - **Contrat** : `DevisInput.mode_sans_outil` + `laize_stock_mm` ; `OptimisationCalculerRequest.mode_sans_outil` + `laize_stock_mm` (obligatoire si sans outil, validateur) + `nb_filles_force` (override souveraineté). `LotProduction.mode_sans_outil` + `laize_stock_mm` + **`cylindre_id` NULLABLE** (sentinelle `0` côté config), migration **`a2b4c6d8e0f1`** (additive, réversible, dialect-aware).
+  - **Sortie** : `geometrie_laize` **+4 clés** (`laize_stock_mm` / `laize_utile_mm` / `dechet_lateral_mm` / **`nb_filles`** explicite, distinct de `nb_poses_laize` ; `None` en mode avec outil) + écho top-level `mode_sans_outil`. Court-circuit candidats cylindre (`optimiser_pose` bypassé), `intervalle_dev=0`, géométrie pure [`sans_outil.py`](../backend/app/services/optimisation/sans_outil.py).
+  - **Décisions appliquées** : Option A (champ explicite `laize_stock_mm`) ; intervalle refente défaut **3 mm** (`DEFAULT_INTERVALLE_REFENTE_MM`, acté Eric) ; **`nb_filles` explicite + override** `nb_filles_force` (1 fille = pistes regroupées / pas de refente ; infaisable → presse écartée) ; **bord_lateral L1 NON appliqué** en sans outil. P1 facture la laize STOCK entière (déchet inclus). **cost_engine logique INTOUCHÉE** ; `rotation_se` / `bat_calculs` **INTOUCHÉS**.
+- **Lot back B — RESTE** : coût de refente / Ø bobines filles via le **module rebobinage additif** (`ht_total = prix_vente_ht + contribution_rebobinage`), `prix_vente_ht` 7 postes intouché. `bat_calculs` (Ø) consommé en lecture.
+- **Lot front — RESTE (CC2)** : toggle Card Format + masquages (intervalle dev, développé) + ligne « déchet latéral », consomme le contrat back A.
 
 ---
 
