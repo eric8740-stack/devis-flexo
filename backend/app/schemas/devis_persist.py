@@ -28,7 +28,10 @@ class LotProductionCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    cylindre_id: int
+    # Lot back A/B — NULLABLE : un lot « mode sans outil » n'a pas d'outil de
+    # découpe (cylindre). Reste requis de fait pour un lot avec outil (le front
+    # le fournit), mais le schéma ne 422 plus en sans outil.
+    cylindre_id: int | None = None
     machine_id: int
     nb_poses_dev: int = Field(ge=1)
     nb_poses_laize: int = Field(ge=1)
@@ -46,6 +49,13 @@ class LotProductionCreate(BaseModel):
     # L1 — bord latéral surchargeable par lot (mm). NULL → défaut =
     # entreprise.chute_laterale_min_mm (comportement actuel).
     bord_lateral_mm: Decimal | None = None
+
+    # Lot back A/B — mode « format sans outil » + persistance du flag. Défauts
+    # NEUTRES (value-neutral) : un lot legacy/avec outil ne pose pas ces champs.
+    mode_sans_outil: bool = False
+    laize_stock_mm: Decimal | None = None
+    # Lot back B — override opérateur du nb de filles de refente (≠ nb_poses_laize).
+    nb_filles_force: int | None = None
 
     # Brief #33 — snapshot visuel pour SchemaImplantation par lot (laize
     # papier, liner, chute latérale, diamètre bobine, lacets, rotations).
@@ -65,7 +75,8 @@ class LotProductionRead(BaseModel):
 
     id: int
     ordre: int
-    cylindre_id: int
+    # Lot back A/B — NULLABLE en lecture (lot sans outil = pas de cylindre).
+    cylindre_id: int | None = None
     machine_id: int
     nb_poses_dev: int
     nb_poses_laize: int
@@ -79,6 +90,11 @@ class LotProductionRead(BaseModel):
     cout_lot_ht_eur: Decimal | None
     created_at: datetime
     updated_at: datetime
+
+    # Lot back A/B — mode sans outil rechargé (le flag survit au reload du devis).
+    mode_sans_outil: bool = False
+    laize_stock_mm: Decimal | None = None
+    nb_filles_force: int | None = None
 
     # Brief #32 — joints pour l'UI multi-lots. Défauts à None pour
     # rester rétro-compatible avec les rows historiques (créées sans

@@ -102,6 +102,17 @@ class ConfigCouts(Base):
         Integer, nullable=False, default=0, server_default="0"
     )
 
+    # Lot back B — coût de refente (rebobinage finisseuse), ADDITIF hors des 7
+    # postes. Taux horaire d'exploitation de la rebobineuse pour la refente +
+    # % de gâche au raccord. Défauts NEUTRES = 0 → aucune ligne refente tant
+    # que le tenant ne les configure pas (value-neutral, sacrés intouchés).
+    cout_exploitation_rebobineuse_eur_h: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    gache_raccord_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
+
     date_creation: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

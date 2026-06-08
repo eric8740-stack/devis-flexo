@@ -1,9 +1,10 @@
-"""Total HT du devis = base cost_engine + contribution rebobinage (bug #6 6.2e-final).
+"""Total HT du devis = base cost_engine + contributions ADDITIVES (rebobinage,
+refente).
 
-Le coût rebobinage entre désormais dans `devis.ht_total_eur`. Sa contribution
-vient de la ligne **multi-lots** (`rebobinage_multilots`, épaisseur réelle +
-paroi par lot) QUAND elle existe, sinon de la ligne **mono-lot** legacy
-(`rebobinage`), sinon 0.
+`devis.ht_total_eur` = `prix_vente_ht` (7 postes PUR, sacré) + coût rebobinage
+(bug #6 6.2e-final) + coût refente (lot back B). Les lignes additives sont
+prises depuis `payload_output` (ligne `rebobinage_multilots`/`rebobinage` et
+ligne `refente`) ; aucune n'augmente jamais `prix_vente_ht`.
 
 INVARIANT SACRÉ : `payload_output["prix_vente_ht_eur"]` reste la valeur PURE du
 cost_engine (7 postes) — JAMAIS augmentée du rebobinage. Le benchmark V1a
@@ -33,6 +34,20 @@ def contribution_rebobinage_eur(payload_output: dict | None) -> Decimal:
     return Decimal("0")
 
 
+def contribution_refente_eur(payload_output: dict | None) -> Decimal:
+    """Coût refente (lot back B) qui ENTRE dans `ht_total`.
+
+    Ligne ADDITIVE distincte du rebobinage. Comptée seulement si `applique`.
+    Absente / non applicable → 0 (value-neutral, sacrés intouchés).
+    """
+    if not payload_output:
+        return Decimal("0")
+    refente = payload_output.get("refente")
+    if isinstance(refente, dict) and refente.get("applique"):
+        return Decimal(str(refente.get("cout_total_refente_eur", "0")))
+    return Decimal("0")
+
+
 def ht_total_avec_rebobinage(
     base_ht_eur: Decimal | None, payload_output: dict | None
 ) -> Decimal | None:
@@ -43,7 +58,11 @@ def ht_total_avec_rebobinage(
     """
     if base_ht_eur is None:
         return None
-    total = Decimal(str(base_ht_eur)) + contribution_rebobinage_eur(payload_output)
+    total = (
+        Decimal(str(base_ht_eur))
+        + contribution_rebobinage_eur(payload_output)
+        + contribution_refente_eur(payload_output)
+    )
     # ht_total_eur est un montant (Numeric(10,2)) : on quantize à 2 décimales
     # (le coût rebobinage est porté à 4 décimales par le moteur). Déterministe
     # vs l'arrondi implicite de la colonne DB.
