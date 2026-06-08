@@ -111,6 +111,10 @@ class LotProduction(Base):
         Boolean, nullable=False, default=False, server_default=false()
     )
     laize_stock_mm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    # Lot back B — override opérateur du nb de bobines filles de refente
+    # (souveraineté lot back A). NULL → nb_filles dérivé de la géométrie. C'est
+    # la SOURCE du nb_filles résolu (≠ `nb_poses_laize`, qui est l'axe poses).
+    nb_filles_force: Mapped[int | None] = mapped_column(Integer)
 
     score_optim: Mapped[float | None] = mapped_column(Float)
     cout_lot_ht_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))

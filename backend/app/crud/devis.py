@@ -194,7 +194,13 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
         "machine_nom",
         machine.nom if machine else f"Machine #{lot.machine_id}",
     )
-    cyl = db.get(CylindreMagnetique, lot.cylindre_id)
+    # Lot back A/B — cylindre_id NULL en mode sans outil (pas d'outil) : on
+    # évite `db.get(..., None)` (SAWarning « fully NULL primary key »).
+    cyl = (
+        db.get(CylindreMagnetique, lot.cylindre_id)
+        if lot.cylindre_id is not None
+        else None
+    )
     if cyl is not None:
         setattr(lot, "cylindre_developpe_mm", cyl.developpe_mm)
         # 1 dent = 3.175 mm (DENTS_TO_MM_FACTOR catalogue_defaults).
@@ -370,6 +376,11 @@ def create_devis(
                 payload_visuel=lot_in.payload_visuel,
                 # L1 — bord latéral surchargeable (NULL = défaut chute_min).
                 bord_lateral_mm=lot_in.bord_lateral_mm,
+                # Lot back A/B — persistance du mode sans outil (flag + laize
+                # stock + override nb filles de refente).
+                mode_sans_outil=lot_in.mode_sans_outil,
+                laize_stock_mm=lot_in.laize_stock_mm,
+                nb_filles_force=lot_in.nb_filles_force,
             )
             db.add(lot)
             lots_persistes.append(lot)
@@ -557,13 +568,18 @@ def _chiffrer_devis_multilots(
         for detail in cout_agrege.details_par_lot
     ]
     po["note"] = "Devis créé depuis optimisation multi-lots, chiffrage automatique."
+
+    # Lot back B — ligne de coût refente ADDITIVE (lots « sans outil »). Émise
+    # au chiffrage. None si rien à facturer (config neutre / avec outil) →
+    # value-neutral, sacrés intouchés.
+    refente = _calculer_refente_lots(db, devis, lots, payload_input, entreprise_id)
+    if refente is not None:
+        po["refente"] = refente
     devis.payload_output = po
 
-    # ht_total = base cost_engine + contribution rebobinage (multilots si
-    # présent, sinon mono-lot, sinon 0). À la création, aucune ligne
-    # rebobinage → ht_total = base (tripwire/benchmark inchangés). Si le devis
-    # est re-chiffré APRÈS application d'un rebobinage, la ligne est préservée
-    # dans `po` → le total la reflète (bug #6 6.2e-final).
+    # ht_total = base cost_engine + contribution rebobinage + refente (toutes
+    # ADDITIVES, hors des 7 postes figés). À la création sans rebobinage ni
+    # refente → ht_total = base (tripwire/benchmark inchangés).
     devis.ht_total_eur = ht_total_avec_rebobinage(
         cout_agrege.prix_vente_ht_total_eur, po
     )
@@ -618,6 +634,186 @@ def _calcul_laize_papier_lot(
         return Decimal(str(papier))
     except Exception:  # noqa: BLE001 — plomberie non-bloquante (P1 ignore)
         return None
+
+
+# Ø mandrin par défaut (mm) si le tenant n'a pas de paramètre dédié — valeur
+# flexo standard, sert uniquement à dimensionner l'axe Ø de la refente.
+_MANDRIN_DEFAUT_MM = 76
+# Épaisseur matière de repli (mm) si la matière du lot ne porte pas d'épaisseur.
+_EPAISSEUR_REPLI_MM = Decimal("0.15")
+
+
+def _calculer_refente_lots(
+    db: Session,
+    devis: Devis,
+    lots: list[LotProduction],
+    payload_input: dict[str, Any],
+    entreprise_id: int,
+) -> dict | None:
+    """Lot back B — ligne de coût refente ADDITIVE pour les lots « sans outil ».
+
+    Émise au chiffrage (AUTO). Réutilise le module rebobinage Sprint-16
+    (axe Ø `calculer_bobines`) et MULTIPLIE par le `nb_filles` RÉSOLU (lot
+    back A : géométrie + `nb_filles_force`, JAMAIS `nb_poses_laize`). Coût =
+    temps refente × `ConfigCouts.cout_exploitation_rebobineuse_eur_h` + gâche
+    raccord. `prix_vente_ht` (7 postes) et le calage restent INTOUCHÉS.
+
+    Best-effort / gracieux : si la config est neutre (taux & gâche = 0), si
+    aucune rebobineuse, ou si la géométrie Ø d'un lot est invalide → la ligne
+    est simplement absente / le lot est ignoré (jamais d'erreur bloquante).
+    Retourne None quand il n'y a rien à facturer (value-neutral).
+    """
+    from app.models import MachineRebobineuse, Matiere, ParametreMandrin
+    from app.services.rebobinage.calcul_bobines import calculer_bobines
+    from app.services.rebobinage.refente import calculer_cout_refente
+    from app.services.rebobinage.types import ProfilClient, SpecLot
+
+    lots_sans_outil = [lot for lot in lots if getattr(lot, "mode_sans_outil", False)]
+    if not lots_sans_outil:
+        return None
+
+    cfg = (
+        db.query(ConfigCouts).filter_by(entreprise_id=entreprise_id).first()
+    )
+    if cfg is None:
+        return None
+    taux = Decimal(str(cfg.cout_exploitation_rebobineuse_eur_h))
+    gache_pct = Decimal(str(cfg.gache_raccord_pct))
+    # Config neutre (rien configuré) → aucune ligne refente (value-neutral).
+    if taux == 0 and gache_pct == 0:
+        return None
+
+    rebobineuse = (
+        db.query(MachineRebobineuse)
+        .filter_by(entreprise_id=entreprise_id, actif=True)
+        .order_by(MachineRebobineuse.id)
+        .first()
+    )
+    if rebobineuse is None:
+        return {
+            "applique": False,
+            "raison": "aucune rebobineuse active — refente non chiffrée",
+            "cout_total_refente_eur": "0.00",
+            "lots": [],
+        }
+
+    # Profil client (Ø) : Ø max bobine du client si défini, sinon Ø max
+    # rebobineuse ; Ø mandrin depuis ParametreMandrin, sinon défaut flexo.
+    pm = (
+        db.query(ParametreMandrin).filter_by(entreprise_id=entreprise_id).first()
+    )
+    diam_mandrin = (
+        int(pm.diametre_mandrin_mm)
+        if pm is not None and getattr(pm, "diametre_mandrin_mm", None)
+        else _MANDRIN_DEFAUT_MM
+    )
+    client = db.get(Client, devis.client_id) if devis.client_id else None
+    diam_max = None
+    if client is not None and client.diametre_max_bobine_mm:
+        diam_max = int(client.diametre_max_bobine_mm)
+    elif rebobineuse.diametre_max_mm:
+        diam_max = int(rebobineuse.diametre_max_mm)
+
+    format_h = int(payload_input.get("format_etiquette_hauteur_mm", 40))
+    format_l = int(payload_input.get("format_etiquette_largeur_mm", 60))
+
+    lignes: list[dict] = []
+    cout_total = Decimal("0.00")
+    for lot in lots_sans_outil:
+        try:
+            machine = db.get(Machine, lot.machine_id)
+            laize_presse = float(
+                machine.laize_utile_mm
+                if machine is not None and machine.laize_utile_mm is not None
+                else (machine.laize_max_mm if machine is not None else 0)
+            )
+            laize_stock = (
+                float(lot.laize_stock_mm)
+                if lot.laize_stock_mm is not None
+                else laize_presse
+            )
+            interv = float(lot.intervalle_laize_reel_mm or 0)
+            nb_filles_force = (
+                int(lot.nb_filles_force)
+                if lot.nb_filles_force and lot.nb_filles_force > 0
+                else None
+            )
+            geo = calculer_geometrie_sans_outil(
+                laize_stock_mm=laize_stock,
+                laize_utile_presse_mm=laize_presse,
+                format_largeur_mm=float(format_l),
+                format_hauteur_mm=float(format_h),
+                intervalle_laize_mm=interv,
+                quantite=lot.quantite,
+                nb_filles_force=nb_filles_force,
+            )
+            if geo is None or geo.nb_filles <= 1:
+                # Pas de refente réelle (1 fille) → pas de poste fantôme.
+                continue
+
+            mat = db.get(Matiere, lot.matiere_id) if lot.matiere_id else None
+            epaisseur_um = getattr(mat, "epaisseur_microns", None) if mat else None
+            epaisseur_mm = (
+                Decimal(str(epaisseur_um)) / Decimal(1000)
+                if epaisseur_um
+                else _EPAISSEUR_REPLI_MM
+            )
+            if diam_max is None or diam_max <= diam_mandrin:
+                # Ø client/rebobineuse non exploitable → lot ignoré (gracieux).
+                continue
+
+            nb_etiq_fille = max(1, lot.quantite // geo.nb_filles)
+            bobines = calculer_bobines(
+                SpecLot(
+                    nb_etiquettes_total=nb_etiq_fille,
+                    intervalle_developpe_mm=Decimal(str(format_h)),
+                    epaisseur_matiere_mm=epaisseur_mm,
+                ),
+                ProfilClient(
+                    diametre_mandrin_mm=diam_mandrin,
+                    diametre_max_bobine_mm=diam_max,
+                ),
+            )
+            res = calculer_cout_refente(
+                nb_filles=geo.nb_filles,
+                longueur_par_fille_m=Decimal(str(geo.ml_total)),
+                bobines_par_fille=bobines,
+                vitesse_pratique_m_min=int(rebobineuse.vitesse_pratique_m_min),
+                temps_changement_bobine_min=Decimal(
+                    str(rebobineuse.temps_changement_bobine_min)
+                ),
+                cout_exploitation_rebobineuse_eur_h=taux,
+                gache_raccord_pct=gache_pct,
+            )
+            if not res.applicable:
+                continue
+            cout_total += res.cout_refente_eur
+            lignes.append(
+                {
+                    "ordre": lot.ordre,
+                    "nb_filles": res.nb_filles,
+                    "nb_bobines_total": res.nb_bobines_total,
+                    "longueur_rebobinee_m": str(res.longueur_rebobinee_m),
+                    "gache_metres": str(res.gache_metres),
+                    "temps_refente_h": str(res.temps_refente_h),
+                    "cout_refente_eur": str(res.cout_refente_eur),
+                }
+            )
+        except (ValueError, ArithmeticError) as exc:  # noqa: BLE001
+            logger.warning(
+                "Refente lot %s non chiffrée (gracieux) : %s", lot.ordre, exc
+            )
+            continue
+
+    if not lignes:
+        return None
+    return {
+        "applique": True,
+        "machine_rebobineuse_id": rebobineuse.id,
+        "nb_lots_refendus": len(lignes),
+        "cout_total_refente_eur": str(cout_total.quantize(Decimal("0.01"))),
+        "lots": lignes,
+    }
 
 
 def _construire_devis_input_pour_lot(
@@ -699,12 +895,12 @@ def _construire_devis_input_pour_lot(
             else laize_presse
         )
         interv_laize = float(lot.intervalle_laize_reel_mm or 0)
-        # Le lot porte le nb de filles CHOISI dans `nb_poses_laize` (= nb_filles
-        # en sans outil) → on l'impose pour que la ml/déchet reflètent la config
-        # retenue (y compris un override opérateur). 0/absent → dérivation auto.
-        nb_filles_lot = (
-            int(lot.nb_poses_laize)
-            if lot.nb_poses_laize and lot.nb_poses_laize > 0
+        # nb_filles RÉSOLU = géométrie + override opérateur `nb_filles_force`
+        # (lot back A/B). On n'utilise JAMAIS `nb_poses_laize` (≠ filles : c'est
+        # l'axe poses). NULL → dérivation géométrique auto.
+        nb_filles_force_lot = (
+            int(lot.nb_filles_force)
+            if lot.nb_filles_force and lot.nb_filles_force > 0
             else None
         )
         geo = calculer_geometrie_sans_outil(
@@ -714,7 +910,7 @@ def _construire_devis_input_pour_lot(
             format_hauteur_mm=float(format_h),
             intervalle_laize_mm=interv_laize,
             quantite=lot.quantite,
-            nb_filles_force=nb_filles_lot,
+            nb_filles_force=nb_filles_force_lot,
         )
         if geo is None:
             raise ValueError(
@@ -837,7 +1033,8 @@ def update_devis(
                 devis_id=devis.id,
                 entreprise_id=devis.entreprise_id,
                 ordre=ordre,
-                cylindre_id=lot_dict["cylindre_id"],
+                # Lot back A/B — cylindre_id NULLABLE (sans outil).
+                cylindre_id=lot_dict.get("cylindre_id"),
                 machine_id=lot_dict["machine_id"],
                 nb_poses_dev=lot_dict["nb_poses_dev"],
                 nb_poses_laize=lot_dict["nb_poses_laize"],
@@ -850,6 +1047,10 @@ def update_devis(
                 score_optim=lot_dict.get("score_optim"),
                 cout_lot_ht_eur=lot_dict.get("cout_lot_ht_eur"),
                 payload_visuel=lot_dict.get("payload_visuel"),
+                # Lot back A/B — persistance du mode sans outil à l'édition.
+                mode_sans_outil=lot_dict.get("mode_sans_outil", False),
+                laize_stock_mm=lot_dict.get("laize_stock_mm"),
+                nb_filles_force=lot_dict.get("nb_filles_force"),
             )
             db.add(lot)
             nouveaux_lots.append(lot)
