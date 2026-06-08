@@ -26,14 +26,16 @@ from app.models import (
     LotProduction,
     Machine,
 )
-from app.schemas.devis import DevisInput
+from app.schemas.devis import DevisInput, PartenaireSTForfait
 from app.schemas.devis_persist import DevisCreate, DevisUpdate, NbCouleursIn
 from app.services.cost_engine.errors import CostEngineError
 from app.services.optimisation.bat_calculs import (
+    calcul_diametre_bobine,
     calcul_laize_papier,
     calcul_laize_plaque,
 )
 from app.services.optimisation.sans_outil import calculer_geometrie_sans_outil
+from app.services.cost_engine import MoteurDevis
 from app.services.cost_engine_aggregator import calculer_devis_multilots
 from app.services.devis_total import ht_total_avec_rebobinage
 from app.services.numero_devis_service import generate_next_numero
@@ -483,6 +485,286 @@ def preview_couts_multilots(
     }
 
 
+def preview_devis(
+    db: Session, entreprise_id: int, p: dict[str, Any]
+) -> dict:
+    """Recalc live READ-ONLY de la page unique (POST /api/devis/preview).
+
+    Reçoit l'état PARTIEL du devis, renvoie les valeurs dérivées + prix SANS
+    persister (aucun db.add). RÉUTILISE le cost_engine (`MoteurDevis`),
+    `bat_calculs` (Ø) et le module refente — ZÉRO logique dupliquée. Champs
+    manquants → calcul best-effort + alertes, jamais de 500. Idempotent.
+
+    `prix_ht` = prix de vente des 7 postes (base PURE, sacrée) ; la refente
+    (mode sans outil) est une ligne ADDITIVE de `decompo`, hors `prix_ht`.
+    """
+    _INTERVALLE_DEV = 2.0
+    _INTERVALLE_LAIZE = 3.0
+    alertes: list[dict] = []
+    geometrie = {
+        "diametre_mm": None,
+        "nb_poses": None,
+        "nb_filles": None,
+        "dechet_lateral_mm": None,
+    }
+    out: dict = {
+        "prix_ht": None,
+        "cout_revient": None,
+        "marge_pct": None,
+        "prix_1000": None,
+        "geometrie": geometrie,
+        "decompo": [],
+        "options": [],
+        "alertes": alertes,
+    }
+
+    mode_sans_outil = bool(p.get("mode_sans_outil"))
+    laize = p.get("laize")
+    dev = p.get("dev")
+    quantite = p.get("quantite")
+
+    # Machine (P5) : id fourni (scopé tenant) sinon 1ère presse active.
+    machine = None
+    if p.get("machine_id"):
+        machine = (
+            db.query(Machine)
+            .filter_by(id=p["machine_id"], entreprise_id=entreprise_id, actif=True)
+            .first()
+        )
+        if machine is None:
+            alertes.append(
+                {"niveau": "warn", "message": "Machine introuvable/hors périmètre — 1ère presse utilisée."}
+            )
+    if machine is None:
+        machine = (
+            db.query(Machine)
+            .filter_by(entreprise_id=entreprise_id, actif=True, type_machine="presse")
+            .order_by(Machine.id)
+            .first()
+        )
+    if machine is None:
+        alertes.append(
+            {"niveau": "warn", "message": "Aucune presse active — chiffrage indisponible."}
+        )
+
+    cyl = (
+        db.get(CylindreMagnetique, p["cylindre_id"])
+        if p.get("cylindre_id")
+        else None
+    )
+    if p.get("cylindre_id") and cyl is None:
+        alertes.append(
+            {"niveau": "warn", "message": "Cylindre introuvable dans le parc."}
+        )
+
+    laize_utile = None
+    if machine is not None:
+        laize_utile = float(
+            machine.laize_utile_mm
+            if machine.laize_utile_mm is not None
+            else machine.laize_max_mm
+        )
+
+    # Poses dérivées (best-effort) — l'état partiel ne porte pas les poses.
+    nb_poses_dev = 1
+    nb_poses_laize = 1
+    if cyl is not None and dev:
+        nb_poses_dev = max(
+            1, math.floor(float(cyl.developpe_mm) / (float(dev) + _INTERVALLE_DEV))
+        )
+    if laize_utile and laize:
+        nb_poses_laize = max(
+            1, math.floor(laize_utile / (float(laize) + _INTERVALLE_LAIZE))
+        )
+
+    lot = LotProduction(
+        entreprise_id=entreprise_id,
+        ordre=1,
+        cylindre_id=(cyl.id if cyl is not None else None),
+        machine_id=(machine.id if machine is not None else 0),
+        nb_poses_dev=nb_poses_dev,
+        nb_poses_laize=nb_poses_laize,
+        sens_enroulement=1,
+        quantite=(quantite or 0),
+        matiere_id=(p.get("matiere_id") or 1),
+        intervalle_laize_reel_mm=Decimal(str(_INTERVALLE_LAIZE)),
+        mode_sans_outil=mode_sans_outil,
+        laize_stock_mm=(
+            Decimal(str(p["laize_stock_mm"])) if p.get("laize_stock_mm") else None
+        ),
+        nb_filles_force=p.get("nb_filles_force"),
+    )
+    payload_input = {
+        "format_etiquette_largeur_mm": int(laize) if laize else 60,
+        "format_etiquette_hauteur_mm": int(dev) if dev else 40,
+    }
+
+    # nb_couleurs → P2 Encres + P3a clichés (réutilise le mapping existant).
+    nb_couleurs_par_type = (
+        _mapper_nb_couleurs(NbCouleursIn(**p["nb_couleurs"]))
+        if p.get("nb_couleurs")
+        else None
+    )
+    # finitions → P6 (forfaits sous-traitance). Chaque entrée fait bouger le prix.
+    forfaits_st = [
+        PartenaireSTForfait(
+            partenaire_st_id=int(f.get("partenaire_st_id") or 1),
+            montant_eur=Decimal(str(f["montant_eur"])),
+        )
+        for f in (p.get("finitions") or [])
+    ]
+
+    # === Bloc coût (7 postes) — RÉUTILISE _construire + MoteurDevis ===
+    def _run(ncpt, forfaits):
+        """Construit le DevisInput (best-effort) + lance MoteurDevis. Le moteur
+        n'est PAS modifié — on ne fait que varier ses entrées."""
+        di = _construire_devis_input_pour_lot(
+            lot, payload_input, db, entreprise_id, ncpt
+        )
+        if forfaits:
+            di = di.model_copy(update={"forfaits_st": forfaits})
+        return MoteurDevis(db, entreprise_id).calculer(di), di
+
+    devis_input = None
+    if machine is not None and quantite:
+        try:
+            res, devis_input = _run(nb_couleurs_par_type, forfaits_st)
+            base_prix = res.prix_vente_ht_eur
+            out["prix_ht"] = base_prix
+            out["cout_revient"] = res.cout_revient_eur
+            out["marge_pct"] = (
+                res.pct_marge_appliquee * Decimal(100)
+            ).quantize(Decimal("0.01"))
+            out["prix_1000"] = res.prix_au_mille_eur
+            out["decompo"] = [
+                {"poste": pst.libelle, "montant": pst.montant_eur}
+                for pst in res.postes
+            ]
+
+            # === options : impact marginal (prix avec − prix sans), même
+            # réponse (calcul serveur, pas d'appel séparé). ===
+            for idx, f in enumerate(p.get("finitions") or []):
+                try:
+                    forfaits_wo = [
+                        ff for j, ff in enumerate(forfaits_st) if j != idx
+                    ]
+                    res_wo, _ = _run(nb_couleurs_par_type, forfaits_wo)
+                    code = f.get("libelle") or (
+                        f"finition_{f.get('partenaire_st_id') or 1}"
+                    )
+                    out["options"].append(
+                        {
+                            "code": code,
+                            "delta_eur": (
+                                base_prix - res_wo.prix_vente_ht_eur
+                            ).quantize(Decimal("0.01")),
+                        }
+                    )
+                except (CostEngineError, ValueError):
+                    continue
+            # Delta d'une couleur process en plus (impression + 1 cliché).
+            try:
+                ncpt_plus = dict(nb_couleurs_par_type or {})
+                ncpt_plus["process_cmj"] = ncpt_plus.get("process_cmj", 0) + 1
+                res_plus, _ = _run(ncpt_plus, forfaits_st)
+                out["options"].append(
+                    {
+                        "code": "couleur_plus",
+                        "delta_eur": (
+                            res_plus.prix_vente_ht_eur - base_prix
+                        ).quantize(Decimal("0.01")),
+                    }
+                )
+            except (CostEngineError, ValueError):
+                pass
+        except (CostEngineError, ValueError) as exc:
+            alertes.append(
+                {"niveau": "warn", "message": f"Chiffrage partiel indisponible : {exc}"}
+            )
+    elif quantite is None:
+        alertes.append(
+            {"niveau": "info", "message": "Quantité manquante — coûts non chiffrés."}
+        )
+
+    # === Géométrie : Ø (bat_calculs), nb_poses, nb_filles, déchet ===
+    if devis_input is not None:
+        laize_pap = (
+            float(devis_input.laize_papier_mm)
+            if devis_input.laize_papier_mm is not None
+            else float(devis_input.laize_utile_mm)
+        )
+        try:
+            geometrie["diametre_mm"] = calcul_diametre_bobine(
+                devis_input.ml_total,
+                p.get("epaisseur_um") or 150,
+                p.get("mandrin_mm") or 76,
+                laize_pap,
+            )
+        except (ValueError, ArithmeticError):
+            pass
+
+    if mode_sans_outil:
+        if machine is not None and laize and dev and quantite and p.get("laize_stock_mm"):
+            try:
+                geo = calculer_geometrie_sans_outil(
+                    laize_stock_mm=float(p["laize_stock_mm"]),
+                    laize_utile_presse_mm=laize_utile or float(p["laize_stock_mm"]),
+                    format_largeur_mm=float(laize),
+                    format_hauteur_mm=float(dev),
+                    intervalle_laize_mm=_INTERVALLE_LAIZE,
+                    quantite=int(quantite),
+                    nb_filles_force=p.get("nb_filles_force"),
+                )
+                if geo is not None:
+                    geometrie["nb_filles"] = geo.nb_filles
+                    geometrie["nb_poses"] = geo.nb_filles
+                    geometrie["dechet_lateral_mm"] = round(geo.dechet_lateral_mm, 2)
+            except (ValueError, ArithmeticError):
+                pass
+        else:
+            alertes.append(
+                {"niveau": "info", "message": "Mode sans outil : laize stock + format requis pour le déchet."}
+            )
+        # Ligne refente ADDITIVE (RÉUTILISE _calculer_refente_lots).
+        try:
+            devis_tmp = Devis(entreprise_id=entreprise_id, client_id=None)
+            refente = _calculer_refente_lots(
+                db, devis_tmp, [lot], payload_input, entreprise_id
+            )
+            if refente and refente.get("applique"):
+                out["decompo"].append(
+                    {
+                        "poste": "Refente (rebobinage)",
+                        "montant": Decimal(refente["cout_total_refente_eur"]),
+                    }
+                )
+                alertes.append(
+                    {
+                        "niveau": "info",
+                        "message": (
+                            f"Refente : {refente['cout_total_refente_eur']} € "
+                            "(additif, hors prix HT 7 postes)."
+                        ),
+                    }
+                )
+        except (CostEngineError, ValueError):
+            pass
+    else:
+        if cyl is not None:
+            geometrie["nb_poses"] = nb_poses_dev * nb_poses_laize
+        elif not p.get("cylindre_id"):
+            alertes.append(
+                {"niveau": "info", "message": "Cylindre non sélectionné — nb poses non calculé."}
+            )
+
+    if not p.get("matiere_id"):
+        alertes.append(
+            {"niveau": "info", "message": "Matière non sélectionnée — complexe par défaut utilisé."}
+        )
+
+    return out
+
+
 def _chiffrer_devis_multilots(
     db: Session,
     devis: Devis,
@@ -922,6 +1204,12 @@ def _construire_devis_input_pour_lot(
         laize_papier_sans_outil = Decimal(str(laize_stock))
     else:
         # Développé du cylindre magnétique du lot (chemin standard avec outil).
+        # `cylindre_id` None (état partiel preview) → message clair sans
+        # `db.get(None)` (évite le SAWarning « fully NULL primary key »).
+        if lot.cylindre_id is None:
+            raise ValueError(
+                "Cylindre requis pour chiffrer un lot avec outil."
+            )
         cyl = db.get(CylindreMagnetique, lot.cylindre_id)
         if cyl is None:
             raise ValueError(
