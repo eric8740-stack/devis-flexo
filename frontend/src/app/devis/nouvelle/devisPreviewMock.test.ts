@@ -12,55 +12,63 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
   return {
     laize_mm: 100,
     dev_mm: 80,
+    forme: null,
     quantite: 10000,
     nb_couleurs: 4,
-    mode_sans_outil: false,
-    laize_stock_mm: null,
-    nb_filles_force: null,
     cylindre_id: 1,
-    cylindre_developpe_mm: 330,
-    matiere_prix_m2_eur: null,
+    machine_id: 1,
+    matiere_id: 1,
     epaisseur_um: 150,
     mandrin_mm: 76,
-    diametre_max_bobine_mm: null,
-    nb_options: 0,
-    bord_lateral_mm: 10,
+    diam_max_mm: null,
+    nb_filles_force: null,
+    mode_sans_outil: false,
+    laize_stock_mm: null,
+    finitions: [],
     ...over,
   };
 }
 
-describe("devisPreviewMock — compute déterministe", () => {
-  it("inputs incomplets → message incomplet, prix 0 (jamais de faux prix)", () => {
+describe("devisPreviewMock — compute déterministe (contrat final)", () => {
+  it("inputs incomplets → prix 0 + alerte bloquante (jamais de faux prix)", () => {
     const r = computeDevisPreview(baseInput({ laize_mm: 0 }));
-    expect(r.incomplet).toBeTruthy();
-    expect(r.prix_total_ht_eur).toBe(0);
+    expect(r.prix_ht).toBe(0);
+    expect(r.alertes.some((a) => a.niveau === "bloquant")).toBe(true);
   });
 
-  it("inputs valides (avec outil) → prix > 0, poses ≥ 1, pas de déchet refente", () => {
-    const r = computeDevisPreview(baseInput());
-    expect(r.incomplet).toBeNull();
-    expect(r.prix_total_ht_eur).toBeGreaterThan(0);
-    expect(r.derived.nb_poses_laize).toBeGreaterThanOrEqual(1);
-    expect(r.derived.nb_poses_dev).toBeGreaterThanOrEqual(1);
-    // Avec outil : pas de ligne refente.
-    expect(r.decompo.dechet_lateral_mm).toBeNull();
-    expect(r.decompo.nb_filles).toBeNull();
+  it("inputs valides (avec outil) → prix>0, €/1000>0, poses≥1, pas de refente", () => {
+    const r = computeDevisPreview(baseInput(), { cylindre_developpe_mm: 330 });
+    expect(r.prix_ht).toBeGreaterThan(0);
+    expect(r.prix_1000).toBeGreaterThan(0);
+    expect(r.marge_pct).toBeGreaterThan(0);
+    expect(r.geometrie.nb_poses).toBeGreaterThanOrEqual(1);
+    // Avec outil : pas de déchet de refente.
+    expect(r.geometrie.dechet_lateral_mm).toBe(0);
+    // Décompo = postes de coût (poste/montant).
+    expect(r.decompo.length).toBeGreaterThan(0);
+    expect(r.decompo.every((l) => typeof l.montant === "number")).toBe(true);
   });
 
-  it("mode sans outil → déchet latéral (stock − utile) + nb_filles exposés", () => {
+  it("€/1000 cohérent avec prix_ht / quantité", () => {
+    const r = computeDevisPreview(baseInput({ quantite: 5000 }), {
+      cylindre_developpe_mm: 330,
+    });
+    expect(r.prix_1000).toBeCloseTo((r.prix_ht / 5000) * 1000, 1);
+  });
+
+  it("mode sans outil → déchet latéral + nb_filles dans geometrie", () => {
     const r = computeDevisPreview(
       baseInput({
         mode_sans_outil: true,
         laize_stock_mm: 330,
         cylindre_id: null,
-        cylindre_developpe_mm: null,
+        machine_id: null,
       }),
     );
-    expect(r.incomplet).toBeNull();
-    expect(r.decompo.laize_stock_mm).toBe(330);
-    expect(r.decompo.dechet_lateral_mm).not.toBeNull();
-    expect(r.decompo.dechet_lateral_mm).toBeGreaterThanOrEqual(0);
-    expect(r.decompo.nb_filles).toBeGreaterThanOrEqual(1);
+    expect(r.geometrie.dechet_lateral_mm).toBeGreaterThanOrEqual(0);
+    expect(r.geometrie.nb_filles).toBeGreaterThanOrEqual(1);
+    // Pas de poste outillage en sans outil.
+    expect(r.decompo.some((l) => l.poste === "Outillage")).toBe(false);
   });
 
   it("nb_filles_force respecté en sans outil", () => {
@@ -71,12 +79,31 @@ describe("devisPreviewMock — compute déterministe", () => {
         nb_filles_force: 2,
       }),
     );
-    expect(r.decompo.nb_filles).toBe(2);
+    expect(r.geometrie.nb_filles).toBe(2);
+  });
+
+  it("finitions → un coût marginal par option (delta_eur>0) + couleur_plus", () => {
+    const r = computeDevisPreview(baseInput({ finitions: ["VERNIS", "DORURE"] }), {
+      cylindre_developpe_mm: 330,
+    });
+    expect(r.options.map((o) => o.code)).toEqual(["VERNIS", "DORURE"]);
+    expect(r.options.every((o) => o.delta_eur > 0)).toBe(true);
+    expect(r.couleur_plus).toBeGreaterThan(0);
+  });
+
+  it("matière absente → alerte info (état partiel toléré)", () => {
+    const r = computeDevisPreview(baseInput({ matiere_id: null }), {
+      cylindre_developpe_mm: 330,
+    });
+    expect(r.alertes.some((a) => a.niveau === "info")).toBe(true);
+    // Le prix reste estimé malgré la matière manquante.
+    expect(r.prix_ht).toBeGreaterThan(0);
   });
 
   it("déterministe : mêmes entrées → mêmes sorties", () => {
-    expect(computeDevisPreview(baseInput())).toEqual(
-      computeDevisPreview(baseInput()),
+    const ctx = { cylindre_developpe_mm: 330 };
+    expect(computeDevisPreview(baseInput(), ctx)).toEqual(
+      computeDevisPreview(baseInput(), ctx),
     );
   });
 });

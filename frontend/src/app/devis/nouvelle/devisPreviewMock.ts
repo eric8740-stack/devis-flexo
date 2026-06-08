@@ -1,79 +1,100 @@
-// Lot front — devis page unique réactive.
+// Lot front A — devis page unique réactive.
 //
 // ⚠️ MOCK du contrat « live preview » tant que l'endpoint backend CC1
-// `POST /api/devis/preview` n'est pas mergé. Tout est ISOLÉ ici : quand
-// l'endpoint existe, on remplace `previewDevisLive` par un `apiFetch` sans
-// toucher l'UI (l'interface `DevisPreviewResult` est le contrat cible).
+// `POST /api/devis/preview` (#124) n'est pas mergé + déployé. Tout est ISOLÉ
+// ici : la shape de `DevisPreviewInput` / `DevisPreviewResult` est le CONTRAT
+// FINAL tranché avec CC1. Au swap, on remplace le corps de `previewDevisLive`
+// par un `apiFetch<DevisPreviewResult>("/api/devis/preview", …, { signal })`
+// SANS toucher l'UI (zéro friction).
 //
 // Le calcul est une APPROXIMATION déterministe (pas le cost_engine sacré) :
-// il sert UNIQUEMENT à rendre la page réactive en démo (hero prix + décompo
-// + indices dérivés). Les vrais chiffres viendront du backend.
+// il rend la page réactive (hero prix + €/1000 + marge + décompo + géométrie
+// + coût marginal par option + alertes). Les vrais chiffres viennent du back.
 
 import type { CylindreParc } from "@/lib/api";
+
+// ── Contrat /api/devis/preview ───────────────────────────────────────
+
+/** Niveau d'alerte douce (info bleu / attention ambre / bloquant rouge). */
+export type DevisPreviewNiveau = "info" | "attention" | "bloquant";
 
 export interface DevisPreviewInput {
   laize_mm: number;
   dev_mm: number;
+  forme: string | null;
   quantite: number;
   nb_couleurs: number;
-  // Mode « format sans outil » (impression pleine largeur + refente).
+  cylindre_id: number | null;
+  machine_id: number | null;
+  matiere_id: number | null;
+  epaisseur_um: number | null;
+  mandrin_mm: number;
+  diam_max_mm: number | null;
+  nb_filles_force: number | null;
   mode_sans_outil: boolean;
   laize_stock_mm: number | null;
-  nb_filles_force: number | null;
-  // Outil : cylindre choisi (null en sans outil).
-  cylindre_id: number | null;
-  cylindre_developpe_mm: number | null;
-  // Matière.
-  matiere_prix_m2_eur: number | null;
-  epaisseur_um: number | null;
-  // Bobinage.
-  mandrin_mm: number;
-  diametre_max_bobine_mm: number | null;
-  // Finitions.
-  nb_options: number;
-  // Commercial.
-  bord_lateral_mm: number;
+  finitions: string[];
 }
 
-export interface DevisPreviewDecompo {
-  laize_plaque_mm: number;
-  bord_lateral_mm: number;
-  laize_papier_mm: number;
-  // Sans outil uniquement (null sinon).
-  laize_stock_mm: number | null;
-  laize_utile_mm: number | null;
-  dechet_lateral_mm: number | null;
-  nb_filles: number | null;
+export interface DevisPreviewGeometrie {
+  diametre_mm: number;
+  nb_poses: number;
+  nb_filles: number;
+  dechet_lateral_mm: number;
 }
 
-export interface DevisPreviewDerived {
-  nb_poses_dev: number;
-  nb_poses_laize: number;
-  diametre_bobine_mm: number;
-  ml_total: number;
+export interface DevisPreviewDecompoLigne {
+  poste: string;
+  montant: number;
+}
+
+export interface DevisPreviewOptionCout {
+  code: string;
+  delta_eur: number;
+}
+
+export interface DevisPreviewAlerte {
+  niveau: DevisPreviewNiveau;
+  message: string;
 }
 
 export interface DevisPreviewResult {
-  prix_total_ht_eur: number;
+  prix_ht: number;
+  cout_revient: number;
   marge_pct: number;
-  cout_revient_eur: number;
-  decompo: DevisPreviewDecompo;
-  derived: DevisPreviewDerived;
-  // null = preview OK ; sinon message (ex. champs insuffisants). Le hero
-  // affiche le message au lieu d'un prix (jamais « 0,00 € » trompeur).
-  incomplet: string | null;
+  prix_1000: number;
+  geometrie: DevisPreviewGeometrie;
+  decompo: DevisPreviewDecompoLigne[];
+  // Coût marginal de chaque finition active (« + X € »), en UN appel.
+  options: DevisPreviewOptionCout[];
+  // Coût marginal d'une couleur d'impression supplémentaire.
+  couleur_plus: number;
+  alertes: DevisPreviewAlerte[];
 }
 
-const PAS_CHENILLE_MM = 3.175; // 1 dent flexo
-const MARGE_DEFAUT_PCT = 0.3; // mock (le vrai vient de ConfigCouts)
+/** Contexte mock-only : le vrai endpoint résout le développé depuis
+ * `cylindre_id` côté serveur. En mock on lui passe le développé résolu pour
+ * la géométrie. Le swap réseau ignore ce paramètre. */
+export interface DevisPreviewMockCtx {
+  cylindre_developpe_mm?: number | null;
+}
 
-/** Un cylindre est « compatible » avec le format si son développé permet
- * au moins une pose en dev (développé ≥ dev + intervalle). Filtre purement
+const MARGE_DEFAUT_PCT = 0.3; // mock (le vrai vient de ConfigCouts)
+const PRIX_M2_DEFAUT_EUR = 0.35; // mock (le vrai vient du complexe matière)
+const INTERVALLE_DEV_MM = 2;
+const INTERVALLE_LAIZE_MM = 3;
+const LAIZE_PRESSE_DEFAUT_MM = 330;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Un cylindre est « compatible » avec le format si son développé permet au
+ * moins une pose en dev (développé ≥ dev + intervalle). Filtre purement
  * géométrique côté front pour alimenter le select Outil. */
 export function cylindresCompatibles(
   cylindres: CylindreParc[],
   devMm: number,
-  intervalleDevMm: number,
+  intervalleDevMm: number = INTERVALLE_DEV_MM,
 ): CylindreParc[] {
   const pas = devMm + intervalleDevMm;
   if (pas <= 0) return cylindres;
@@ -85,9 +106,24 @@ function nbPosesDev(developpeMm: number, pasDevMm: number): number {
   return Math.floor(developpeMm / pasDevMm);
 }
 
-/** Approximation déterministe du devis pour la preview live (MOCK). */
+/** Coût marginal mock d'une finition — déterministe, varié par code (pas de
+ * hasard, stable d'un appel à l'autre). */
+function optionDelta(code: string, quantite: number): number {
+  let h = 0;
+  for (let i = 0; i < code.length; i++) {
+    h = (h + code.charCodeAt(i) * (i + 1)) % 97;
+  }
+  const base = 15 + (h % 26); // 15–40 € fixe
+  const variable = (quantite / 1000) * 0.8; // par mille
+  return round2((base + variable) / (1 - MARGE_DEFAUT_PCT));
+}
+
+/** Approximation déterministe du devis pour la preview live (MOCK). Renvoie
+ * TOUJOURS la shape complète du contrat ; les états partiels sont signalés
+ * via `alertes` (le front « skip » l'appel sous le minimum laize/dev/qté). */
 export function computeDevisPreview(
   input: DevisPreviewInput,
+  ctx: DevisPreviewMockCtx = {},
 ): DevisPreviewResult {
   const {
     laize_mm,
@@ -97,80 +133,67 @@ export function computeDevisPreview(
     mode_sans_outil,
     laize_stock_mm,
     nb_filles_force,
-    cylindre_developpe_mm,
-    matiere_prix_m2_eur,
+    matiere_id,
+    cylindre_id,
     mandrin_mm,
-    nb_options,
-    bord_lateral_mm,
+    finitions,
   } = input;
+  const cylindreDeveloppe = ctx.cylindre_developpe_mm ?? null;
 
+  const alertes: DevisPreviewAlerte[] = [];
+
+  // Sous le minimum géométrique → pas de prix (jamais de faux « 0,00 € »).
   if (!(laize_mm > 0) || !(dev_mm > 0) || !(quantite > 0)) {
     return {
-      prix_total_ht_eur: 0,
+      prix_ht: 0,
+      cout_revient: 0,
       marge_pct: MARGE_DEFAUT_PCT,
-      cout_revient_eur: 0,
-      decompo: {
-        laize_plaque_mm: 0,
-        bord_lateral_mm,
-        laize_papier_mm: 0,
-        laize_stock_mm: null,
-        laize_utile_mm: null,
-        dechet_lateral_mm: null,
-        nb_filles: null,
+      prix_1000: 0,
+      geometrie: {
+        diametre_mm: 0,
+        nb_poses: 0,
+        nb_filles: 0,
+        dechet_lateral_mm: 0,
       },
-      derived: {
-        nb_poses_dev: 0,
-        nb_poses_laize: 0,
-        diametre_bobine_mm: 0,
-        ml_total: 0,
-      },
-      incomplet: "Renseigne laize, développé et quantité pour estimer le prix.",
+      decompo: [],
+      options: [],
+      couleur_plus: 0,
+      alertes: [
+        {
+          niveau: "bloquant",
+          message: "Renseigne laize, développé et quantité pour estimer le prix.",
+        },
+      ],
     };
   }
 
-  const intervalleLaize = bord_lateral_mm > 0 ? 3 : 3; // mock : pas latéral
-  // Poses laize = combien d'étiquettes (ou bobines filles) en largeur.
-  const laizeUtilePresse = laize_stock_mm ?? 330;
+  // ── Géométrie ───────────────────────────────────────────────────
+  const laizePresse = laize_stock_mm ?? LAIZE_PRESSE_DEFAUT_MM;
   const posesLaizeGeom = Math.max(
     1,
-    Math.floor(laizeUtilePresse / (laize_mm + intervalleLaize)),
+    Math.floor(laizePresse / (laize_mm + INTERVALLE_LAIZE_MM)),
   );
   const nbFilles = mode_sans_outil
     ? (nb_filles_force ?? posesLaizeGeom)
     : posesLaizeGeom;
 
-  // Poses dev = depuis le cylindre choisi (avec outil) sinon impression
-  // continue (1 « pose » conceptuelle pour le mock).
-  const pasDev = dev_mm + 2; // mock intervalle dev
+  const pasDev = dev_mm + INTERVALLE_DEV_MM;
   const posesDev = mode_sans_outil
     ? 1
-    : cylindre_developpe_mm
-      ? Math.max(1, nbPosesDev(cylindre_developpe_mm, pasDev))
+    : cylindreDeveloppe
+      ? Math.max(1, nbPosesDev(cylindreDeveloppe, pasDev))
       : 1;
+  const nbPoses = posesDev * nbFilles;
 
-  const laizePlaque = laize_mm * nbFilles + intervalleLaize * (nbFilles - 1);
-  const laizePapierAvecOutil = laizePlaque + 2 * bord_lateral_mm;
-  const laizeStock = laize_stock_mm ?? laizePapierAvecOutil;
-  const laizePapier = mode_sans_outil ? laizeStock : laizePapierAvecOutil;
-
-  // ml de matière (mock) : quantité × pas dev / poses, en mètres.
-  const mlTotal = (quantite * pasDev) / Math.max(1, posesDev * nbFilles) / 1000;
-  const surfaceM2 = (mlTotal * laizePapier) / 1000;
-  const prixM2 = matiere_prix_m2_eur ?? 0.35;
-
-  // Coût de revient (MOCK) = matière + encres + outillage + options.
-  const coutMatiere = surfaceM2 * prixM2;
-  const coutEncres = nb_couleurs * 0.012 * (quantite / 1000);
-  const coutOutillage = mode_sans_outil ? 0 : 45 * Math.max(1, nbFilles);
-  const coutOptions = nb_options * 25;
-  const coutFixe = 180; // calage mock
-  const coutRevient =
-    coutMatiere + coutEncres + coutOutillage + coutOptions + coutFixe;
-  const prixTotal = coutRevient / (1 - MARGE_DEFAUT_PCT);
-
+  const laizePlaque =
+    laize_mm * nbFilles + INTERVALLE_LAIZE_MM * Math.max(0, nbFilles - 1);
+  const laizeStock = laize_stock_mm ?? laizePlaque;
   const dechetLateral = mode_sans_outil
     ? Math.max(0, laizeStock - laizePlaque)
-    : null;
+    : 0;
+
+  // ml de matière (mock) : quantité × pas dev / poses, en mètres.
+  const mlTotal = (quantite * pasDev) / Math.max(1, nbPoses) / 1000;
 
   // Ø bobine (mock géométrique simple).
   const epaisseurMm = (input.epaisseur_um ?? 150) / 1000;
@@ -180,39 +203,98 @@ export function computeDevisPreview(
     2 * Math.sqrt(rMandrin * rMandrin + surfaceMatiereMm2 / Math.PI),
   );
 
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  const round1 = (n: number) => Math.round(n * 10) / 10;
+  // ── Coûts (MOCK) ────────────────────────────────────────────────
+  const laizePapier = mode_sans_outil ? laizeStock : laizePlaque;
+  const surfaceM2 = (mlTotal * laizePapier) / 1000;
+  const coutMatiere = surfaceM2 * PRIX_M2_DEFAUT_EUR;
+  const coutEncres = nb_couleurs * (0.012 * (quantite / 1000) + 8);
+  const coutOutillage = mode_sans_outil ? 0 : 45 * Math.max(1, nbFilles);
+  const coutFinitions = finitions.reduce(
+    (acc, code) => acc + optionDelta(code, quantite) * (1 - MARGE_DEFAUT_PCT),
+    0,
+  );
+  const coutFixe = 180; // calage mock
+  const coutRevient =
+    coutMatiere + coutEncres + coutOutillage + coutFinitions + coutFixe;
+  const prixTotal = coutRevient / (1 - MARGE_DEFAUT_PCT);
+  const prix1000 = (prixTotal / quantite) * 1000;
+
+  const decompo: DevisPreviewDecompoLigne[] = [
+    { poste: "Matière", montant: round2(coutMatiere) },
+    { poste: "Encres", montant: round2(coutEncres) },
+  ];
+  if (!mode_sans_outil) {
+    decompo.push({ poste: "Outillage", montant: round2(coutOutillage) });
+  }
+  if (finitions.length > 0) {
+    decompo.push({ poste: "Finitions", montant: round2(coutFinitions) });
+  }
+  decompo.push({ poste: "Calage & fixes", montant: round2(coutFixe) });
+
+  const options: DevisPreviewOptionCout[] = finitions.map((code) => ({
+    code,
+    delta_eur: optionDelta(code, quantite),
+  }));
+  const couleurPlus = round2(
+    (0.012 * (quantite / 1000) + 8) / (1 - MARGE_DEFAUT_PCT),
+  );
+
+  // ── Alertes douces ──────────────────────────────────────────────
+  if (matiere_id === null) {
+    alertes.push({
+      niveau: "info",
+      message: "Choisis une matière pour affiner le prix.",
+    });
+  }
+  if (!mode_sans_outil && cylindre_id === null) {
+    alertes.push({
+      niveau: "info",
+      message: "Choisis un cylindre compatible pour figer la pose.",
+    });
+  }
+  if (mode_sans_outil && laize_stock_mm === null) {
+    alertes.push({
+      niveau: "attention",
+      message: "Renseigne la laize bobine stock pour calculer la refente.",
+    });
+  }
+  if (mode_sans_outil && laizeStock > 0 && dechetLateral / laizeStock > 0.15) {
+    alertes.push({
+      niveau: "attention",
+      message: `Déchet latéral élevé (${round1(dechetLateral)} mm) : une autre laize stock réduirait la perte.`,
+    });
+  }
 
   return {
-    prix_total_ht_eur: round2(prixTotal),
+    prix_ht: round2(prixTotal),
+    cout_revient: round2(coutRevient),
     marge_pct: MARGE_DEFAUT_PCT,
-    cout_revient_eur: round2(coutRevient),
-    decompo: {
-      laize_plaque_mm: round1(laizePlaque),
-      bord_lateral_mm,
-      laize_papier_mm: round1(laizePapier),
-      laize_stock_mm: mode_sans_outil ? round1(laizeStock) : null,
-      laize_utile_mm: mode_sans_outil ? round1(laizePlaque) : null,
-      dechet_lateral_mm: dechetLateral != null ? round1(dechetLateral) : null,
-      nb_filles: mode_sans_outil ? nbFilles : null,
+    prix_1000: round2(prix1000),
+    geometrie: {
+      diametre_mm: diametreBobine,
+      nb_poses: nbPoses,
+      nb_filles: nbFilles,
+      dechet_lateral_mm: round1(dechetLateral),
     },
-    derived: {
-      nb_poses_dev: posesDev,
-      nb_poses_laize: nbFilles,
-      diametre_bobine_mm: diametreBobine,
-      ml_total: round1(mlTotal),
-    },
-    incomplet: null,
+    decompo,
+    options,
+    couleur_plus: couleurPlus,
+    alertes,
   };
 }
 
-/** Point d'entrée « preview live » — MOCK async (mime un fetch réseau).
- * Remplacer le corps par `apiFetch<DevisPreviewResult>("/api/devis/preview", …)`
- * quand le back CC1 est mergé ; le reste de l'UI est inchangé. */
+/** Point d'entrée « preview live » — MOCK async (mime un fetch réseau,
+ * honore l'AbortSignal). Au swap : remplacer le corps par
+ * `apiFetch<DevisPreviewResult>("/api/devis/preview", { method: "POST",
+ *  body: JSON.stringify(input), signal: opts?.signal })`. Le reste est inchangé. */
 export async function previewDevisLive(
   input: DevisPreviewInput,
+  opts: DevisPreviewMockCtx & { signal?: AbortSignal } = {},
 ): Promise<DevisPreviewResult> {
-  return computeDevisPreview(input);
+  if (opts.signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+  return computeDevisPreview(input, {
+    cylindre_developpe_mm: opts.cylindre_developpe_mm,
+  });
 }
-
-export const PREVIEW_PAS_CHENILLE_MM = PAS_CHENILLE_MM;
