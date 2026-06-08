@@ -39,7 +39,8 @@ export interface DevisPreviewInput {
   nb_filles_force: number | null;
   mode_sans_outil: boolean;
   laize_stock_mm: number | null;
-  finitions: string[];
+  // Codes des options de fabrication sélectionnées (chips finitions).
+  options_codes: string[];
 }
 
 // ── Résultat parsé (consommé par l'UI) ───────────────────────────────
@@ -58,7 +59,9 @@ export interface DevisPreviewDecompoLigne {
 
 export interface DevisPreviewOptionCout {
   code: string;
-  delta_eur: number;
+  // null = option à impact production sans forfait → « chiffré bientôt ».
+  delta_eur: number | null;
+  impact_production: boolean;
 }
 
 export interface DevisPreviewAlerte {
@@ -102,9 +105,9 @@ function nbCouleursObj(n: number): NbCouleursIn {
 }
 
 /** État page → body wire. Champs absents/invalides → `null` (le backend les
- * traite best-effort ; il refuse 0 via `gt=0`). `finitions: []` en A1 (la
- * saisie de leurs montants ST arrive en A2 ; la persistance passe par
- * `options_codes_etape4`). */
+ * traite best-effort ; il refuse 0 via `gt=0`). Les options partent en
+ * `options_codes` (le serveur price) ; `finitions` reste vide (réservé aux
+ * forfaits ST ad-hoc). */
 export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
   return {
     laize: i.laize_mm > 0 ? i.laize_mm : null,
@@ -124,6 +127,8 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
     laize_stock_mm:
       i.laize_stock_mm && i.laize_stock_mm > 0 ? i.laize_stock_mm : null,
     nb_couleurs: i.nb_couleurs > 0 ? nbCouleursObj(i.nb_couleurs) : null,
+    // Options par CODE (#130) : le serveur price. Forfaits ad-hoc inutilisés.
+    options_codes: i.options_codes,
     finitions: [],
   };
 }
@@ -147,7 +152,8 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
     })),
     options: out.options.map((o) => ({
       code: o.code,
-      delta_eur: Number(o.delta_eur),
+      delta_eur: numOrNull(o.delta_eur),
+      impact_production: o.impact_production,
     })),
     alertes: out.alertes.map((a) => ({ niveau: a.niveau, message: a.message })),
   };

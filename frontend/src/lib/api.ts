@@ -999,6 +999,10 @@ export interface DevisPreviewRequest {
   mode_sans_outil: boolean;
   laize_stock_mm?: number | null;
   nb_couleurs?: NbCouleursIn | null;
+  // Entrée CANONIQUE des options (#130) : le front envoie des CODES, le
+  // cost_engine price € serveur. Ne jamais assembler de montant côté front.
+  options_codes: string[];
+  // Forfaits ST ad-hoc à montant explicite (rare) — préférer options_codes.
   finitions: FinitionPreviewIn[];
 }
 
@@ -1016,7 +1020,10 @@ export interface DecompoLignePreviewOut {
 
 export interface OptionDeltaPreviewOut {
   code: string;
-  delta_eur: string; // Decimal sérialisé
+  // Decimal sérialisé, OU null quand l'option est à impact production sans
+  // forfait (cf. impact_production) — afficher « impact production », pas 0 €.
+  delta_eur: string | null;
+  impact_production: boolean;
 }
 
 export interface AlertePreviewOut {
