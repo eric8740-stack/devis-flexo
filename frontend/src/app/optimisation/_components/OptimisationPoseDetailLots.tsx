@@ -237,6 +237,36 @@ export function OptimisationPoseDetailLots() {
                         : " (motif manquant)"}
                     </div>
                   )}
+                  {/* Lot back A — mode sans outil : déchet latéral (stock −
+                      utile) + nb bobines filles, exposés par geometrie_laize. */}
+                  {lot.candidat.geometrie_laize.dechet_lateral_mm != null && (
+                    <div
+                      data-testid={`dechet-lateral-${idx}`}
+                      className="mt-1 font-mono text-xs"
+                    >
+                      Déchet latéral : stock{" "}
+                      <strong>
+                        {lot.candidat.geometrie_laize.laize_stock_mm} mm
+                      </strong>{" "}
+                      − utile{" "}
+                      <strong>
+                        {lot.candidat.geometrie_laize.laize_utile_mm} mm
+                      </strong>{" "}
+                      ={" "}
+                      <strong>
+                        {lot.candidat.geometrie_laize.dechet_lateral_mm} mm
+                      </strong>
+                      {lot.candidat.geometrie_laize.nb_filles != null && (
+                        <>
+                          {" "}
+                          · <strong>
+                            {lot.candidat.geometrie_laize.nb_filles}
+                          </strong>{" "}
+                          bobine(s) fille(s)
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
