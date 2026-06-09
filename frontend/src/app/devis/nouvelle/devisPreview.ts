@@ -41,12 +41,9 @@ export interface DevisPreviewInput {
   laize_stock_mm: number | null;
   // Codes des options de fabrication sélectionnées (chips finitions).
   options_codes: string[];
-  // Lot C — config outil×machine choisie (épingle la pose serveur).
-  config_id: number | null;
-  // Lot C — écarts forçables (Règle 7).
-  intervalle_laize_mm: number | null;
-  force_intervalle_laize: boolean;
-  nb_poses_laize_force: number | null;
+  // Lot C : la config choisie pilote la preview via cylindre_id/machine_id
+  // (résolus depuis le parc), PAS via un champ dédié — `/preview` est
+  // `extra="forbid"`. config_id / écarts forcés ne sont pas envoyés.
 }
 
 // ── Résultat parsé (consommé par l'UI) ───────────────────────────────
@@ -77,7 +74,7 @@ export interface DevisPreviewAlerte {
 
 // Lot C — config cylindre×machine candidate (pose + score), parsée.
 export interface DevisPreviewConfig {
-  id: number;
+  id: string; // identifiant composite du back (ex. "1-1-4x2")
   cylindre_dents: number;
   developpe_mm: number;
   machine: string;
@@ -163,19 +160,6 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
     // Options par CODE (#130) : le serveur price. Forfaits ad-hoc inutilisés.
     options_codes: i.options_codes,
     finitions: [],
-    // Lot C — config épinglée + écarts forcés (sinon défauts moteur).
-    config_id: i.config_id ?? null,
-    intervalle_laize_mm:
-      i.force_intervalle_laize &&
-      i.intervalle_laize_mm &&
-      i.intervalle_laize_mm > 0
-        ? i.intervalle_laize_mm
-        : null,
-    force_intervalle_laize: i.force_intervalle_laize,
-    nb_poses_laize:
-      i.nb_poses_laize_force && i.nb_poses_laize_force > 0
-        ? i.nb_poses_laize_force
-        : null,
   };
 }
 
@@ -205,7 +189,7 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
     // Lot C — parse défensif (les numériques peuvent arriver en string ou
     // number selon le back) ; absents sur l'ancien endpoint → [] / null.
     configs: (out.configs ?? []).map((c) => ({
-      id: c.id,
+      id: String(c.id),
       cylindre_dents: Number(c.cylindre_dents),
       developpe_mm: Number(c.developpe_mm),
       machine: c.machine,

@@ -27,10 +27,6 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     mode_sans_outil: false,
     laize_stock_mm: null,
     options_codes: [],
-    config_id: null,
-    intervalle_laize_mm: null,
-    force_intervalle_laize: false,
-    nb_poses_laize_force: null,
     ...over,
   };
 }
@@ -74,25 +70,14 @@ describe("buildPreviewRequest — état page → body wire", () => {
     expect(r.laize_stock_mm).toBe(330);
   });
 
-  it("Lot C : config_id transmis ; écarts envoyés seulement si forcés", () => {
-    // Intervalle laize non forcé → null même si une valeur est présente.
-    const r0 = buildPreviewRequest(
-      baseInput({ config_id: 7, intervalle_laize_mm: 5 }),
-    );
-    expect(r0.config_id).toBe(7);
-    expect(r0.intervalle_laize_mm).toBeNull();
-    expect(r0.force_intervalle_laize).toBe(false);
-    // Forcé → transmis.
-    const r1 = buildPreviewRequest(
-      baseInput({
-        force_intervalle_laize: true,
-        intervalle_laize_mm: 8,
-        nb_poses_laize_force: 3,
-      }),
-    );
-    expect(r1.intervalle_laize_mm).toBe(8);
-    expect(r1.force_intervalle_laize).toBe(true);
-    expect(r1.nb_poses_laize).toBe(3);
+  it("Lot C : n'envoie PAS config_id ni écarts (/preview est extra=forbid → 422)", () => {
+    const r = buildPreviewRequest(baseInput());
+    expect(r).not.toHaveProperty("config_id");
+    expect(r).not.toHaveProperty("intervalle_laize_mm");
+    expect(r).not.toHaveProperty("force_intervalle_laize");
+    expect(r).not.toHaveProperty("nb_poses_laize");
+    // La config choisie pilote la preview via cylindre_id (champ accepté).
+    expect(r.cylindre_id).toBe(1);
   });
 });
 
@@ -181,7 +166,7 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
       alertes: [],
       configs: [
         {
-          id: 11,
+          id: "1-1-4x2",
           cylindre_dents: 104,
           developpe_mm: 330.2,
           machine: "Mark Andy P5",
@@ -205,7 +190,7 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
     const r = parsePreview(wire);
     expect(r.configs).toHaveLength(1);
     expect(r.configs[0]).toMatchObject({
-      id: 11,
+      id: "1-1-4x2",
       cylindre_dents: 104,
       poses_total: 8,
       delta_dev_mm: 2.55,
