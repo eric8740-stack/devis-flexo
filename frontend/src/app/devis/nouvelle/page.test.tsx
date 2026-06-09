@@ -106,12 +106,27 @@ function installFetchMock() {
     if (url.endsWith("/api/devis/preview") && method === "POST") {
       const body = JSON.parse((init?.body as string) ?? "{}");
       const sansOutil = body.mode_sans_outil === true;
+      // V0 — remise calculée depuis la requête (mock).
+      const prixHt = 123.45;
+      const remisePct = Number(body.remise_pct) || 0;
+      const remiseEur = (prixHt * remisePct) / 100;
+      const prixHtNet = prixHt - remiseEur;
       // Réponse wire : Decimal sérialisés en CHAÎNES, nullables.
       return ok({
         prix_ht: "123.45",
         cout_revient: "80.00",
         marge_pct: "30.00",
         prix_1000: "12.35",
+        remise_pct: remisePct.toFixed(2),
+        remise_eur: remiseEur.toFixed(2),
+        prix_ht_net: prixHtNet.toFixed(2),
+        decompo_groupee: {
+          matiere_p1: "40.00",
+          impression_presse_calage: "25.00",
+          cliches_outil: "10.00",
+          option_finitions: "0.00",
+          refente: sansOutil ? "8.00" : "0.00",
+        },
         geometrie: sansOutil
           ? {
               diametre_mm: 250,
@@ -306,6 +321,35 @@ describe("DevisPageUnique — page devis réactive", () => {
     expect(screen.getByTestId("ec-intervalle-laize")).toBeDisabled();
     await userEvent.click(screen.getByTestId("ec-force-laize"));
     expect(screen.getByTestId("ec-intervalle-laize")).not.toBeDisabled();
+  });
+
+  it("V0 : panneau (HT net + décompo groupée + total) + barre mobile + remise live", async () => {
+    render(<DevisPageUnique />);
+    await screen.findByTestId("hero-prix-valeur");
+    // Le gros prix = HT net (123,45 € sans remise au départ).
+    expect(screen.getByTestId("hero-prix-valeur")).toHaveTextContent("123,45");
+    // Décompo coût groupée (avec ligne Total) affichée dans le panneau.
+    expect(screen.getByTestId("hero-decompo-groupee")).toHaveTextContent(
+      /Total HT/,
+    );
+    // Barre prix basse fixe (mobile) présente, avec son propre Valider.
+    expect(screen.getByTestId("mobile-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("valider-mobile")).toBeInTheDocument();
+    // Pas de remise par défaut (0 %).
+    expect(screen.queryByTestId("hero-remise")).toBeNull();
+    // Saisir une remise → ligne remise (HT brut + −€) + HT net recalculé.
+    await userEvent.clear(screen.getByTestId("c-remise"));
+    await userEvent.type(screen.getByTestId("c-remise"), "10");
+    await waitFor(() =>
+      expect(screen.getByTestId("hero-remise")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("hero-remise")).toHaveTextContent(/remise/i);
+    // Le gros prix = HT net < brut → n'affiche plus 123,45 €.
+    await waitFor(() =>
+      expect(screen.getByTestId("hero-prix-valeur")).not.toHaveTextContent(
+        "123,45",
+      ),
+    );
   });
 
   it("décompo refente affichée en sans outil (déchet latéral)", async () => {

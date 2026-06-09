@@ -1007,6 +1007,10 @@ export interface DevisPreviewRequest {
   // ⚠️ Lot C : la config choisie pilote la preview via cylindre_id/machine_id
   // (champs existants). `DevisPreviewIn` est `extra="forbid"` → NE PAS ajouter
   // config_id / écarts ici tant que le back ne les accepte pas (sinon 422).
+  // V0 — leviers commerciaux : marge override (en %, null = défaut tenant),
+  // remise commerciale (en %, par-dessus le HT brut, hors coût de revient).
+  marge_pct?: number | null;
+  remise_pct?: number;
 }
 
 export interface GeometriePreviewOut {
@@ -1062,8 +1066,18 @@ export interface PreviewEcartsOut {
   force_intervalle_laize: boolean;
 }
 
+// V0 — décompo coût regroupée en 5 lignes métier (somme = coût revient +
+// refente). Decimal sérialisés en chaînes.
+export interface DecompoGroupeeOut {
+  matiere_p1: string;
+  impression_presse_calage: string;
+  cliches_outil: string;
+  option_finitions: string;
+  refente: string;
+}
+
 export interface DevisPreviewOut {
-  prix_ht: string | null;
+  prix_ht: string | null; // HT BRUT (7 postes, sacré)
   cout_revient: string | null;
   marge_pct: string | null; // pourcentage (ex. "30.00"), pas une fraction
   prix_1000: string | null;
@@ -1074,6 +1088,11 @@ export interface DevisPreviewOut {
   // Lot C — ajout NON breaking : absents sur l'ancien endpoint (→ [] / null).
   configs?: PreviewConfigOut[];
   ecarts?: PreviewEcartsOut | null;
+  // V0 — remise commerciale tracée à part + HT net facturé + décompo groupée.
+  remise_pct?: string;
+  remise_eur?: string | null;
+  prix_ht_net?: string | null; // HT facturé après remise
+  decompo_groupee?: DecompoGroupeeOut | null;
 }
 
 export const previewDevis = (
