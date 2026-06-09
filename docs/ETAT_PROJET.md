@@ -9,15 +9,19 @@
 
 ## En-tête
 
-- **Date** : 2026-06-08
-- **Branche active** : `main` = **`663c194`** (après #130 — **`/preview` options par CODE LIVE**).
-- **Sprint en cours** : **Aucun**. **🎉 Chantier « devis page unique » end-to-end CLOS** : **CC1 endpoint `/api/devis/preview`** (#124, contrat final prix + déltas/option + `machine_id`) + **CC2 front A1** `/devis/nouvelle` réactive (#123, recalc live debounce/AbortController, contrat preview complet). Chantier précédent **« format sans outil » end-to-end CLOS** (#118 + #121 + #120). Autres CLOS : **L1**, **L2** (sacrés re-baselinés), **Souveraineté**. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1 / CC2 = libres**. Chantiers sans-outil + devis-page-unique terminés.
+- **Date** : 2026-06-09
+- **Branche active** : `main` = **`f3be39e`** (après #136 — **`/preview` V0 boucle marge live**).
+- **Sprint en cours** : **Chantier « configurateur page unique »** — câblage live des sections via `/preview`. Mergés : **Lot C** (configs outil & pose : back #135 + front #134) · **V0 boucle marge live** (back #136 : marge override + remise à part + décompo groupée). Avant : **A1** (#123/#124), **A2/A2bis** (#129/#132 : toggle sans-outil, chips finitions + déltas par code). ⚠️ **Hotfix ouvert #137** (`/preview` 422 : front Lot C envoie des **inputs** — `config_id` + écarts forcés — que `DevisPreviewIn` rejette ; **gap contrat ENTRÉE Lot C**). Chantiers CLOS antérieurs : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1** = back C #135 + V0 #136 mergés (+ à traiter : inputs `/preview` Lot C, cf. #137). **CC2** = front C #134 / A2bis #132 mergés ; attaque **front V0** (panneau prix sticky).
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- **#136** — feat(devis): **`/preview` V0 boucle marge live** — `marge_pct` override (→ `pct_marge_override`) + `remise_pct` **tracée à part** (par-dessus HT brut, hors coût → `remise_eur`/`prix_ht_net`) + `decompo_groupee` (5 lignes métier, somme = coût) + `_appliquer_remise` isolée (archi ouverte marge-cible). cost_engine INTOUCHÉ, value-neutral. Baseline **1202**.
+- **#135** — feat(devis): **`/preview` configs cylindre × machine + écarts (Lot C back)** — `configs[]` (tri score, top 3 `recommande`) + `ecarts`, via réutilisation `optimiser_pose` (SSOT, lecture pure, AUCUN coût). Sans-outil → `configs=[]`, `intervalle_dev=0`. Baseline **1199**.
+- **#134** — feat(devis): **Lot C front** « choix outil & pose » (CC2) — 3 cartes config + table N configs + bloc écarts, consomme `configs[]`/`ecarts`. ⚠️ a introduit le 422 traité par **#137** (inputs non acceptés).
+- **#132** — feat(devis): **A2bis front** — chips finitions (aria-pressed, actif orange) + coût marginal « +X € » par code via `options[].delta_eur` (impact production → « chiffré bientôt », jamais +0 €) + `couleur_plus` ; requête `/preview` + POST via `options_codes`.
 - **#130** — feat(devis): **`/preview` options par CODE** — `options_codes: list[str]` (entrée canonique, le front n'envoie que les codes) → € résolu serveur via `OptionFabrication` (catalogue tenant+global) → `forfaits_st` → P6 (moteur intouché). `options[].delta_eur` par code (`€×(1+marge)`) + flag `impact_production` (option coef/temps sans forfait → `delta_eur:null`, pas de faux +0 €) ; décompo ligne `Option · <libelle>` distincte. `finitions:[{montant_eur}]` déprécié (rétro-compat). `OptionDisponiblePublic` inchangé. **Sacrés L2 EXACTS**. Baseline **1197**.
 - **#123** — feat(devis): **front A1 « devis page unique »** (CC2) — page `/devis/nouvelle` réactive consommant `POST /api/devis/preview` live (swap mock → endpoint #124). Recalc live (debounce 250ms, AbortController, keep-last), contrat preview complet (€/1000, géométrie, décompo, options/déltas, alertes info/warn, `couleur_plus`), select presse masqué si tenant mono-machine. Front pur. vitest 204→**218**. → **chantier devis page unique CLOS end-to-end**.
 - **#126** — ci(backend): **anti-flaky pull postgres** — `postgres:16` sort de `services:` (pullé avant les steps, source du flaky `registry-1.docker.io`) → géré en **step** : cache image (`docker save`+`actions/cache`) + retry ×5 sur le pull, zéro Docker Hub dès le 2ᵉ run. `backend.yml` uniquement, comportement des tests INCHANGÉ (CI 1201 passed, test FK strictes Postgres tourne).
@@ -40,7 +44,8 @@
 
 ## PRs ouvertes
 
-- **Aucune** — chantier « devis page unique » end-to-end mergé (#124 endpoint + #123 front A1).
+- **#137** — fix(devis): **hotfix `/preview` 422** — le front Lot C envoyait des champs non acceptés par `DevisPreviewIn` (`extra="forbid"`). ⚠️ Symptôme d'un **gap contrat ENTRÉE Lot C** (les inputs `config_id` + écarts forcés ne sont pas au schéma `/preview`).
+- **#133** — docs(etat-projet): **cadrage Devis page unique V2** (maquette north-star). OPEN.
 
 ## PRs récemment fermées (non mergées)
 
