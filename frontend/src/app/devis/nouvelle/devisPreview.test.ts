@@ -27,6 +27,10 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     mode_sans_outil: false,
     laize_stock_mm: null,
     options_codes: [],
+    config_id: null,
+    intervalle_laize_mm: null,
+    force_intervalle_laize: false,
+    nb_poses_laize_force: null,
     marge_pct_override: null,
     remise_pct: 0,
     ...over,
@@ -72,14 +76,43 @@ describe("buildPreviewRequest — état page → body wire", () => {
     expect(r.laize_stock_mm).toBe(330);
   });
 
-  it("Lot C : n'envoie PAS config_id ni écarts (/preview est extra=forbid → 422)", () => {
-    const r = buildPreviewRequest(baseInput());
-    expect(r).not.toHaveProperty("config_id");
-    expect(r).not.toHaveProperty("intervalle_laize_mm");
-    expect(r).not.toHaveProperty("force_intervalle_laize");
-    expect(r).not.toHaveProperty("nb_poses_laize");
-    // La config choisie pilote la preview via cylindre_id (champ accepté).
-    expect(r.cylindre_id).toBe(1);
+  it("Lot C-inputs (#140) : config_id + écarts forcés envoyés (noms exacts)", () => {
+    const r = buildPreviewRequest(
+      baseInput({
+        config_id: "1-1-4x2",
+        force_intervalle_laize: true,
+        intervalle_laize_mm: 8,
+        nb_poses_laize_force: 3,
+      }),
+    );
+    expect(r.config_id).toBe("1-1-4x2");
+    expect(r.force_intervalle_laize).toBe(true);
+    expect(r.intervalle_laize_mm).toBe(8);
+    expect(r.nb_poses_laize_force).toBe(3);
+  });
+
+  it("Lot C-inputs : intervalle non envoyé si non forcé ; sans outil → config_id null", () => {
+    const r = buildPreviewRequest(
+      baseInput({ config_id: "x", intervalle_laize_mm: 8 }),
+    );
+    expect(r.intervalle_laize_mm).toBeNull(); // pas forcé
+    const r2 = buildPreviewRequest(
+      baseInput({ mode_sans_outil: true, config_id: "x" }),
+    );
+    expect(r2.config_id).toBeNull(); // pas d'outil en sans-outil
+  });
+
+  it("Lot C-inputs : valeurs hors bornes NON envoyées (évite 422)", () => {
+    // intervalle ∈ (0,50], nb_poses ∈ [1,20] côté schéma #140.
+    const r = buildPreviewRequest(
+      baseInput({
+        force_intervalle_laize: true,
+        intervalle_laize_mm: 99,
+        nb_poses_laize_force: 50,
+      }),
+    );
+    expect(r.intervalle_laize_mm).toBeNull();
+    expect(r.nb_poses_laize_force).toBeNull();
   });
 
   it("V0 : marge override envoyée si saisie ; remise toujours (défaut 0)", () => {

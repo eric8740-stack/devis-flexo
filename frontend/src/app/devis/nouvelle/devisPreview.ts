@@ -41,9 +41,12 @@ export interface DevisPreviewInput {
   laize_stock_mm: number | null;
   // Codes des options de fabrication sélectionnées (chips finitions).
   options_codes: string[];
-  // Lot C : la config choisie pilote la preview via cylindre_id/machine_id
-  // (résolus depuis le parc), PAS via un champ dédié — `/preview` est
-  // `extra="forbid"`. config_id / écarts forcés ne sont pas envoyés.
+  // Lot C-inputs (#140) — config choisie (id composite) + forçage écarts. Le
+  // serveur fige la pose / surcharge les écarts → la marge bouge en direct.
+  config_id: string | null;
+  intervalle_laize_mm: number | null;
+  force_intervalle_laize: boolean;
+  nb_poses_laize_force: number | null;
   // V0 — leviers commerciaux : marge override (%, null = défaut tenant) +
   // remise commerciale (%).
   marge_pct_override: number | null;
@@ -178,6 +181,24 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
     // Options par CODE (#130) : le serveur price. Forfaits ad-hoc inutilisés.
     options_codes: i.options_codes,
     finitions: [],
+    // Lot C-inputs (#140) — config épingle la pose ; forçage écarts dans les
+    // bornes du schéma (sinon non envoyé → évite 422). Pas de config en sans
+    // outil (pas d'outil de découpe).
+    config_id: i.mode_sans_outil ? null : (i.config_id ?? null),
+    force_intervalle_laize: i.force_intervalle_laize,
+    intervalle_laize_mm:
+      i.force_intervalle_laize &&
+      i.intervalle_laize_mm !== null &&
+      i.intervalle_laize_mm > 0 &&
+      i.intervalle_laize_mm <= 50
+        ? i.intervalle_laize_mm
+        : null,
+    nb_poses_laize_force:
+      i.nb_poses_laize_force !== null &&
+      i.nb_poses_laize_force >= 1 &&
+      i.nb_poses_laize_force <= 20
+        ? i.nb_poses_laize_force
+        : null,
     // V0 — marge override seulement si saisie ; remise toujours (défaut 0).
     marge_pct:
       i.marge_pct_override !== null && i.marge_pct_override >= 0
