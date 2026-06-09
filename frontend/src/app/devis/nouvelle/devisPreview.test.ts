@@ -27,6 +27,10 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     mode_sans_outil: false,
     laize_stock_mm: null,
     options_codes: [],
+    config_id: null,
+    intervalle_laize_mm: null,
+    force_intervalle_laize: false,
+    nb_poses_laize_force: null,
     ...over,
   };
 }
@@ -68,6 +72,27 @@ describe("buildPreviewRequest — état page → body wire", () => {
     expect(r.machine_id).toBe(1);
     expect(r.mode_sans_outil).toBe(true);
     expect(r.laize_stock_mm).toBe(330);
+  });
+
+  it("Lot C : config_id transmis ; écarts envoyés seulement si forcés", () => {
+    // Intervalle laize non forcé → null même si une valeur est présente.
+    const r0 = buildPreviewRequest(
+      baseInput({ config_id: 7, intervalle_laize_mm: 5 }),
+    );
+    expect(r0.config_id).toBe(7);
+    expect(r0.intervalle_laize_mm).toBeNull();
+    expect(r0.force_intervalle_laize).toBe(false);
+    // Forcé → transmis.
+    const r1 = buildPreviewRequest(
+      baseInput({
+        force_intervalle_laize: true,
+        intervalle_laize_mm: 8,
+        nb_poses_laize_force: 3,
+      }),
+    );
+    expect(r1.intervalle_laize_mm).toBe(8);
+    expect(r1.force_intervalle_laize).toBe(true);
+    expect(r1.nb_poses_laize).toBe(3);
   });
 });
 
@@ -134,6 +159,66 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
     expect(r.prix_ht).toBeNull();
     expect(r.prix_1000).toBeNull();
     expect(r.decompo).toEqual([]);
+    // Lot C : ancien endpoint (pas de configs/ecarts) → dégradation propre.
+    expect(r.configs).toEqual([]);
+    expect(r.ecarts).toBeNull();
+  });
+
+  it("Lot C : parse configs (numériques défensifs) + ecarts", () => {
+    const wire: DevisPreviewOut = {
+      prix_ht: "100.00",
+      cout_revient: "70.00",
+      marge_pct: "30.00",
+      prix_1000: "10.00",
+      geometrie: {
+        diametre_mm: 250,
+        nb_poses: 8,
+        nb_filles: null,
+        dechet_lateral_mm: null,
+      },
+      decompo: [],
+      options: [],
+      alertes: [],
+      configs: [
+        {
+          id: 11,
+          cylindre_dents: 104,
+          developpe_mm: 330.2,
+          machine: "Mark Andy P5",
+          poses_laize: 2,
+          poses_dev: 4,
+          poses_total: 8,
+          delta_dev_mm: 2.55,
+          delta_laize_mm: 5,
+          sens: 1,
+          score: 100,
+          recommande: true,
+        },
+      ],
+      ecarts: {
+        intervalle_laize_mm: 5,
+        intervalle_dev_mm: 2,
+        nb_poses_laize: "auto",
+        force_intervalle_laize: false,
+      },
+    };
+    const r = parsePreview(wire);
+    expect(r.configs).toHaveLength(1);
+    expect(r.configs[0]).toMatchObject({
+      id: 11,
+      cylindre_dents: 104,
+      poses_total: 8,
+      delta_dev_mm: 2.55,
+      sens: 1,
+      score: 100,
+      recommande: true,
+    });
+    expect(r.ecarts).toEqual({
+      intervalle_laize_mm: 5,
+      intervalle_dev_mm: 2,
+      nb_poses_laize: "auto",
+      force_intervalle_laize: false,
+    });
   });
 });
 

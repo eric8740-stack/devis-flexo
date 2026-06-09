@@ -65,6 +65,26 @@ function eur(n: number | null): string {
   });
 }
 
+// mm avec décimales FR (ex. 2.55 → « 2,55 »).
+function mm(n: number): string {
+  return n.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+}
+
+// Libellés des sens d'enroulement (codes SE ; 0/9 = sans impression).
+const SENS_LABEL: Record<number, string> = {
+  0: "0° ext. sans impr.",
+  1: "0° ext. droite",
+  2: "180° ext. gauche",
+  3: "270° ext. pied",
+  4: "90° ext. tête",
+  5: "0° int. droite",
+  6: "180° int. gauche",
+  7: "270° int. pied",
+  8: "90° int. tête",
+  9: "0° int. sans impr.",
+};
+const sensLabel = (n: number): string => SENS_LABEL[n] ?? `Sens ${n}`;
+
 export default function DevisPageUnique() {
   const router = useRouter();
   const { toast } = useToast();
@@ -90,6 +110,13 @@ export default function DevisPageUnique() {
   // Outil : cylindre + machine (alimentent le lot persisté).
   const [machineId, setMachineId] = useState<number | null>(null);
   const [cylindreId, setCylindreId] = useState<number | null>(null);
+  // Lot C — config outil×machine choisie (cartes/table) + table dépliée.
+  const [configId, setConfigId] = useState<number | null>(null);
+  const [showAllConfigs, setShowAllConfigs] = useState(false);
+  // Lot C — écarts entre étiquettes (forçables Règle 7).
+  const [intervalleLaize, setIntervalleLaize] = useState("");
+  const [forceIntervalleLaize, setForceIntervalleLaize] = useState(false);
+  const [nbPosesLaizeForce, setNbPosesLaizeForce] = useState(""); // "" = auto
   // Matière.
   const [matiereId, setMatiereId] = useState<number | null>(null);
   const [epaisseur, setEpaisseur] = useState("150");
@@ -222,6 +249,14 @@ export default function DevisPageUnique() {
           ? parseFloat(laizeStock)
           : null,
       options_codes: Array.from(optionsCodes),
+      config_id: modeSansOutil ? null : configId,
+      intervalle_laize_mm:
+        intervalleLaize.trim() !== "" ? parseFloat(intervalleLaize) : null,
+      force_intervalle_laize: forceIntervalleLaize,
+      nb_poses_laize_force:
+        nbPosesLaizeForce.trim() !== ""
+          ? parseInt(nbPosesLaizeForce, 10)
+          : null,
     }),
     [
       laize,
@@ -238,6 +273,10 @@ export default function DevisPageUnique() {
       mandrin,
       diametreMax,
       optionsCodes,
+      configId,
+      intervalleLaize,
+      forceIntervalleLaize,
+      nbPosesLaizeForce,
     ],
   );
 
@@ -294,6 +333,49 @@ export default function DevisPageUnique() {
     };
   }, [previewInput, miniPresents]);
 
+  // ── Lot C : configs outil×machine & écarts (depuis la preview) ────
+  const configsTries = useMemo(
+    () => [...(preview?.configs ?? [])].sort((a, b) => b.score - a.score),
+    [preview],
+  );
+  const configsRecommandees = useMemo(
+    () => configsTries.filter((c) => c.recommande).slice(0, 3),
+    [configsTries],
+  );
+  const selectedConfig = useMemo(
+    () => configsTries.find((c) => c.id === configId) ?? null,
+    [configsTries, configId],
+  );
+  const ecarts = preview?.ecarts ?? null;
+
+  // Auto-sélection de la meilleure config quand la liste arrive (ou que la
+  // sélection courante n'existe plus). Pas en mode sans outil (pas d'outil).
+  useEffect(() => {
+    if (modeSansOutil || configsTries.length === 0) return;
+    if (configId !== null && configsTries.some((c) => c.id === configId)) return;
+    setConfigId(configsTries[0]!.id);
+  }, [configsTries, configId, modeSansOutil]);
+
+  // Config choisie → résout cylindre_id + machine_id depuis le parc (le lot
+  // persisté garde sa shape ; le serveur épingle aussi via config_id).
+  useEffect(() => {
+    if (selectedConfig === null) return;
+    const cyl = cylindres.find(
+      (c) => c.nb_dents === selectedConfig.cylindre_dents,
+    );
+    if (cyl) setCylindreId(cyl.id);
+    const mach = machines.find((m) => m.nom === selectedConfig.machine);
+    if (mach) setMachineId(mach.id);
+  }, [selectedConfig, cylindres, machines]);
+
+  // Écarts : pré-remplit l'intervalle laize depuis le défaut moteur tant que
+  // l'utilisateur ne force pas (Règle 7).
+  useEffect(() => {
+    if (ecarts && !forceIntervalleLaize) {
+      setIntervalleLaize(String(ecarts.intervalle_laize_mm));
+    }
+  }, [ecarts, forceIntervalleLaize]);
+
   const toggleOption = (code: string) =>
     setOptionsCodes((prev) => {
       const next = new Set(prev);
@@ -313,10 +395,17 @@ export default function DevisPageUnique() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!peutValider || machineId === null) return;
-    // Poses pour la persistance — best-effort local (le backend recalcule via
-    // le cost_engine à la création ; même géométrie que /api/devis/preview).
-    const { nb_poses_dev: nbPosesDev, nb_poses_laize: nbFilles } =
-      posesPourPersist(previewInput, cylindreDeveloppe);
+    // Poses pour la persistance : la config choisie (Lot C) fait foi ; sinon
+    // best-effort local (le backend recalcule via le cost_engine à la création).
+    const posesFallback = posesPourPersist(previewInput, cylindreDeveloppe);
+    const nbPosesDev =
+      !modeSansOutil && selectedConfig
+        ? selectedConfig.poses_dev
+        : posesFallback.nb_poses_dev;
+    const nbFilles =
+      !modeSansOutil && selectedConfig
+        ? selectedConfig.poses_laize
+        : posesFallback.nb_poses_laize;
     setSubmitting(true);
     try {
       const devis = await createDevis({
@@ -584,62 +673,244 @@ export default function DevisPageUnique() {
             Replié (transition douce) en mode sans outil plutôt que démonté :
             les contrôles passent hors tab-order (tabIndex -1) + aria-hidden. */}
         <Collapsible open={!modeSansOutil} testId="outil-section">
-          <SectionCard title="Outil de découpe">
-            <div className="grid grid-cols-2 gap-3">
-              {/* Machine : select seulement si le tenant en a plusieurs ;
-                  sinon machine unique pré-sélectionnée (1ère active). */}
-              {machines.length > 1 ? (
-                <Field label="Machine">
+          <SectionCard title="Choix outil & pose">
+            {configsTries.length > 0 ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Le moteur propose les meilleures configs (cylindre × machine).
+                  Choisis-en une — chaque config = un développé Z = une pose.
+                </p>
+                {/* 3 cartes recommandées (score décroissant). */}
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {configsRecommandees.map((c) => {
+                    const actif = c.id === configId;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        aria-pressed={actif ? "true" : "false"}
+                        onClick={() => setConfigId(c.id)}
+                        data-testid={`config-card-${c.id}`}
+                        tabIndex={modeSansOutil ? -1 : undefined}
+                        className={
+                          "rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E85D2F]/60 " +
+                          (actif
+                            ? "border-2 border-[#E85D2F] bg-[#E85D2F]/5"
+                            : "border-border bg-white hover:border-[#E85D2F]/50")
+                        }
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-semibold">
+                            {c.cylindre_dents} dents · {mm(c.developpe_mm)} mm
+                          </span>
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-bold text-emerald-800">
+                            {c.score}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {c.machine}
+                        </div>
+                        <div className="mt-1.5 text-xs">
+                          <strong>
+                            {c.poses_laize}×{c.poses_dev} = {c.poses_total} poses
+                          </strong>{" "}
+                          · Δdev {mm(c.delta_dev_mm)} · Δlaize{" "}
+                          {mm(c.delta_laize_mm)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Voir toutes les configs (table repliable). */}
+                <button
+                  type="button"
+                  onClick={() => setShowAllConfigs((v) => !v)}
+                  data-testid="toggle-configs"
+                  aria-expanded={showAllConfigs ? "true" : "false"}
+                  className="text-sm font-semibold text-[#B8431D]"
+                >
+                  {showAllConfigs ? "▴" : "▾"} Voir les {configsTries.length}{" "}
+                  configurations
+                </button>
+                <Collapsible open={showAllConfigs} testId="configs-table">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="text-left text-muted-foreground">
+                          <th className="border-b border-border p-2">
+                            Cylindre (développé)
+                          </th>
+                          <th className="border-b border-border p-2">Machine</th>
+                          <th className="border-b border-border p-2">Poses</th>
+                          <th className="border-b border-border p-2">Δ dev</th>
+                          <th className="border-b border-border p-2">Δ laize</th>
+                          <th className="border-b border-border p-2">Score</th>
+                          <th className="border-b border-border p-2">Sens</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {configsTries.map((c) => {
+                          const actif = c.id === configId;
+                          return (
+                            <tr
+                              key={c.id}
+                              onClick={() => setConfigId(c.id)}
+                              data-testid={`config-row-${c.id}`}
+                              className={
+                                "cursor-pointer " +
+                                (actif ? "bg-[#E85D2F]/10" : "hover:bg-muted/40")
+                              }
+                            >
+                              <td className="border-b border-border p-2">
+                                {mm(c.developpe_mm)} mm · {c.cylindre_dents} d
+                              </td>
+                              <td className="border-b border-border p-2">
+                                {c.machine}
+                              </td>
+                              <td className="border-b border-border p-2">
+                                {c.poses_laize}×{c.poses_dev}={c.poses_total}
+                              </td>
+                              <td className="border-b border-border p-2">
+                                {mm(c.delta_dev_mm)}
+                              </td>
+                              <td className="border-b border-border p-2">
+                                {mm(c.delta_laize_mm)}
+                              </td>
+                              <td className="border-b border-border p-2">
+                                {c.score}
+                              </td>
+                              <td className="border-b border-border p-2">
+                                {sensLabel(c.sens)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Collapsible>
+              </>
+            ) : (
+              /* Fallback tant que /preview ne renvoie pas encore les configs
+                 (ancien endpoint / état trop partiel) : sélection manuelle. */
+              <div className="grid grid-cols-2 gap-3">
+                {machines.length > 1 ? (
+                  <Field label="Machine">
+                    <select
+                      className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={machineId ?? ""}
+                      onChange={(e) =>
+                        setMachineId(Number(e.target.value) || null)
+                      }
+                      data-testid="o-machine"
+                      aria-label="Machine"
+                      tabIndex={modeSansOutil ? -1 : undefined}
+                    >
+                      {machines.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ) : (
+                  <Field label="Machine">
+                    <p
+                      data-testid="o-machine-unique"
+                      className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
+                    >
+                      {machines[0]?.nom ?? "—"}
+                    </p>
+                  </Field>
+                )}
+                <Field label="Cylindre compatible">
                   <select
                     className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={machineId ?? ""}
+                    value={cylindreId ?? ""}
                     onChange={(e) =>
-                      setMachineId(Number(e.target.value) || null)
+                      setCylindreId(Number(e.target.value) || null)
                     }
-                    data-testid="o-machine"
-                    aria-label="Machine"
+                    data-testid="o-cylindre"
+                    aria-label="Cylindre compatible"
                     tabIndex={modeSansOutil ? -1 : undefined}
                   >
-                    {machines.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.nom}
+                    <option value="">— Choisir un cylindre —</option>
+                    {cylindresOk.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nb_dents} dents · ø {c.developpe_mm} mm
                       </option>
                     ))}
                   </select>
                 </Field>
-              ) : (
-                <Field label="Machine">
-                  <p
-                    data-testid="o-machine-unique"
-                    className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
-                  >
-                    {machines[0]?.nom ?? "—"}
-                  </p>
+              </div>
+            )}
+
+            {/* Écarts entre étiquettes (forçables Règle 7). */}
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Écarts entre étiquettes
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Intervalle laize (mm)">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    value={intervalleLaize}
+                    onChange={(e) => setIntervalleLaize(e.target.value)}
+                    disabled={!forceIntervalleLaize}
+                    data-testid="ec-intervalle-laize"
+                    tabIndex={modeSansOutil ? -1 : undefined}
+                  />
+                  <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-[#E85D2F]"
+                      checked={forceIntervalleLaize}
+                      onChange={(e) =>
+                        setForceIntervalleLaize(e.target.checked)
+                      }
+                      data-testid="ec-force-laize"
+                    />
+                    forcer (Règle 7)
+                  </label>
                 </Field>
-              )}
-              <Field label="Cylindre compatible">
-                <select
-                  className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={cylindreId ?? ""}
-                  onChange={(e) => setCylindreId(Number(e.target.value) || null)}
-                  data-testid="o-cylindre"
-                  aria-label="Cylindre compatible"
-                  tabIndex={modeSansOutil ? -1 : undefined}
-                >
-                  <option value="">— Choisir un cylindre —</option>
-                  {cylindresOk.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nb_dents} dents · ø {c.developpe_mm} mm
-                    </option>
-                  ))}
-                </select>
-              </Field>
+                <Field label="Nb poses laize">
+                  <select
+                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={nbPosesLaizeForce === "" ? "auto" : "force"}
+                    onChange={(e) =>
+                      setNbPosesLaizeForce(
+                        e.target.value === "auto"
+                          ? ""
+                          : String(selectedConfig?.poses_laize ?? 1),
+                      )
+                    }
+                    data-testid="ec-nb-poses-mode"
+                    aria-label="Nb poses laize"
+                    tabIndex={modeSansOutil ? -1 : undefined}
+                  >
+                    <option value="auto">Auto (moteur)</option>
+                    <option value="force">Forcer N poses</option>
+                  </select>
+                  {nbPosesLaizeForce !== "" && (
+                    <Input
+                      type="number"
+                      min={1}
+                      value={nbPosesLaizeForce}
+                      onChange={(e) => setNbPosesLaizeForce(e.target.value)}
+                      data-testid="ec-nb-poses-n"
+                      className="mt-1.5"
+                    />
+                  )}
+                </Field>
+              </div>
+              <p className="mt-2 text-xs text-blue-700">
+                🛡 Souveraineté Règle 7 — tu peux forcer/écraser n&apos;importe
+                quel choix du moteur ; chaque forçage est tracé sur le devis.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {cylindresOk.length} cylindre(s) compatible(s) avec ce développé.
-              L&apos;optimisation automatique (choix malin du cylindre) arrive
-              au lot suivant.
-            </p>
           </SectionCard>
         </Collapsible>
 
