@@ -392,6 +392,16 @@ class DevisPreviewIn(BaseModel):
     nb_filles_force: int | None = Field(None, ge=1)
     mode_sans_outil: bool = False
     laize_stock_mm: float | None = Field(None, gt=0)
+    # Lot C-inputs — sélection de config + forçage des écarts (Règle 7). Défauts
+    # (None/False) = comportement actuel STRICTEMENT inchangé.
+    config_id: str | None = Field(
+        None,
+        max_length=64,
+        description="Config choisie 'cyl-mach-DxL' → fige cylindre/machine/poses.",
+    )
+    force_intervalle_laize: bool = False
+    intervalle_laize_mm: float | None = Field(None, gt=0, le=50)
+    nb_poses_laize_force: int | None = Field(None, ge=1, le=20)
     # V0 — leviers commerciaux live. `marge_pct` (override, en %) → recalcul HT
     # (None = défaut tenant `ConfigCouts.marge_standard_pct`). `remise_pct` =
     # remise commerciale par-dessus le HT brut, N'ENTRE PAS dans le coût.

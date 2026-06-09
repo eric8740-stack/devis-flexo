@@ -548,6 +548,18 @@ def _option_cout_eur(
     return None, impact
 
 
+def _parse_config_id(config_id: str) -> tuple[int, int, int, int] | None:
+    """Lot C-inputs — parse l'id composite `cyl-mach-DxL` produit par
+    `_configs_preview` → `(cylindre_id, machine_id, poses_dev, poses_laize)`.
+    `None` si malformé (le caller ignore + remonte une alerte)."""
+    try:
+        cyl_s, mach_s, poses_s = config_id.split("-", 2)
+        dev_s, laize_s = poses_s.split("x", 1)
+        return int(cyl_s), int(mach_s), int(dev_s), int(laize_s)
+    except (ValueError, AttributeError):
+        return None
+
+
 def _appliquer_remise(
     prix_ht_brut: Decimal, remise_pct: Decimal
 ) -> tuple[Decimal, Decimal]:
@@ -618,6 +630,17 @@ def _configs_preview(
         nb_coul = 0
         if p.get("nb_couleurs"):
             nb_coul = sum(int(v or 0) for v in p["nb_couleurs"].values())
+        # Lot C-inputs — forçage écarts (Règle 7) câblé sur optimiser_pose (params
+        # déjà existants). Défauts (False/None) = comportement actuel inchangé.
+        force_laize = bool(p.get("force_intervalle_laize"))
+        interv_laize_force = (
+            float(p["intervalle_laize_mm"])
+            if force_laize and p.get("intervalle_laize_mm")
+            else None
+        )
+        nb_poses_force = (
+            int(p["nb_poses_laize_force"]) if p.get("nb_poses_laize_force") else None
+        )
         inp = OptimisationInput(
             format=Format(hauteur_mm=float(dev), largeur_mm=float(laize)),
             intervalle_dev_min_mm=_ECART_INTERVALLE_DEV_MIN_MM,
@@ -631,6 +654,8 @@ def _configs_preview(
             bareme_compensation=baremes["compensation_laize_dev"],
             bareme_confort_roulage=baremes["confort_roulage"],
             contrainte_client=ContrainteClient(intervalle_dev_min_mm=0.0),
+            nb_poses_laize_force=nb_poses_force,
+            intervalle_laize_force_mm=interv_laize_force,
         )
         out = optimiser_pose(inp)
         dev_par_cyl = {c.id: c.developpe_mm for c in cylindres}
@@ -658,10 +683,13 @@ def _configs_preview(
                 }
             )
         ecarts = {
-            "intervalle_laize_mm": _ECART_INTERVALLE_LAIZE_MM,
+            "intervalle_laize_mm": (
+                interv_laize_force if interv_laize_force is not None
+                else _ECART_INTERVALLE_LAIZE_MM
+            ),
             "intervalle_dev_mm": round(out.intervalle_dev_min_applique_mm, 2),
-            "nb_poses_laize": "auto",
-            "force_intervalle_laize": False,
+            "nb_poses_laize": nb_poses_force if nb_poses_force else "auto",
+            "force_intervalle_laize": force_laize,
         }
         return configs, ecarts
     except (OptimisationLoaderError, ValueError, KeyError):
@@ -763,6 +791,39 @@ def preview_devis(
         nb_poses_laize = max(
             1, math.floor(laize_utile / (float(laize) + _INTERVALLE_LAIZE))
         )
+
+    # Lot C-inputs — la config sélectionnée (`config_id`) FIGE cylindre / machine
+    # / poses dans le calcul (prioritaire sur cylindre_id/machine_id dérivés).
+    if p.get("config_id"):
+        parsed = _parse_config_id(p["config_id"])
+        if parsed is None:
+            alertes.append(
+                {"niveau": "warn", "message": f"config_id invalide : {p['config_id']}."}
+            )
+        else:
+            cid, mid, pdev, plaize = parsed
+            cyl_sel = (
+                db.query(CylindreMagnetique)
+                .filter_by(id=cid, entreprise_id=entreprise_id, actif=True)
+                .first()
+            )
+            mach_sel = (
+                db.query(Machine)
+                .filter_by(id=mid, entreprise_id=entreprise_id, actif=True)
+                .first()
+            )
+            if cyl_sel is None or mach_sel is None:
+                alertes.append(
+                    {"niveau": "warn", "message": "config_id hors périmètre — config ignorée."}
+                )
+            else:
+                cyl, machine = cyl_sel, mach_sel
+                nb_poses_dev, nb_poses_laize = pdev, plaize
+                laize_utile = float(
+                    machine.laize_utile_mm
+                    if machine.laize_utile_mm is not None
+                    else machine.laize_max_mm
+                )
 
     lot = LotProduction(
         entreprise_id=entreprise_id,

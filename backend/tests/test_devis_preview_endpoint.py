@@ -404,6 +404,65 @@ def test_v0_decompo_groupee_somme_au_cout_revient():  # V0
     assert Decimal(g["matiere_p1"]) > 0
 
 
+def test_cin_config_id_fige_les_poses():  # Lot C-inputs
+    """`config_id` (sélection) fige cylindre/machine/poses → `geometrie.nb_poses`
+    == poses_total de la config choisie."""
+    _, mat_id, cyl_id = _ids()
+    body = client.post("/api/devis/preview", json={
+        "laize": 100, "dev": 80, "quantite": 10_000,
+        "matiere_id": mat_id, "nb_couleurs": {"impression": 4},
+    }).json()
+    assert body["configs"], "configs attendues"
+    # Choisit une config NON-top pour s'assurer que les poses changent vs défaut.
+    c = body["configs"][-1]
+    sel = client.post("/api/devis/preview", json={
+        "laize": 100, "dev": 80, "quantite": 10_000, "matiere_id": mat_id,
+        "nb_couleurs": {"impression": 4}, "config_id": c["id"],
+    }).json()
+    assert sel["geometrie"]["nb_poses"] == c["poses_total"]
+    assert sel["prix_ht"] is not None  # chiffrage OK
+
+
+def test_cin_config_id_invalide_best_effort():  # Lot C-inputs
+    """config_id malformé/hors périmètre → alerte, jamais 500."""
+    _, mat_id, cyl_id = _ids()
+    r = client.post("/api/devis/preview", json={
+        "laize": 100, "dev": 80, "quantite": 10_000, "matiere_id": mat_id,
+        "config_id": "zzz-not-an-id",
+    })
+    assert r.status_code == 200
+    assert any("config_id" in a["message"] for a in r.json()["alertes"])
+
+
+def test_cin_forcage_ecarts_regle7():  # Lot C-inputs
+    """Forçage intervalle laize (Règle 7) + nb poses laize → reflétés dans
+    `ecarts` et appliqués aux `configs`."""
+    _, mat_id, cyl_id = _ids()
+    body = client.post("/api/devis/preview", json={
+        "laize": 50, "dev": 40, "quantite": 10_000, "matiere_id": mat_id,
+        "force_intervalle_laize": True, "intervalle_laize_mm": 8,
+        "nb_poses_laize_force": 2,
+    }).json()
+    assert body["ecarts"]["force_intervalle_laize"] is True
+    assert body["ecarts"]["intervalle_laize_mm"] == 8.0
+    assert body["ecarts"]["nb_poses_laize"] == 2
+    # Toutes les configs respectent le forçage nb poses laize = 2.
+    assert body["configs"]
+    assert all(c["poses_laize"] == 2 for c in body["configs"])
+
+
+def test_cin_defauts_value_neutral():  # Lot C-inputs (garde sacré)
+    """Sans config_id ni forçage → ecarts par défaut (auto, laize 5),
+    comportement strictement inchangé."""
+    _, mat_id, cyl_id = _ids()
+    body = client.post("/api/devis/preview", json={
+        "laize": 100, "dev": 80, "quantite": 10_000, "matiere_id": mat_id,
+    }).json()
+    assert body["ecarts"]["nb_poses_laize"] == "auto"
+    assert body["ecarts"]["intervalle_laize_mm"] == 5.0
+    assert body["ecarts"]["force_intervalle_laize"] is False
+
+
 def test_machine_id_respecte_et_best_effort():
     """machine_id fourni (scopé tenant) accepté ; id hors périmètre → fallback
     1ère presse + alerte (jamais 500)."""
