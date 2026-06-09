@@ -253,6 +253,15 @@ export default function DevisPageUnique() {
           ? parseFloat(laizeStock)
           : null,
       options_codes: Array.from(optionsCodes),
+      // Lot C-inputs (#140) — la config + le forçage écarts bougent la marge.
+      config_id: modeSansOutil ? null : configId,
+      force_intervalle_laize: forceIntervalleLaize,
+      intervalle_laize_mm:
+        intervalleLaize.trim() !== "" ? parseFloat(intervalleLaize) : null,
+      nb_poses_laize_force:
+        nbPosesLaizeForce.trim() !== ""
+          ? parseInt(nbPosesLaizeForce, 10)
+          : null,
       marge_pct_override: margePct.trim() !== "" ? parseFloat(margePct) : null,
       remise_pct: remisePct.trim() !== "" ? parseFloat(remisePct) : 0,
     }),
@@ -271,6 +280,10 @@ export default function DevisPageUnique() {
       mandrin,
       diametreMax,
       optionsCodes,
+      configId,
+      forceIntervalleLaize,
+      intervalleLaize,
+      nbPosesLaizeForce,
       margePct,
       remisePct,
     ],
@@ -930,7 +943,8 @@ export default function DevisPageUnique() {
                 <Field label="Intervalle laize (mm)">
                   <Input
                     type="number"
-                    min={0}
+                    min={0.1}
+                    max={50}
                     step="0.1"
                     value={intervalleLaize}
                     onChange={(e) => setIntervalleLaize(e.target.value)}
@@ -973,6 +987,7 @@ export default function DevisPageUnique() {
                     <Input
                       type="number"
                       min={1}
+                      max={20}
                       value={nbPosesLaizeForce}
                       onChange={(e) => setNbPosesLaizeForce(e.target.value)}
                       data-testid="ec-nb-poses-n"

@@ -1004,9 +1004,14 @@ export interface DevisPreviewRequest {
   options_codes: string[];
   // Forfaits ST ad-hoc à montant explicite (rare) — préférer options_codes.
   finitions: FinitionPreviewIn[];
-  // ⚠️ Lot C : la config choisie pilote la preview via cylindre_id/machine_id
-  // (champs existants). `DevisPreviewIn` est `extra="forbid"` → NE PAS ajouter
-  // config_id / écarts ici tant que le back ne les accepte pas (sinon 422).
+  // Lot C-inputs (#140) — config choisie + forçage écarts (Règle 7). Noms +
+  // bornes EXACTS du schéma : `config_id` composite "cyl-mach-DxL" (≤64),
+  // `intervalle_laize_mm` ∈ (0, 50], `nb_poses_laize_force` ∈ [1, 20]. Hors
+  // bornes → ne PAS envoyer (sinon 422). Défauts (null/false) = inchangé.
+  config_id?: string | null;
+  force_intervalle_laize?: boolean;
+  intervalle_laize_mm?: number | null;
+  nb_poses_laize_force?: number | null;
   // V0 — leviers commerciaux : marge override (en %, null = défaut tenant),
   // remise commerciale (en %, par-dessus le HT brut, hors coût de revient).
   marge_pct?: number | null;
