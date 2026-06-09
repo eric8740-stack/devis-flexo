@@ -10,9 +10,9 @@
 ## En-tête
 
 - **Date** : 2026-06-09
-- **Branche active** : `main` = **`e2969b6`** (après #140 — **`/preview` contrat ENTRÉE Lot C : config_id + forçage écarts**).
-- **Sprint en cours** : **Chantier « configurateur page unique »** — câblage live des sections via `/preview`. Mergés : **Lot C** (configs outil & pose : back #135 + front #134) · **V0 boucle marge live** (back #136 : marge override + remise à part + décompo groupée). Avant : **A1** (#123/#124), **A2/A2bis** (#129/#132 : toggle sans-outil, chips finitions + déltas par code). ⚠️ **Hotfix ouvert #137** (`/preview` 422 : front Lot C envoie des **inputs** — `config_id` + écarts forcés — que `DevisPreviewIn` rejette ; **gap contrat ENTRÉE Lot C**). Chantiers CLOS antérieurs : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1** = back C #135 + V0 #136 mergés (+ à traiter : inputs `/preview` Lot C, cf. #137). **CC2** = front C #134 / A2bis #132 mergés ; attaque **front V0** (panneau prix sticky).
+- **Branche active** : `main` = **`18de1b6`** (après #133 — cadrage V2 mergé ; **boucle live V0+C COMPLÈTE end-to-end**).
+- **Sprint en cours** : **Chantier « configurateur page unique » — boucle live V0+C COMPLÈTE end-to-end.** Tout champ (config outil×machine, écarts Règle 7, matière, finitions, **marge %**, **remise %**) bouge la marge **en direct** via `/preview`. **Mergés ce jour** : front C #134 · back C #135 (sortie configs/écarts) · V0 back #136 (marge override + remise + `decompo_groupee`) · **hotfix 422 #137** · bumps doc #138/#141 · **V0 front #139** (panneau prix sticky live) · **Lot C-inputs back #140** (config_id + écarts en ENTRÉE, ferme le 422 à la source). **Étape 2 front #142** (réactivation envoi config_id + écarts) = **OUVERTE/held** (merge **après** deploy Railway #140). Chantiers CLOS antérieurs : A1/A2/A2bis, « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1 = CC2 = libres.** Boucle live livrée ; reste **#142** à merger (après Railway #140), puis lots **E (matière/Ø) → F (bobinage) → D (calage, DÉBLOQUÉ)**. ⚠️ ETAT_PROJET : **un seul éditeur à la fois** (anti-doublon #76).
 
 ---
 
@@ -183,6 +183,35 @@
 2. Si code : démarrer par **C (layout+rail)** ou prioriser les **config cards section 2** (débloquent l'auto-optim) ?
 
 **Hors scope tant que pas tranché** : bascule des CTA wizard → `/devis/nouvelle` (gated, après validation terrain Eric). Le wizard reste intact.
+
+---
+
+## Chantier — Boucle live **V0 + C** — ✅ COMPLÈTE end-to-end (2026-06-09)
+
+> Le nerf du produit : **tout champ qu'on bouge → la marge bouge en direct**.
+> Livré end-to-end (front #139/#142 + back #135/#136/#140). #142 = held, merge
+> après deploy Railway #140 (cf. leçon 422 ci-dessous).
+
+- **Leviers live** (debounce 250 ms → `POST /api/devis/preview`, read-only) : **config_id** (sélection config outil×machine) + **écarts Règle 7** (`force_intervalle_laize` ∈ (0,50], `nb_poses_laize_force` ∈ [1,20]) + **matière** + **finitions** (`options_codes`) + **marge %** (override) + **remise %**. Tous recalculent prix + marge + décompo sans rechargement.
+- **Remise tracée À PART** : appliquée **par-dessus le HT brut sacré** (`prix_ht`, 7 postes — INTOUCHÉ), n'entre PAS dans le coût de revient. Sortie : `remise_pct`, `remise_eur`, **`prix_ht_net`** (= HT facturé, le gros prix du panneau). `marge_pct` = override (None = défaut tenant `ConfigCouts.marge_standard_pct`).
+- **`decompo_groupee`** = 5 lignes métier (Matière P1 · Impression+presse+calage · Clichés/outil · Option finitions · Refente) + Total, affichées dans le panneau prix.
+- **Panneau prix** (#139) : rail sticky droite (desktop) / **barre basse fixe** (mobile), skeleton pendant recompute, pas de saut de layout.
+- **Sacrés — EXACTS, INTOUCHÉS** : **V1a 1 424,31** / **P0b (tripwire) 695,36** · `cost_engine` / `optimiser_pose` / `rotation_se` / `bat_calculs` **non modifiés** (front = lecture pure ; back = réutilisation pure du moteur via `LotProduction` transitoire). pytest **1206 local / 0 failed**. ⚠️ Baseline **1 424,31 confirmée** → l'ancienne **1 449,09 est PÉRIMÉE** (rebasée par L2 #114).
+
+### ⚠️ Leçon build — régression 422 (#137), à NE PAS reproduire
+
+- **Cause** : front Lot C (#134) déployé **avant** le back acceptant ses inputs → il envoyait `config_id` + écarts à un `DevisPreviewIn` en `extra="forbid"` → **422**, preview prod cassée. La **dégradation propre** côté front couvrait `configs=[]` (sortie vide) mais **PAS un schéma d'ENTRÉE qui rejette** la requête entière.
+- **Règles** (verrouillées) :
+  1. **Ne jamais envoyer un champ que le back DÉPLOYÉ n'accepte pas.** Lire la classe d'entrée (`DevisPreviewIn`) sur `origin/main` avant d'ajouter un champ de requête.
+  2. **Guards de bornes côté front** : valeur hors plage schéma → **non envoyée** (jamais clampée en faux), pour éviter tout 422.
+  3. **Ordre de déploiement quand le contrat ENTRÉE change** : **back Railway AVANT front Vercel** (sinon le front prod tape un back en retard). Inversement pour un retrait de champ.
+- Correctif : hotfix #137 (retrait temporaire) → back #140 (ouvre l'entrée) → front #142 (réactivation, held jusqu'au deploy Railway #140).
+
+### Horizon (prochains lots)
+
+- **#142** à merger après deploy Railway #140 → boucle live 100 % active en prod.
+- **#133 cadrage V2** (maquette north-star) : **mergé** (`18de1b6`) — découpage C→G de référence.
+- Lots à venir : **E (matière / Ø bobine) → F (bobinage) → D (calage, DÉBLOQUÉ : baseline tranchée)**. **`config_id` à étendre** sur E/F (mêmes leviers live).
 
 ---
 
