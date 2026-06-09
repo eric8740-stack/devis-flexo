@@ -57,6 +57,7 @@ def test_preview_contrat_de_sortie():
     body = r.json()
     assert set(body.keys()) == {
         "prix_ht", "cout_revient", "marge_pct", "prix_1000",
+        "remise_pct", "remise_eur", "prix_ht_net", "decompo_groupee",
         "geometrie", "decompo", "options", "configs", "ecarts", "alertes",
     }
     assert isinstance(body["options"], list)
@@ -348,6 +349,59 @@ def test_configs_sans_outil_vide_et_intervalle_dev_zero():  # Lot C
     assert body["configs"] == []
     assert body["ecarts"]["intervalle_dev_mm"] == 0.0
     assert body["ecarts"]["intervalle_laize_mm"] == 5.0
+
+
+def test_v0_marge_override_bouge_le_ht():  # V0
+    """Input `marge_pct` (override) → HT recalculé (≠ marge tenant)."""
+    from decimal import Decimal
+    _, mat_id, cyl_id = _ids()
+    base = client.post("/api/devis/preview", json=_base(cyl_id, mat_id)).json()
+    haute = client.post("/api/devis/preview", json={
+        **_base(cyl_id, mat_id), "marge_pct": 50,
+    }).json()
+    assert Decimal(haute["marge_pct"]) == Decimal("50.00")
+    # Marge plus haute → HT plus haut (coût de revient identique).
+    assert Decimal(haute["prix_ht"]) > Decimal(base["prix_ht"])
+    assert Decimal(haute["cout_revient"]) == Decimal(base["cout_revient"])
+
+
+def test_v0_remise_tracee_a_part_sans_toucher_le_cout():  # V0
+    """Remise par-dessus le HT brut : `prix_ht` (brut) et `cout_revient`
+    INCHANGÉS ; `prix_ht_net` = brut × (1 − remise%)."""
+    from decimal import Decimal
+    _, mat_id, cyl_id = _ids()
+    base = client.post("/api/devis/preview", json=_base(cyl_id, mat_id)).json()
+    rem = client.post("/api/devis/preview", json={
+        **_base(cyl_id, mat_id), "remise_pct": 10,
+    }).json()
+    brut = Decimal(base["prix_ht"])
+    # Remise n'affecte NI le HT brut NI le coût de revient.
+    assert Decimal(rem["prix_ht"]) == brut
+    assert Decimal(rem["cout_revient"]) == Decimal(base["cout_revient"])
+    # remise_eur = 10 % du brut ; net = brut − remise_eur (invariant métier).
+    remise_eur = Decimal(rem["remise_eur"])
+    assert remise_eur == (brut * Decimal("10") / Decimal("100")).quantize(Decimal("0.01"))
+    assert Decimal(rem["prix_ht_net"]) == brut - remise_eur
+    # remise 0 (défaut) → net == brut (value-neutral).
+    assert Decimal(base["prix_ht_net"]) == brut
+    assert Decimal(base["remise_eur"]) == Decimal("0.00")
+
+
+def test_v0_decompo_groupee_somme_au_cout_revient():  # V0
+    """Décompo groupée (5 lignes métier) = regroupement des 7 postes ; somme
+    = coût de revient (avec outil, refente=0)."""
+    from decimal import Decimal
+    _, mat_id, cyl_id = _ids()
+    body = client.post("/api/devis/preview", json=_base(cyl_id, mat_id)).json()
+    g = body["decompo_groupee"]
+    assert set(g.keys()) == {
+        "matiere_p1", "impression_presse_calage", "cliches_outil",
+        "option_finitions", "refente",
+    }
+    somme = sum(Decimal(v) for v in g.values())
+    assert somme == Decimal(body["cout_revient"])  # avec outil → refente 0
+    assert Decimal(g["refente"]) == Decimal("0")
+    assert Decimal(g["matiere_p1"]) > 0
 
 
 def test_machine_id_respecte_et_best_effort():

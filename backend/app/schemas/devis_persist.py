@@ -392,6 +392,11 @@ class DevisPreviewIn(BaseModel):
     nb_filles_force: int | None = Field(None, ge=1)
     mode_sans_outil: bool = False
     laize_stock_mm: float | None = Field(None, gt=0)
+    # V0 — leviers commerciaux live. `marge_pct` (override, en %) → recalcul HT
+    # (None = défaut tenant `ConfigCouts.marge_standard_pct`). `remise_pct` =
+    # remise commerciale par-dessus le HT brut, N'ENTRE PAS dans le coût.
+    marge_pct: Decimal | None = Field(None, ge=0, le=200)
+    remise_pct: Decimal = Field(default=Decimal(0), ge=0, le=100)
     # nb_couleurs → P2 Encres + P3a clichés (réutilise NbCouleursIn + mapping).
     nb_couleurs: NbCouleursIn | None = None
     # options_codes : ENTRÉE CANONIQUE des options (le front a les codes via
@@ -474,6 +479,19 @@ class EcartsPreview(BaseModel):
     force_intervalle_laize: bool = False
 
 
+class DecompoGroupee(BaseModel):
+    """V0 — décompo COÛT regroupée en 5 lignes métier (panneau prix). Somme =
+    coût de revient + refente. NON breaking : s'ajoute à `decompo` (liste plate)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    matiere_p1: Decimal
+    impression_presse_calage: Decimal
+    cliches_outil: Decimal
+    option_finitions: Decimal
+    refente: Decimal
+
+
 class DevisPreviewOut(BaseModel):
     """Réponse POST /api/devis/preview.
 
@@ -489,6 +507,14 @@ class DevisPreviewOut(BaseModel):
     cout_revient: Decimal | None = None
     marge_pct: Decimal | None = None
     prix_1000: Decimal | None = None
+    # V0 — remise commerciale TRACÉE À PART (par-dessus le HT brut, n'affecte pas
+    # le coût). `prix_ht` reste le HT brut (7 postes, sacré) ; `prix_ht_net` =
+    # HT facturé après remise.
+    remise_pct: Decimal = Decimal(0)
+    remise_eur: Decimal | None = None
+    prix_ht_net: Decimal | None = None
+    # V0 — décompo coût regroupée (5 lignes métier), en plus de `decompo` plate.
+    decompo_groupee: DecompoGroupee | None = None
     geometrie: GeometriePreview
     decompo: list[DecompoLignePreview] = Field(default_factory=list)
     # Impact marginal serveur de chaque levier activable (finition, +1 couleur).
