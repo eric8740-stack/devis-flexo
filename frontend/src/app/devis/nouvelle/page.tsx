@@ -129,6 +129,9 @@ export default function DevisPageUnique() {
   const [optionsCodes, setOptionsCodes] = useState<Set<string>>(new Set());
   // Bord latéral (défaut entreprise, rempli au mount).
   const [bordLateral, setBordLateral] = useState("10");
+  // V0 — Commercial : marge % (override, "" = défaut tenant) + remise %.
+  const [margePct, setMargePct] = useState("");
+  const [remisePct, setRemisePct] = useState("0");
 
   // Preview : `preview` = dernier résultat valide (gardé pendant un recalcul),
   // `recomputing` = un recalcul est en vol. `null` = sous le minimum requis.
@@ -250,6 +253,8 @@ export default function DevisPageUnique() {
           ? parseFloat(laizeStock)
           : null,
       options_codes: Array.from(optionsCodes),
+      marge_pct_override: margePct.trim() !== "" ? parseFloat(margePct) : null,
+      remise_pct: remisePct.trim() !== "" ? parseFloat(remisePct) : 0,
     }),
     [
       laize,
@@ -266,6 +271,8 @@ export default function DevisPageUnique() {
       mandrin,
       diametreMax,
       optionsCodes,
+      margePct,
+      remisePct,
     ],
   );
 
@@ -472,15 +479,14 @@ export default function DevisPageUnique() {
 
   return (
     <main className="min-h-screen bg-[#FBF7F0]">
-      <form
-        onSubmit={handleSubmit}
-        className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6"
-      >
-        {/* ── Hero prix (sticky) — recalculé en direct ─────────────── */}
-        <div
-          data-testid="hero-prix"
-          className="sticky top-2 z-10 rounded-xl border border-[#E85D2F]/30 bg-white/95 p-5 shadow-md backdrop-blur"
-        >
+      <form onSubmit={handleSubmit} className="mx-auto max-w-6xl p-4 sm:p-6">
+        <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+          {/* ── Panneau prix : rail sticky (droite desktop / haut mobile) ── */}
+          <aside className="sticky top-2 z-10 self-start space-y-3 lg:top-4 lg:col-start-2 lg:row-start-1">
+            <div
+              data-testid="hero-prix"
+              className="rounded-xl border border-[#E85D2F]/30 bg-white/95 p-5 shadow-md backdrop-blur"
+            >
           <div className="flex items-baseline justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Prix de vente estimé (HT)
@@ -495,7 +501,16 @@ export default function DevisPageUnique() {
               </span>
             )}
           </div>
-          {!miniPresents || !preview || preview.prix_ht === null ? (
+          {recomputing && !preview && miniPresents ? (
+            <div
+              data-testid="hero-skeleton"
+              className="mt-2 space-y-2"
+              aria-hidden="true"
+            >
+              <div className="h-8 w-32 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-48 animate-pulse rounded bg-muted" />
+            </div>
+          ) : !miniPresents || !preview || preview.prix_ht === null ? (
             <p
               data-testid="hero-incomplet"
               className="mt-1 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800"
@@ -506,30 +521,70 @@ export default function DevisPageUnique() {
                 : "Complète la sélection (matière, cylindre…) — voir les indications ci-dessous."}
             </p>
           ) : (
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-              <span
-                data-testid="hero-prix-valeur"
-                className="text-3xl font-bold text-[#E85D2F]"
-              >
-                {eur(preview.prix_ht)} €
-              </span>
-              <span
-                data-testid="hero-prix-1000"
-                className="text-sm font-medium text-foreground"
-              >
-                {eur(preview.prix_1000)} € / 1000
-              </span>
-              {preview.marge_pct !== null && (
+            <div className="mt-1 space-y-2">
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 <span
-                  data-testid="hero-marge"
-                  className="rounded bg-emerald-100 px-2 py-0.5 text-sm font-semibold text-emerald-800"
+                  data-testid="hero-prix-valeur"
+                  className="text-3xl font-bold text-[#E85D2F]"
                 >
-                  marge {Math.round(preview.marge_pct)} %
+                  {eur(preview.prix_ht)} €
                 </span>
-              )}
-              <span className="text-xs text-muted-foreground">
+                <span
+                  data-testid="hero-prix-1000"
+                  className="text-sm font-medium text-foreground"
+                >
+                  {eur(preview.prix_1000)} € / 1000
+                </span>
+                {preview.marge_pct !== null && (
+                  <span
+                    data-testid="hero-marge"
+                    className="rounded bg-emerald-100 px-2 py-0.5 text-sm font-semibold text-emerald-800"
+                  >
+                    marge {Math.round(preview.marge_pct)} %
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
                 revient {eur(preview.cout_revient)} €
-              </span>
+              </p>
+              {/* V0 — remise commerciale tracée à part + HT net facturé. */}
+              {preview.remise_eur !== null && preview.remise_eur > 0 && (
+                <div
+                  data-testid="hero-remise"
+                  className="rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800"
+                >
+                  remise {Math.round(preview.remise_pct)} % : −
+                  {eur(preview.remise_eur)} € ·{" "}
+                  <strong>HT net {eur(preview.prix_ht_net)} €</strong>
+                </div>
+              )}
+              {/* V0 — décompo coût groupée (5 lignes métier). */}
+              {preview.decompo_groupee && (
+                <dl
+                  data-testid="hero-decompo-groupee"
+                  className="space-y-0.5 border-t border-border pt-2 text-xs"
+                >
+                  {(
+                    [
+                      ["Matière (P1)", preview.decompo_groupee.matiere_p1],
+                      [
+                        "Impression + presse + calage",
+                        preview.decompo_groupee.impression_presse_calage,
+                      ],
+                      ["Clichés / outil", preview.decompo_groupee.cliches_outil],
+                      ["Finitions", preview.decompo_groupee.option_finitions],
+                      ["Refente", preview.decompo_groupee.refente],
+                    ] as const
+                  )
+                    .filter(([, v]) => v > 0)
+                    .map(([label, v]) => (
+                      <div key={label} className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="font-mono">{eur(v)} €</dd>
+                      </div>
+                    ))}
+                </dl>
+              )}
             </div>
           )}
           {preview && preview.alertes.length > 0 && (
@@ -550,10 +605,29 @@ export default function DevisPageUnique() {
               ))}
             </ul>
           )}
-        </div>
+            </div>
+            {/* Valider — dans le rail prix. */}
+            <Button
+              type="submit"
+              size="lg"
+              disabled={!peutValider || submitting}
+              data-testid="valider"
+              className="w-full bg-[#E85D2F] px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:bg-[#d24f24] disabled:opacity-50"
+            >
+              {submitting ? "Création…" : "Valider le devis"}
+            </Button>
+            <p className="px-1 text-center text-xs text-muted-foreground">
+              {peutValider
+                ? "Prêt à créer le devis."
+                : "Renseigne format, quantité, matière" +
+                  (modeSansOutil ? "." : ", machine et cylindre.")}
+            </p>
+          </aside>
 
-        {/* ── Client (optionnel) — pré-remplit le profil bobine ────── */}
-        <SectionCard title="Client">
+          {/* ── Colonne formulaire ─────────────────────────────────── */}
+          <div className="space-y-5 lg:col-start-1 lg:row-start-1 lg:min-w-0">
+            {/* ── Client (optionnel) — pré-remplit le profil bobine ──── */}
+            <SectionCard title="Client">
           <Field label="Client (pré-remplit Ø mandrin, Ø max, sens)">
             <select
               className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -1018,6 +1092,47 @@ export default function DevisPageUnique() {
           )}
         </SectionCard>
 
+        {/* ── Commercial (V0) — marge & remise live ────────────────── */}
+        <SectionCard title="Commercial">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Marge (%)">
+              <Input
+                type="number"
+                min={0}
+                max={200}
+                step="0.5"
+                value={margePct}
+                onChange={(e) => setMargePct(e.target.value)}
+                placeholder={
+                  preview?.marge_pct != null
+                    ? `défaut ${Math.round(preview.marge_pct)}`
+                    : "défaut tenant"
+                }
+                data-testid="c-marge"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vide = marge par défaut de l&apos;entreprise. Bouge le prix en
+                direct.
+              </p>
+            </Field>
+            <Field label="Réduction commerciale (%)">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.5"
+                value={remisePct}
+                onChange={(e) => setRemisePct(e.target.value)}
+                data-testid="c-remise"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Remise par-dessus le HT brut, tracée à part — n&apos;entre pas
+                dans le coût de revient.
+              </p>
+            </Field>
+          </div>
+        </SectionCard>
+
         {/* ── Décompo (lecture seule, depuis la preview) ───────────── */}
         <SectionCard title="Décompo coût & géométrie">
           {preview && geo && preview.decompo.length > 0 ? (
@@ -1065,24 +1180,7 @@ export default function DevisPageUnique() {
             read-only). Le devis définitif est figé à la validation.
           </p>
         </SectionCard>
-
-        {/* ── Valider ──────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-8">
-          <p className="text-sm text-muted-foreground">
-            {peutValider
-              ? "Prêt à créer le devis."
-              : "Renseigne format, quantité, matière" +
-                (modeSansOutil ? "." : ", machine et cylindre.")}
-          </p>
-          <Button
-            type="submit"
-            size="lg"
-            disabled={!peutValider || submitting}
-            data-testid="valider"
-            className="bg-[#E85D2F] px-8 py-6 text-base font-semibold text-white shadow-md transition-all hover:bg-[#d24f24] disabled:opacity-50"
-          >
-            {submitting ? "Création…" : "Valider le devis"}
-          </Button>
+          </div>
         </div>
       </form>
     </main>

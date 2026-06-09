@@ -44,6 +44,10 @@ export interface DevisPreviewInput {
   // Lot C : la config choisie pilote la preview via cylindre_id/machine_id
   // (résolus depuis le parc), PAS via un champ dédié — `/preview` est
   // `extra="forbid"`. config_id / écarts forcés ne sont pas envoyés.
+  // V0 — leviers commerciaux : marge override (%, null = défaut tenant) +
+  // remise commerciale (%).
+  marge_pct_override: number | null;
+  remise_pct: number;
 }
 
 // ── Résultat parsé (consommé par l'UI) ───────────────────────────────
@@ -96,8 +100,17 @@ export interface DevisPreviewEcarts {
   force_intervalle_laize: boolean;
 }
 
+// V0 — décompo coût regroupée (5 lignes), parsée.
+export interface DevisPreviewDecompoGroupee {
+  matiere_p1: number;
+  impression_presse_calage: number;
+  cliches_outil: number;
+  option_finitions: number;
+  refente: number;
+}
+
 export interface DevisPreviewResult {
-  prix_ht: number | null;
+  prix_ht: number | null; // HT brut (7 postes)
   cout_revient: number | null;
   marge_pct: number | null; // pourcentage (ex. 30), pas une fraction
   prix_1000: number | null;
@@ -108,6 +121,11 @@ export interface DevisPreviewResult {
   // Lot C — vides sur l'ancien endpoint (dégradation propre).
   configs: DevisPreviewConfig[];
   ecarts: DevisPreviewEcarts | null;
+  // V0 — remise tracée à part + HT net + décompo groupée.
+  remise_pct: number;
+  remise_eur: number | null;
+  prix_ht_net: number | null;
+  decompo_groupee: DevisPreviewDecompoGroupee | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -160,6 +178,12 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
     // Options par CODE (#130) : le serveur price. Forfaits ad-hoc inutilisés.
     options_codes: i.options_codes,
     finitions: [],
+    // V0 — marge override seulement si saisie ; remise toujours (défaut 0).
+    marge_pct:
+      i.marge_pct_override !== null && i.marge_pct_override >= 0
+        ? i.marge_pct_override
+        : null,
+    remise_pct: i.remise_pct > 0 ? i.remise_pct : 0,
   };
 }
 
@@ -211,6 +235,21 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
               ? "auto"
               : Number(out.ecarts.nb_poses_laize),
           force_intervalle_laize: Boolean(out.ecarts.force_intervalle_laize),
+        }
+      : null,
+    // V0 — remise / HT net / décompo groupée (absents sur ancien endpoint).
+    remise_pct: out.remise_pct != null ? Number(out.remise_pct) : 0,
+    remise_eur: numOrNull(out.remise_eur ?? null),
+    prix_ht_net: numOrNull(out.prix_ht_net ?? null),
+    decompo_groupee: out.decompo_groupee
+      ? {
+          matiere_p1: Number(out.decompo_groupee.matiere_p1),
+          impression_presse_calage: Number(
+            out.decompo_groupee.impression_presse_calage,
+          ),
+          cliches_outil: Number(out.decompo_groupee.cliches_outil),
+          option_finitions: Number(out.decompo_groupee.option_finitions),
+          refente: Number(out.decompo_groupee.refente),
         }
       : null,
   };

@@ -27,6 +27,8 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     mode_sans_outil: false,
     laize_stock_mm: null,
     options_codes: [],
+    marge_pct_override: null,
+    remise_pct: 0,
     ...over,
   };
 }
@@ -78,6 +80,17 @@ describe("buildPreviewRequest — état page → body wire", () => {
     expect(r).not.toHaveProperty("nb_poses_laize");
     // La config choisie pilote la preview via cylindre_id (champ accepté).
     expect(r.cylindre_id).toBe(1);
+  });
+
+  it("V0 : marge override envoyée si saisie ; remise toujours (défaut 0)", () => {
+    const r0 = buildPreviewRequest(baseInput());
+    expect(r0.marge_pct).toBeNull(); // pas d'override → défaut tenant
+    expect(r0.remise_pct).toBe(0);
+    const r1 = buildPreviewRequest(
+      baseInput({ marge_pct_override: 42, remise_pct: 5 }),
+    );
+    expect(r1.marge_pct).toBe(42);
+    expect(r1.remise_pct).toBe(5);
   });
 });
 
@@ -203,6 +216,54 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
       intervalle_dev_mm: 2,
       nb_poses_laize: "auto",
       force_intervalle_laize: false,
+    });
+  });
+
+  it("V0 : parse remise / HT net / décompo groupée (+ défauts si absents)", () => {
+    const base: DevisPreviewOut = {
+      prix_ht: "1000.00",
+      cout_revient: "700.00",
+      marge_pct: "30.00",
+      prix_1000: "100.00",
+      geometrie: {
+        diametre_mm: 250,
+        nb_poses: 8,
+        nb_filles: null,
+        dechet_lateral_mm: null,
+      },
+      decompo: [],
+      options: [],
+      alertes: [],
+    };
+    // Absents → défauts propres.
+    const r0 = parsePreview(base);
+    expect(r0.remise_pct).toBe(0);
+    expect(r0.remise_eur).toBeNull();
+    expect(r0.prix_ht_net).toBeNull();
+    expect(r0.decompo_groupee).toBeNull();
+    // Présents → parsés.
+    const r1 = parsePreview({
+      ...base,
+      remise_pct: "5.00",
+      remise_eur: "50.00",
+      prix_ht_net: "950.00",
+      decompo_groupee: {
+        matiere_p1: "400.00",
+        impression_presse_calage: "200.00",
+        cliches_outil: "60.00",
+        option_finitions: "0.00",
+        refente: "40.00",
+      },
+    });
+    expect(r1.remise_pct).toBe(5);
+    expect(r1.remise_eur).toBe(50);
+    expect(r1.prix_ht_net).toBe(950);
+    expect(r1.decompo_groupee).toEqual({
+      matiere_p1: 400,
+      impression_presse_calage: 200,
+      cliches_outil: 60,
+      option_finitions: 0,
+      refente: 40,
     });
   });
 });
