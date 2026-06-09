@@ -148,6 +148,41 @@
   - **Pointeur front** : client typé [`frontend/src/app/devis/nouvelle/devisPreview.ts`](../frontend/src/app/devis/nouvelle/devisPreview.ts) + [`frontend/src/lib/api.ts`](../frontend/src/lib/api.ts).
   - **🔴 Backlog (chantier séparé, sacred-sensitive, validation Eric)** : **pricing options PRODUCTION** (coef vitesse/gâche, temps calage) **dans le cost_engine** — touche P3/P4/P5 → **benchmarks à revérifier EXACTS sous contrôle**. + best-effort V1 : `diam_max_mm` sourcing fin ; `machine_id` ← contrat optim (front B).
 - **CC2 — front A1 : ✅ MERGÉ (#123, `13a579d`).** Page `/devis/nouvelle` réactive + design FlexoSuite, consomme `/api/devis/preview` (swap mock → endpoint live). Recalc live debounce 250ms + AbortController + keep-last ; parse le contrat complet (€/1000, géométrie, décompo, options/déltas, alertes) ; select presse masqué si tenant mono-machine. vitest **218**.
+- **CC2 — front A2 : ✅ MERGÉ (#129).** Transitions douces du toggle sans-outil (`Collapsible` grid-rows+opacité, a11y `aria-hidden`/`tabIndex`) + pré-remplissage profil bobine client (Ø mandrin/Ø max/sens depuis `Client`, fallbacks tracés) + `client_id` persisté.
+- **CC2 — front A2bis : ✅ MERGÉ (#132).** Chips finitions (`aria-pressed`, actif orange) + coût marginal « +X € » **par code** via `options[].delta_eur` (impact production → « chiffré bientôt », jamais +0 €) + `couleur_plus` ; requête `/preview` + POST via `options_codes`. vitest **220**.
+
+---
+
+## Chantier — Devis page unique **V2** (maquette north-star, remplacement complet du wizard) — 🟡 CADRAGE (à trancher 2026-06-09)
+
+> Maquette HTML fournie par Eric le 2026-06-08 (`devis-flexo-maquette-v9 (1).html`,
+> « pas finie »). C'est la cible complète : **toute** la saisie devis sur un
+> écran réactif, en 2 colonnes + rail prix sticky, accordéon 6 sections. A1/A2/
+> A2bis (ci-dessus, en prod) = socle ; V2 = la suite, par lots. **Rien décidé**,
+> Eric tranche le 09/06. Avant tout code : vérifier les contrats back réels
+> (optim wizard, rebobinage) comme pour /preview — ne pas coder contre une spec.
+
+**Déjà en prod (socle A1+A2+A2bis)** : hero prix HT/€1000/marge live · laize/dev/qté/couleurs · toggle sans-outil (transition) · matière+épaisseur · bobinage mandrin/Ø max/sens · chips finitions + « +X € » + couleur_plus + impact prod · décompo postes+refente · prefill client · Valider→devis.
+
+**Nouveaux blocs de la maquette (non bâtis)** :
+1. **Layout 2 colonnes + rail sticky** (prix + décompo détaillée + carte « config retenue » + Valider/**Aperçu PDF**) + **accordéon numéroté 1→6**. 100 % front, zéro back.
+2. **Section 2 « Choix outil & pose »** (cœur) : **config cards scorées** (3 meilleures) + table « 75 configs » = l'**auto-optim** différé (« lot front B », sélecteur malin du même `cylindre_id` ; le wizard `/optimisation` calcule déjà ces configs → réutilisable) ; **Écarts + Souveraineté Règle 7** (forcer intervalle dev/laize, bord latéral, nb poses — *tracé* ; payload lot porte déjà `intervalle_dev_reel_mm`, `intervalle_laize_reel_mm`, `bord_lateral_mm`) ; **Cadence & calage** (vitesse, temps calage, €/h) + types de changement.
+3. **Multi-lots** : répartir la quantité sur plusieurs développés/laizes (consommer le stock). `DevisCreate.lots[]` le supporte déjà.
+4. **Section 5 enrichie** : sens enroulement **8 tuiles**, **plan de bobines** (rebobinage — endpoints existants), lacets, tarifs mandrins, entrée fichier (radio), **délais appro→livraison** (jours ouvrés).
+5. **Matière enrichie** (laize calculée+chute live, adhésif, certifs sanitaires/env, stockage→conseil) · **Commercial** (marge éditable + remise) · **Section 1** (forme, rayon, tolérance qté, matière transparente).
+
+**Découpage proposé (CC2, 1 PR/lot)** :
+- **C — Layout & rail** : 2 colonnes + rail sticky + accordéon. *Recommandé en 1er* (pose le cadre, 100 % front, aucune dépendance CC1).
+- **D — Section 2 outil & pose** : config cards auto-optim (réutilise l'optim wizard) + écarts/Règle 7 + cadence/calage. *Le plus gros ; remplace le select cylindre actuel.*
+- **E — Multi-lots** + calage/changements.
+- **F — Section 5** : sens 8 tuiles + plan bobines + lacets + tarifs mandrins + entrée fichier + délais.
+- **G — Matière/Commercial/Section 1** (complétude).
+
+**Questions ouvertes (à trancher 09/06)** :
+1. Finir/itérer la maquette d'abord (retour design section par section) **ou** commencer à coder vers la cible ?
+2. Si code : démarrer par **C (layout+rail)** ou prioriser les **config cards section 2** (débloquent l'auto-optim) ?
+
+**Hors scope tant que pas tranché** : bascule des CTA wizard → `/devis/nouvelle` (gated, après validation terrain Eric). Le wizard reste intact.
 
 ---
 
