@@ -323,20 +323,33 @@ describe("DevisPageUnique — page devis réactive", () => {
     expect(screen.getByTestId("ec-intervalle-laize")).not.toBeDisabled();
   });
 
-  it("V0 : Commercial remise → panneau remise + HT net ; décompo groupée live", async () => {
+  it("V0 : panneau (HT net + décompo groupée + total) + barre mobile + remise live", async () => {
     render(<DevisPageUnique />);
     await screen.findByTestId("hero-prix-valeur");
-    // Décompo coût groupée affichée dans le panneau.
-    expect(screen.getByTestId("hero-decompo-groupee")).toBeInTheDocument();
+    // Le gros prix = HT net (123,45 € sans remise au départ).
+    expect(screen.getByTestId("hero-prix-valeur")).toHaveTextContent("123,45");
+    // Décompo coût groupée (avec ligne Total) affichée dans le panneau.
+    expect(screen.getByTestId("hero-decompo-groupee")).toHaveTextContent(
+      /Total HT/,
+    );
+    // Barre prix basse fixe (mobile) présente, avec son propre Valider.
+    expect(screen.getByTestId("mobile-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("valider-mobile")).toBeInTheDocument();
     // Pas de remise par défaut (0 %).
     expect(screen.queryByTestId("hero-remise")).toBeNull();
-    // Saisir une remise → panneau remise + HT net en direct.
+    // Saisir une remise → ligne remise (HT brut + −€) + HT net recalculé.
     await userEvent.clear(screen.getByTestId("c-remise"));
     await userEvent.type(screen.getByTestId("c-remise"), "10");
     await waitFor(() =>
       expect(screen.getByTestId("hero-remise")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("hero-remise")).toHaveTextContent(/HT net/);
+    expect(screen.getByTestId("hero-remise")).toHaveTextContent(/remise/i);
+    // Le gros prix = HT net < brut → n'affiche plus 123,45 €.
+    await waitFor(() =>
+      expect(screen.getByTestId("hero-prix-valeur")).not.toHaveTextContent(
+        "123,45",
+      ),
+    );
   });
 
   it("décompo refente affichée en sans outil (déchet latéral)", async () => {

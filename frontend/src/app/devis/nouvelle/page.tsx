@@ -479,17 +479,22 @@ export default function DevisPageUnique() {
 
   return (
     <main className="min-h-screen bg-[#FBF7F0]">
-      <form onSubmit={handleSubmit} className="mx-auto max-w-6xl p-4 sm:p-6">
+      <form
+        onSubmit={handleSubmit}
+        className="mx-auto max-w-6xl p-4 pb-24 sm:p-6 lg:pb-6"
+      >
         <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-          {/* ── Panneau prix : rail sticky (droite desktop / haut mobile) ── */}
-          <aside className="sticky top-2 z-10 self-start space-y-3 lg:top-4 lg:col-start-2 lg:row-start-1">
+          {/* ── Panneau prix : rail sticky droite (desktop). Sur mobile, la
+              barre basse fixe ci-dessous prend le relais (ce panneau est
+              masqué). ──────────────────────────────────────────────────── */}
+          <aside className="hidden self-start lg:col-start-2 lg:row-start-1 lg:flex lg:flex-col lg:gap-3 lg:sticky lg:top-4">
             <div
               data-testid="hero-prix"
               className="rounded-xl border border-[#E85D2F]/30 bg-white/95 p-5 shadow-md backdrop-blur"
             >
           <div className="flex items-baseline justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Prix de vente estimé (HT)
+              Prix HT facturé (net remise)
             </p>
             {recomputing && (
               <span
@@ -527,7 +532,7 @@ export default function DevisPageUnique() {
                   data-testid="hero-prix-valeur"
                   className="text-3xl font-bold text-[#E85D2F]"
                 >
-                  {eur(preview.prix_ht)} €
+                  {eur(preview.prix_ht_net ?? preview.prix_ht)} €
                 </span>
                 <span
                   data-testid="hero-prix-1000"
@@ -547,15 +552,16 @@ export default function DevisPageUnique() {
               <p className="text-xs text-muted-foreground">
                 revient {eur(preview.cout_revient)} €
               </p>
-              {/* V0 — remise commerciale tracée à part + HT net facturé. */}
+              {/* V0 — le gros prix EST le HT net ; ici on trace le brut + la
+                  remise commerciale appliquée par-dessus (ligne séparée). */}
               {preview.remise_eur !== null && preview.remise_eur > 0 && (
                 <div
                   data-testid="hero-remise"
                   className="rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800"
                 >
-                  remise {Math.round(preview.remise_pct)} % : −
-                  {eur(preview.remise_eur)} € ·{" "}
-                  <strong>HT net {eur(preview.prix_ht_net)} €</strong>
+                  HT brut {eur(preview.prix_ht)} € · remise{" "}
+                  {Math.round(preview.remise_pct)} % (−{eur(preview.remise_eur)}{" "}
+                  €)
                 </div>
               )}
               {/* V0 — décompo coût groupée (5 lignes métier). */}
@@ -583,6 +589,12 @@ export default function DevisPageUnique() {
                         <dd className="font-mono">{eur(v)} €</dd>
                       </div>
                     ))}
+                  <div className="flex justify-between gap-2 border-t border-border pt-1 font-semibold text-foreground">
+                    <dt>Total HT{preview.remise_eur ? " net" : ""}</dt>
+                    <dd className="font-mono text-[#B8431D]">
+                      {eur(preview.prix_ht_net ?? preview.prix_ht)} €
+                    </dd>
+                  </div>
                 </dl>
               )}
             </div>
@@ -1181,6 +1193,40 @@ export default function DevisPageUnique() {
           </p>
         </SectionCard>
           </div>
+        </div>
+
+        {/* ── Barre prix basse fixe (mobile uniquement) ────────────── */}
+        <div
+          data-testid="mobile-bar"
+          className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-border bg-white/95 px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden"
+        >
+          <div className="min-w-0">
+            {preview && preview.prix_ht !== null ? (
+              <>
+                <span className="text-lg font-bold text-[#E85D2F]">
+                  {eur(preview.prix_ht_net ?? preview.prix_ht)} €
+                </span>
+                <span className="ml-1 text-xs text-muted-foreground">
+                  HT · {eur(preview.prix_1000)}/1000
+                  {preview.marge_pct !== null && (
+                    <> · marge {Math.round(preview.marge_pct)} %</>
+                  )}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                {recomputing ? "Calcul…" : "Renseigne format & quantité"}
+              </span>
+            )}
+          </div>
+          <Button
+            type="submit"
+            disabled={!peutValider || submitting}
+            data-testid="valider-mobile"
+            className="shrink-0 bg-[#E85D2F] px-6 text-base font-semibold text-white hover:bg-[#d24f24] disabled:opacity-50"
+          >
+            {submitting ? "…" : "Valider"}
+          </Button>
         </div>
       </form>
     </main>
