@@ -548,6 +548,109 @@ def _option_cout_eur(
     return None, impact
 
 
+# Lot C — défauts écarts (cf. brief). Intervalle laize 5 mm ; intervalle dev
+# plancher imprimeur ; sens recommandé par défaut SE1 (rotation_se reste SSOT).
+_ECART_INTERVALLE_LAIZE_MM = 5.0
+_ECART_INTERVALLE_DEV_MIN_MM = 2.0
+_CONFIG_SENS_DEFAUT = 1
+_CONFIG_TOP_RECOMMANDE = 3
+
+
+def _configs_preview(
+    db: Session, entreprise_id: int, p: dict[str, Any]
+) -> tuple[list[dict], dict | None]:
+    """Lot C — configurations cylindre × machine + écarts entre étiquettes.
+
+    RÉUTILISE le moteur `optimiser_pose` (SSOT) — géométrie/lecture PURE, AUCUN
+    coût. Best-effort : `([], None)` si géométrie incomplète (laize/dev absents)
+    ou parc/barèmes indisponibles. `mode_sans_outil` : pas de cylindre → pas de
+    configs ; `intervalle_dev=0` (impression continue), intervalle laize conservé.
+    """
+    from app.services.optimisation.moteur import optimiser_pose
+    from app.services.optimisation.types import (
+        ContrainteClient,
+        Format,
+        OptimisationInput,
+    )
+    from app.services.optimisation_loader import (
+        OptimisationLoaderError,
+        charger_baremes,
+        charger_cylindres_actifs,
+        charger_machines_actives,
+    )
+
+    laize = p.get("laize")
+    dev = p.get("dev")
+    if not laize or not dev:
+        return [], None
+
+    if bool(p.get("mode_sans_outil")):
+        return [], {
+            "intervalle_laize_mm": _ECART_INTERVALLE_LAIZE_MM,
+            "intervalle_dev_mm": 0.0,
+            "nb_poses_laize": "auto",
+            "force_intervalle_laize": False,
+        }
+
+    try:
+        cylindres = charger_cylindres_actifs(db, entreprise_id)
+        machines = charger_machines_actives(db, entreprise_id)
+        baremes = charger_baremes(db, entreprise_id)
+        if not cylindres or not machines:
+            return [], None
+        nb_coul = 0
+        if p.get("nb_couleurs"):
+            nb_coul = sum(int(v or 0) for v in p["nb_couleurs"].values())
+        inp = OptimisationInput(
+            format=Format(hauteur_mm=float(dev), largeur_mm=float(laize)),
+            intervalle_dev_min_mm=_ECART_INTERVALLE_DEV_MIN_MM,
+            nb_couleurs_impression=nb_coul,
+            quantite=int(p.get("quantite") or 1),
+            options=[],
+            cylindres=cylindres,
+            machines=machines,
+            bareme_echenillage=baremes["echenillage"],
+            bareme_effet_banane=baremes["effet_banane"],
+            bareme_compensation=baremes["compensation_laize_dev"],
+            bareme_confort_roulage=baremes["confort_roulage"],
+            contrainte_client=ContrainteClient(intervalle_dev_min_mm=0.0),
+        )
+        out = optimiser_pose(inp)
+        dev_par_cyl = {c.id: c.developpe_mm for c in cylindres}
+        nom_par_mach = {m.id: m.nom for m in machines}
+        configs: list[dict] = []
+        for i, c in enumerate(out.configurations):
+            developpe = float(dev_par_cyl.get(c.cylindre_id, 0.0))
+            configs.append(
+                {
+                    "id": (
+                        f"{c.cylindre_id}-{c.machine_id}"
+                        f"-{c.nb_poses_dev}x{c.nb_poses_laize}"
+                    ),
+                    "cylindre_dents": round(developpe / 3.175) if developpe > 0 else 0,
+                    "developpe_mm": round(developpe, 2),
+                    "machine": nom_par_mach.get(c.machine_id, f"#{c.machine_id}"),
+                    "poses_laize": c.nb_poses_laize,
+                    "poses_dev": c.nb_poses_dev,
+                    "poses_total": c.nb_poses_total,
+                    "delta_dev_mm": round(c.intervalle_dev_reel_mm, 2),
+                    "delta_laize_mm": round(c.intervalle_laize_reel_mm, 2),
+                    "sens": _CONFIG_SENS_DEFAUT,
+                    "score": round(c.score, 2),
+                    "recommande": i < _CONFIG_TOP_RECOMMANDE,
+                }
+            )
+        ecarts = {
+            "intervalle_laize_mm": _ECART_INTERVALLE_LAIZE_MM,
+            "intervalle_dev_mm": round(out.intervalle_dev_min_applique_mm, 2),
+            "nb_poses_laize": "auto",
+            "force_intervalle_laize": False,
+        }
+        return configs, ecarts
+    except (OptimisationLoaderError, ValueError, KeyError):
+        return [], None
+
+
 def preview_devis(
     db: Session, entreprise_id: int, p: dict[str, Any]
 ) -> dict:
@@ -860,6 +963,10 @@ def preview_devis(
         alertes.append(
             {"niveau": "info", "message": "Matière non sélectionnée — complexe par défaut utilisé."}
         )
+
+    # Lot C — configurations cylindre × machine + écarts (géométrie/lecture
+    # pure via optimiser_pose, SSOT ; AUCUN coût touché).
+    out["configs"], out["ecarts"] = _configs_preview(db, entreprise_id, p)
 
     return out
 
