@@ -10,14 +10,27 @@
 ## En-tête
 
 - **Date** : 2026-06-09
-- **Branche active** : `main` = **`e2969b6`** (après #140 — **`/preview` contrat ENTRÉE Lot C : config_id + forçage écarts**).
-- **Sprint en cours** : **Chantier « configurateur page unique »** — câblage live des sections via `/preview`. Mergés : **Lot C** (configs outil & pose : back #135 + front #134) · **V0 boucle marge live** (back #136 : marge override + remise à part + décompo groupée). Avant : **A1** (#123/#124), **A2/A2bis** (#129/#132 : toggle sans-outil, chips finitions + déltas par code). ⚠️ **Hotfix ouvert #137** (`/preview` 422 : front Lot C envoie des **inputs** — `config_id` + écarts forcés — que `DevisPreviewIn` rejette ; **gap contrat ENTRÉE Lot C**). Chantiers CLOS antérieurs : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1** = back C #135 + V0 #136 mergés (+ à traiter : inputs `/preview` Lot C, cf. #137). **CC2** = front C #134 / A2bis #132 mergés ; attaque **front V0** (panneau prix sticky).
+- **Branche active** : `main` = **`b4ea8b2`** (après #142 — **réactivation front `config_id` + écarts ; boucle live V0+C complète**).
+- **Sprint en cours** : **Chantier « configurateur page unique »** — **boucle live V0+C COMPLÈTE end-to-end** (cf. récap 2026-06-09 ci-dessous). Tout champ de `/preview` (configs/écarts/matière/finitions/marge/remise) bouge la marge en direct. Chantiers CLOS antérieurs : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1 / CC2 = libres** (boucle V0+C livrée). Prochain horizon : **E** (matière/Ø) → **F** (bobinage) → **D** (calage, débloqué).
+
+---
+
+## 2026-06-09 — Boucle live V0+C COMPLÈTE end-to-end
+
+- **Pilotée par `/preview`** : configs + écarts (Règle 7) + matière + finitions + marge % + remise % → **bougent la marge en direct**.
+- **Remise tracée à part**, par-dessus le **HT brut sacré** → `prix_ht_net`. `decompo_groupee` = **5 lignes** (matiere_p1 / impression_presse_calage / cliches_outil / option_finitions / refente).
+- **Mergés ce jour** : #134 #135 #136 #137 #138 #139 #140 #141 #142.
+- **Sacrés EXACTS** : V1a **1 424,31** / P0b **695,36** · `cost_engine`/`optimiser_pose`/`rotation_se`/`bat_calculs` **intouchés** · **1206/0**. **Baseline = 1 424,31** (**1 449,09 PÉRIMÉ**, cf. L2 #114).
+- **Leçon 422** : front déployé **avant** back → la dégradation propre couvrait `configs=[]` vide **mais pas un schéma rejeté**. **Règle** : ne **jamais** envoyer un champ que le back déployé refuse ; **guards de bornes** côté front ; **déployer le back (Railway) AVANT le front (Vercel)** quand le contrat ENTRÉE change.
+- **Horizon** : **E** (matière/Ø) → **F** (bobinage) → **D** (calage, **DÉBLOQUÉ**) ; `config_id` à étendre sur E/F.
 
 ---
 
 ## PRs récemment mergées (10 dernières)
 
+- **#142** — feat(devis): **Étape 2 front** — réactive l'envoi `config_id` + forçage écarts vers `/preview` (boucle live complète). (CC2.)
+- **#139** — feat(devis): **V0 front** — panneau prix live (rail sticky + marge/remise), consomme `marge_pct`/`remise_pct`/`prix_ht_net`/`decompo_groupee`. (CC2.)
 - **#140** — feat(devis): **`/preview` contrat ENTRÉE Lot C** — `DevisPreviewIn` accepte `config_id` ('cyl-mach-DxL', **fige** cylindre/machine/poses → `geometrie.nb_poses` = poses_total config) + `force_intervalle_laize`/`intervalle_laize_mm` + `nb_poses_laize_force`, threadés dans `optimiser_pose` (params existants). **Ferme le 422 à la source** (dette stopgap #137). Défauts value-neutral, cost_engine intouché. Baseline **1206**.
 - **#136** — feat(devis): **`/preview` V0 boucle marge live** — `marge_pct` override (→ `pct_marge_override`) + `remise_pct` **tracée à part** (par-dessus HT brut, hors coût → `remise_eur`/`prix_ht_net`) + `decompo_groupee` (5 lignes métier, somme = coût) + `_appliquer_remise` isolée (archi ouverte marge-cible). cost_engine INTOUCHÉ, value-neutral. Baseline **1202**.
 - **#135** — feat(devis): **`/preview` configs cylindre × machine + écarts (Lot C back)** — `configs[]` (tri score, top 3 `recommande`) + `ecarts`, via réutilisation `optimiser_pose` (SSOT, lecture pure, AUCUN coût). Sans-outil → `configs=[]`, `intervalle_dev=0`. Baseline **1199**.
@@ -45,10 +58,7 @@
 
 ## PRs ouvertes
 
-- **#139** — feat(devis): **V0 front** — panneau prix live (rail sticky + marge/remise), consomme le contrat V0 (`marge_pct`/`remise_pct`/`prix_ht_net`/`decompo_groupee`). OPEN (CC2).
-- **#133** — docs(etat-projet): **cadrage Devis page unique V2** (maquette north-star). OPEN (à rebaser/dédupliquer vs #138).
-
-> ℹ️ Gap contrat ENTRÉE Lot C **RÉSOLU** par #140 (stopgap front #137 mergé puis superseded) : CC2 peut **réactiver l'envoi `config_id` + écarts forcés**.
+- **Aucune** — boucle live V0+C mergée end-to-end (back #140 + front V0 #139 + réactivation inputs #142) ; cadrage V2 #133 mergé.
 
 ## PRs récemment fermées (non mergées)
 
