@@ -548,6 +548,23 @@ def _option_cout_eur(
     return None, impact
 
 
+def _appliquer_remise(
+    prix_ht_brut: Decimal, remise_pct: Decimal
+) -> tuple[Decimal, Decimal]:
+    """V0 — remise commerciale appliquée PAR-DESSUS le HT brut. N'affecte PAS le
+    coût de revient (juste le HT facturé). Retourne `(remise_eur, prix_ht_net)`.
+
+    Archi ouverte (sens-cible plus tard) : la MARGE reste calculée par le
+    cost_engine (param `ConfigCouts.marge_standard_pct` ou override) ; la remise
+    est isolée ici. Un futur mode « marge cible % / prix cible → room » s'insérera
+    à ce point SANS refondre le flux `input → prix`. Pas de mode cible en V0.
+    """
+    remise_eur = (prix_ht_brut * remise_pct / Decimal(100)).quantize(
+        Decimal("0.01")
+    )
+    return remise_eur, (prix_ht_brut - remise_eur).quantize(Decimal("0.01"))
+
+
 # Lot C — défauts écarts (cf. brief). Intervalle laize 5 mm ; intervalle dev
 # plancher imprimeur ; sens recommandé par défaut SE1 (rotation_se reste SSOT).
 _ECART_INTERVALLE_LAIZE_MM = 5.0
@@ -678,6 +695,10 @@ def preview_devis(
         "cout_revient": None,
         "marge_pct": None,
         "prix_1000": None,
+        "remise_pct": Decimal(str(p.get("remise_pct") or 0)),
+        "remise_eur": None,
+        "prix_ht_net": None,
+        "decompo_groupee": None,
         "geometrie": geometrie,
         "decompo": [],
         "options": [],
@@ -782,6 +803,15 @@ def preview_devis(
         for f in (p.get("finitions") or [])
     ]
 
+    # V0 — marge override (en %, levier live) → fraction `pct_marge_override`
+    # du DevisInput (None = défaut tenant `ConfigCouts.marge_standard_pct`). Le
+    # cost_engine reste SEUL juge du prix ; on ne fait que lui passer la marge.
+    marge_override_frac = (
+        (Decimal(str(p["marge_pct"])) / Decimal(100))
+        if p.get("marge_pct") is not None
+        else None
+    )
+
     # === Bloc coût (7 postes) — RÉUTILISE _construire + MoteurDevis ===
     def _run(ncpt, forfaits):
         """Construit le DevisInput (best-effort) + lance MoteurDevis. Le moteur
@@ -789,8 +819,13 @@ def preview_devis(
         di = _construire_devis_input_pour_lot(
             lot, payload_input, db, entreprise_id, ncpt
         )
+        maj: dict = {}
         if forfaits:
-            di = di.model_copy(update={"forfaits_st": forfaits})
+            maj["forfaits_st"] = forfaits
+        if marge_override_frac is not None:
+            maj["pct_marge_override"] = marge_override_frac
+        if maj:
+            di = di.model_copy(update=maj)
         return MoteurDevis(db, entreprise_id).calculer(di), di
 
     devis_input = None
@@ -833,6 +868,27 @@ def preview_devis(
             out["cout_revient"] = res.cout_revient_eur
             out["marge_pct"] = (marge * Decimal(100)).quantize(Decimal("0.01"))
             out["prix_1000"] = res.prix_au_mille_eur
+
+            # V0 — remise tracée À PART (par-dessus le HT brut, hors coût).
+            out["remise_eur"], out["prix_ht_net"] = _appliquer_remise(
+                base_prix, out["remise_pct"]
+            )
+
+            # V0 — décompo COÛT regroupée (5 lignes métier). refente ajoutée
+            # plus bas si mode sans outil. Somme = coût de revient (+ refente).
+            par_poste = {pst.poste_numero: pst.montant_eur for pst in res.postes}
+            out["decompo_groupee"] = {
+                "matiere_p1": par_poste.get(1, Decimal("0")),
+                "impression_presse_calage": (
+                    par_poste.get(2, Decimal("0"))
+                    + par_poste.get(4, Decimal("0"))
+                    + par_poste.get(5, Decimal("0"))
+                    + par_poste.get(7, Decimal("0"))
+                ),
+                "cliches_outil": par_poste.get(3, Decimal("0")),
+                "option_finitions": par_poste.get(6, Decimal("0")),
+                "refente": Decimal("0"),
+            }
 
             # Décompo : 7 postes ; on ISOLE les options de la ligne Finitions
             # (label distinct, pas mélangées avec la sous-traitance).
@@ -934,12 +990,16 @@ def preview_devis(
                 db, devis_tmp, [lot], payload_input, entreprise_id
             )
             if refente and refente.get("applique"):
+                refente_eur = Decimal(refente["cout_total_refente_eur"])
                 out["decompo"].append(
                     {
                         "poste": "Refente (rebobinage)",
-                        "montant": Decimal(refente["cout_total_refente_eur"]),
+                        "montant": refente_eur,
                     }
                 )
+                # V0 — ligne refente de la décompo groupée.
+                if isinstance(out.get("decompo_groupee"), dict):
+                    out["decompo_groupee"]["refente"] = refente_eur
                 alertes.append(
                     {
                         "niveau": "info",
