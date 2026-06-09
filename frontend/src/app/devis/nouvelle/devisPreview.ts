@@ -41,6 +41,12 @@ export interface DevisPreviewInput {
   laize_stock_mm: number | null;
   // Codes des options de fabrication sélectionnées (chips finitions).
   options_codes: string[];
+  // Lot C — config outil×machine choisie (épingle la pose serveur).
+  config_id: number | null;
+  // Lot C — écarts forçables (Règle 7).
+  intervalle_laize_mm: number | null;
+  force_intervalle_laize: boolean;
+  nb_poses_laize_force: number | null;
 }
 
 // ── Résultat parsé (consommé par l'UI) ───────────────────────────────
@@ -69,6 +75,30 @@ export interface DevisPreviewAlerte {
   message: string;
 }
 
+// Lot C — config cylindre×machine candidate (pose + score), parsée.
+export interface DevisPreviewConfig {
+  id: number;
+  cylindre_dents: number;
+  developpe_mm: number;
+  machine: string;
+  poses_laize: number;
+  poses_dev: number;
+  poses_total: number;
+  delta_dev_mm: number;
+  delta_laize_mm: number;
+  sens: number;
+  score: number;
+  recommande: boolean;
+}
+
+// Lot C — écarts entre étiquettes (défauts moteur, surchargeables Règle 7).
+export interface DevisPreviewEcarts {
+  intervalle_laize_mm: number;
+  intervalle_dev_mm: number;
+  nb_poses_laize: "auto" | number;
+  force_intervalle_laize: boolean;
+}
+
 export interface DevisPreviewResult {
   prix_ht: number | null;
   cout_revient: number | null;
@@ -78,6 +108,9 @@ export interface DevisPreviewResult {
   decompo: DevisPreviewDecompoLigne[];
   options: DevisPreviewOptionCout[];
   alertes: DevisPreviewAlerte[];
+  // Lot C — vides sur l'ancien endpoint (dégradation propre).
+  configs: DevisPreviewConfig[];
+  ecarts: DevisPreviewEcarts | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -130,6 +163,19 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
     // Options par CODE (#130) : le serveur price. Forfaits ad-hoc inutilisés.
     options_codes: i.options_codes,
     finitions: [],
+    // Lot C — config épinglée + écarts forcés (sinon défauts moteur).
+    config_id: i.config_id ?? null,
+    intervalle_laize_mm:
+      i.force_intervalle_laize &&
+      i.intervalle_laize_mm &&
+      i.intervalle_laize_mm > 0
+        ? i.intervalle_laize_mm
+        : null,
+    force_intervalle_laize: i.force_intervalle_laize,
+    nb_poses_laize:
+      i.nb_poses_laize_force && i.nb_poses_laize_force > 0
+        ? i.nb_poses_laize_force
+        : null,
   };
 }
 
@@ -156,6 +202,33 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
       impact_production: o.impact_production,
     })),
     alertes: out.alertes.map((a) => ({ niveau: a.niveau, message: a.message })),
+    // Lot C — parse défensif (les numériques peuvent arriver en string ou
+    // number selon le back) ; absents sur l'ancien endpoint → [] / null.
+    configs: (out.configs ?? []).map((c) => ({
+      id: c.id,
+      cylindre_dents: Number(c.cylindre_dents),
+      developpe_mm: Number(c.developpe_mm),
+      machine: c.machine,
+      poses_laize: Number(c.poses_laize),
+      poses_dev: Number(c.poses_dev),
+      poses_total: Number(c.poses_total),
+      delta_dev_mm: Number(c.delta_dev_mm),
+      delta_laize_mm: Number(c.delta_laize_mm),
+      sens: Number(c.sens),
+      score: Number(c.score),
+      recommande: Boolean(c.recommande),
+    })),
+    ecarts: out.ecarts
+      ? {
+          intervalle_laize_mm: Number(out.ecarts.intervalle_laize_mm),
+          intervalle_dev_mm: Number(out.ecarts.intervalle_dev_mm),
+          nb_poses_laize:
+            out.ecarts.nb_poses_laize === "auto"
+              ? "auto"
+              : Number(out.ecarts.nb_poses_laize),
+          force_intervalle_laize: Boolean(out.ecarts.force_intervalle_laize),
+        }
+      : null,
   };
 }
 

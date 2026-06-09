@@ -140,6 +140,47 @@ function installFetchMock() {
           { code: "couleur_plus", delta_eur: "5.50", impact_production: false },
         ],
         alertes: sansOutil ? [] : [],
+        // Lot C — configs outil×machine + écarts (vides en sans outil).
+        configs: sansOutil
+          ? []
+          : [
+              {
+                id: 11,
+                cylindre_dents: 104,
+                developpe_mm: 330.2,
+                machine: "Mark Andy P5",
+                poses_laize: 2,
+                poses_dev: 4,
+                poses_total: 8,
+                delta_dev_mm: 2.55,
+                delta_laize_mm: 5,
+                sens: 1,
+                score: 100,
+                recommande: true,
+              },
+              {
+                id: 12,
+                cylindre_dents: 132,
+                developpe_mm: 419.1,
+                machine: "Mark Andy P5",
+                poses_laize: 2,
+                poses_dev: 5,
+                poses_total: 10,
+                delta_dev_mm: 3.82,
+                delta_laize_mm: 5,
+                sens: 1,
+                score: 85,
+                recommande: true,
+              },
+            ],
+        ecarts: sansOutil
+          ? null
+          : {
+              intervalle_laize_mm: 5,
+              intervalle_dev_mm: 2,
+              nb_poses_laize: "auto",
+              force_intervalle_laize: false,
+            },
       });
     }
     if (url.endsWith("/api/devis") && method === "POST") {
@@ -177,8 +218,8 @@ describe("DevisPageUnique — page devis réactive", () => {
 
   it("toggle sans outil : replie la carte Outil (transition), expose la laize stock", async () => {
     render(<DevisPageUnique />);
-    // Avec outil par défaut → section Outil ouverte (aria-hidden absent).
-    await screen.findByTestId("o-cylindre");
+    // Avec outil par défaut → section Outil ouverte (config cards visibles).
+    await screen.findByTestId("config-card-11");
     expect(screen.getByTestId("outil-section")).not.toHaveAttribute(
       "aria-hidden",
       "true",
@@ -228,6 +269,45 @@ describe("DevisPageUnique — page devis réactive", () => {
     expect(screen.getByTestId("couleur-plus")).toHaveTextContent("+5,50 €");
   });
 
+  it("Section 2 : cartes configs (top recommandé auto-sélectionné) + table dépliable + écarts", async () => {
+    render(<DevisPageUnique />);
+    // Top score (config 11) auto-sélectionnée.
+    await waitFor(() =>
+      expect(screen.getByTestId("config-card-11")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(screen.getByTestId("config-card-12")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    // Sélection d'une autre config.
+    await userEvent.click(screen.getByTestId("config-card-12"));
+    expect(screen.getByTestId("config-card-12")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("config-card-11")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    // Table repliée par défaut, dépliable.
+    expect(screen.getByTestId("configs-table")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await userEvent.click(screen.getByTestId("toggle-configs"));
+    expect(screen.getByTestId("configs-table")).not.toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    // Écarts : intervalle laize désactivé tant que non forcé.
+    expect(screen.getByTestId("ec-intervalle-laize")).toBeDisabled();
+    await userEvent.click(screen.getByTestId("ec-force-laize"));
+    expect(screen.getByTestId("ec-intervalle-laize")).not.toBeDisabled();
+  });
+
   it("décompo refente affichée en sans outil (déchet latéral)", async () => {
     render(<DevisPageUnique />);
     await screen.findByTestId("toggle-sans-outil");
@@ -239,12 +319,11 @@ describe("DevisPageUnique — page devis réactive", () => {
     expect(screen.getByTestId("decompo-dechet")).toHaveTextContent(/déchet/i);
   });
 
-  it("Valider (avec outil) → POST /api/devis avec le cylindre_id sélectionné", async () => {
+  it("Valider (avec outil) → POST /api/devis avec le cylindre_id de la config", async () => {
     const { container } = render(<DevisPageUnique />);
-    // Attendre le chargement (option cylindre dispo).
-    await screen.findByRole("option", { name: /104 dents/ });
+    // Config recommandée auto-sélectionnée → résout cylindre/machine (parc).
+    await screen.findByTestId("config-card-11");
     await userEvent.selectOptions(screen.getByTestId("m-matiere"), "1");
-    await userEvent.selectOptions(screen.getByTestId("o-cylindre"), "1");
 
     await waitFor(() =>
       expect(screen.getByTestId("valider")).not.toBeDisabled(),
