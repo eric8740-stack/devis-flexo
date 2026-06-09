@@ -442,6 +442,38 @@ class AlertePreview(BaseModel):
     message: str
 
 
+class ConfigPreview(BaseModel):
+    """Une configuration cylindre × machine (Lot C) — géométrie/lecture pure,
+    issue du moteur `optimiser_pose` (SSOT). AUCUN coût."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    cylindre_dents: int
+    developpe_mm: float
+    machine: str
+    poses_laize: int
+    poses_dev: int
+    poses_total: int
+    delta_dev_mm: float
+    delta_laize_mm: float
+    sens: int
+    score: float
+    recommande: bool = False
+
+
+class EcartsPreview(BaseModel):
+    """Écarts entre étiquettes (Lot C). `nb_poses_laize` : "auto" ou un entier
+    forcé. `force_intervalle_laize` : Règle 7 (souveraineté)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    intervalle_laize_mm: float
+    intervalle_dev_mm: float
+    nb_poses_laize: str | int = "auto"
+    force_intervalle_laize: bool = False
+
+
 class DevisPreviewOut(BaseModel):
     """Réponse POST /api/devis/preview.
 
@@ -461,6 +493,10 @@ class DevisPreviewOut(BaseModel):
     decompo: list[DecompoLignePreview] = Field(default_factory=list)
     # Impact marginal serveur de chaque levier activable (finition, +1 couleur).
     options: list[OptionDeltaPreview] = Field(default_factory=list)
+    # Lot C — configurations cylindre × machine (tri score, top 3 recommandé)
+    # + écarts entre étiquettes. Vide si géométrie incomplète / sans outil.
+    configs: list[ConfigPreview] = Field(default_factory=list)
+    ecarts: EcartsPreview | None = None
     alertes: list[AlertePreview] = Field(default_factory=list)
 
 

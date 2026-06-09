@@ -57,9 +57,10 @@ def test_preview_contrat_de_sortie():
     body = r.json()
     assert set(body.keys()) == {
         "prix_ht", "cout_revient", "marge_pct", "prix_1000",
-        "geometrie", "decompo", "options", "alertes",
+        "geometrie", "decompo", "options", "configs", "ecarts", "alertes",
     }
     assert isinstance(body["options"], list)
+    assert isinstance(body["configs"], list)
     assert set(body["geometrie"].keys()) == {
         "diametre_mm", "nb_poses", "nb_filles", "dechet_lateral_mm",
     }
@@ -305,6 +306,48 @@ def test_options_disponibles_n_expose_pas_les_montants():
         assert "forfait_eur" not in o
         assert "prix_au_m2_eur" not in o
         assert "prix_au_mille_eur" not in o
+
+
+def test_configs_outil_exposees_triees_et_top3(  # Lot C
+):
+    """`/preview` expose `configs[]` (cylindre × machine) triées score DESC,
+    top 3 `recommande`, + `ecarts`. Géométrie pure, aucun coût."""
+    _, mat_id, cyl_id = _ids()
+    body = client.post("/api/devis/preview", json={
+        "laize": 100, "dev": 80, "quantite": 10_000,
+        "matiere_id": mat_id, "nb_couleurs": {"impression": 4},
+    }).json()
+    configs = body["configs"]
+    assert configs, "au moins une configuration attendue (format 100×80)"
+    # Tri score DESC.
+    scores = [c["score"] for c in configs]
+    assert scores == sorted(scores, reverse=True)
+    # Top 3 recommandé, le reste non.
+    for i, c in enumerate(configs):
+        assert c["recommande"] is (i < 3)
+    # Cohérence géométrie d'une config.
+    c0 = configs[0]
+    assert c0["poses_total"] == c0["poses_laize"] * c0["poses_dev"]
+    assert c0["cylindre_dents"] > 0 and c0["developpe_mm"] > 0
+    assert isinstance(c0["sens"], int)
+    assert "machine" in c0 and c0["machine"]
+    # Écarts présents (défauts brief : laize 5 mm, poses auto).
+    assert body["ecarts"]["intervalle_laize_mm"] == 5.0
+    assert body["ecarts"]["nb_poses_laize"] == "auto"
+    assert body["ecarts"]["force_intervalle_laize"] is False
+
+
+def test_configs_sans_outil_vide_et_intervalle_dev_zero():  # Lot C
+    """Mode sans outil : pas de cylindre → `configs=[]` ; impression continue
+    → `ecarts.intervalle_dev_mm = 0`, intervalle laize conservé."""
+    _, mat_id, _ = _ids()
+    body = client.post("/api/devis/preview", json={
+        "laize": 100, "dev": 80, "quantite": 10_000, "matiere_id": mat_id,
+        "mode_sans_outil": True, "laize_stock_mm": 250,
+    }).json()
+    assert body["configs"] == []
+    assert body["ecarts"]["intervalle_dev_mm"] == 0.0
+    assert body["ecarts"]["intervalle_laize_mm"] == 5.0
 
 
 def test_machine_id_respecte_et_best_effort():
