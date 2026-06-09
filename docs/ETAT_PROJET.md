@@ -10,7 +10,7 @@
 ## En-tête
 
 - **Date** : 2026-06-09
-- **Branche active** : `main` = **`f3be39e`** (après #136 — **`/preview` V0 boucle marge live**).
+- **Branche active** : `main` = **`e2969b6`** (après #140 — **`/preview` contrat ENTRÉE Lot C : config_id + forçage écarts**).
 - **Sprint en cours** : **Chantier « configurateur page unique »** — câblage live des sections via `/preview`. Mergés : **Lot C** (configs outil & pose : back #135 + front #134) · **V0 boucle marge live** (back #136 : marge override + remise à part + décompo groupée). Avant : **A1** (#123/#124), **A2/A2bis** (#129/#132 : toggle sans-outil, chips finitions + déltas par code). ⚠️ **Hotfix ouvert #137** (`/preview` 422 : front Lot C envoie des **inputs** — `config_id` + écarts forcés — que `DevisPreviewIn` rejette ; **gap contrat ENTRÉE Lot C**). Chantiers CLOS antérieurs : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
 - **Carte qui-fait-quoi** : **CC1** = back C #135 + V0 #136 mergés (+ à traiter : inputs `/preview` Lot C, cf. #137). **CC2** = front C #134 / A2bis #132 mergés ; attaque **front V0** (panneau prix sticky).
 
@@ -18,6 +18,7 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- **#140** — feat(devis): **`/preview` contrat ENTRÉE Lot C** — `DevisPreviewIn` accepte `config_id` ('cyl-mach-DxL', **fige** cylindre/machine/poses → `geometrie.nb_poses` = poses_total config) + `force_intervalle_laize`/`intervalle_laize_mm` + `nb_poses_laize_force`, threadés dans `optimiser_pose` (params existants). **Ferme le 422 à la source** (dette stopgap #137). Défauts value-neutral, cost_engine intouché. Baseline **1206**.
 - **#136** — feat(devis): **`/preview` V0 boucle marge live** — `marge_pct` override (→ `pct_marge_override`) + `remise_pct` **tracée à part** (par-dessus HT brut, hors coût → `remise_eur`/`prix_ht_net`) + `decompo_groupee` (5 lignes métier, somme = coût) + `_appliquer_remise` isolée (archi ouverte marge-cible). cost_engine INTOUCHÉ, value-neutral. Baseline **1202**.
 - **#135** — feat(devis): **`/preview` configs cylindre × machine + écarts (Lot C back)** — `configs[]` (tri score, top 3 `recommande`) + `ecarts`, via réutilisation `optimiser_pose` (SSOT, lecture pure, AUCUN coût). Sans-outil → `configs=[]`, `intervalle_dev=0`. Baseline **1199**.
 - **#134** — feat(devis): **Lot C front** « choix outil & pose » (CC2) — 3 cartes config + table N configs + bloc écarts, consomme `configs[]`/`ecarts`. ⚠️ a introduit le 422 traité par **#137** (inputs non acceptés).
@@ -44,8 +45,10 @@
 
 ## PRs ouvertes
 
-- **#137** — fix(devis): **hotfix `/preview` 422** — le front Lot C envoyait des champs non acceptés par `DevisPreviewIn` (`extra="forbid"`). ⚠️ Symptôme d'un **gap contrat ENTRÉE Lot C** (les inputs `config_id` + écarts forcés ne sont pas au schéma `/preview`).
-- **#133** — docs(etat-projet): **cadrage Devis page unique V2** (maquette north-star). OPEN.
+- **#139** — feat(devis): **V0 front** — panneau prix live (rail sticky + marge/remise), consomme le contrat V0 (`marge_pct`/`remise_pct`/`prix_ht_net`/`decompo_groupee`). OPEN (CC2).
+- **#133** — docs(etat-projet): **cadrage Devis page unique V2** (maquette north-star). OPEN (à rebaser/dédupliquer vs #138).
+
+> ℹ️ Gap contrat ENTRÉE Lot C **RÉSOLU** par #140 (stopgap front #137 mergé puis superseded) : CC2 peut **réactiver l'envoi `config_id` + écarts forcés**.
 
 ## PRs récemment fermées (non mergées)
 
