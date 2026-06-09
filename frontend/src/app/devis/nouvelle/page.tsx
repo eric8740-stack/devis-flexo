@@ -111,7 +111,8 @@ export default function DevisPageUnique() {
   const [machineId, setMachineId] = useState<number | null>(null);
   const [cylindreId, setCylindreId] = useState<number | null>(null);
   // Lot C — config outil×machine choisie (cartes/table) + table dépliée.
-  const [configId, setConfigId] = useState<number | null>(null);
+  // id = identifiant composite du back (string, ex. "1-1-4x2").
+  const [configId, setConfigId] = useState<string | null>(null);
   const [showAllConfigs, setShowAllConfigs] = useState(false);
   // Lot C — écarts entre étiquettes (forçables Règle 7).
   const [intervalleLaize, setIntervalleLaize] = useState("");
@@ -249,14 +250,6 @@ export default function DevisPageUnique() {
           ? parseFloat(laizeStock)
           : null,
       options_codes: Array.from(optionsCodes),
-      config_id: modeSansOutil ? null : configId,
-      intervalle_laize_mm:
-        intervalleLaize.trim() !== "" ? parseFloat(intervalleLaize) : null,
-      force_intervalle_laize: forceIntervalleLaize,
-      nb_poses_laize_force:
-        nbPosesLaizeForce.trim() !== ""
-          ? parseInt(nbPosesLaizeForce, 10)
-          : null,
     }),
     [
       laize,
@@ -273,10 +266,6 @@ export default function DevisPageUnique() {
       mandrin,
       diametreMax,
       optionsCodes,
-      configId,
-      intervalleLaize,
-      forceIntervalleLaize,
-      nbPosesLaizeForce,
     ],
   );
 

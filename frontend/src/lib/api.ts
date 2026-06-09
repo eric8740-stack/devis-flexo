@@ -1004,13 +1004,9 @@ export interface DevisPreviewRequest {
   options_codes: string[];
   // Forfaits ST ad-hoc à montant explicite (rare) — préférer options_codes.
   finitions: FinitionPreviewIn[];
-  // Lot C — config outil×machine sélectionnée (épingle la pose côté serveur).
-  config_id?: number | null;
-  // Lot C — écarts forçables (Règle 7) : si fournis, surchargent les défauts.
-  intervalle_laize_mm?: number | null;
-  force_intervalle_laize?: boolean;
-  // nb poses laize : null/absent = auto (moteur) ; entier = forcé.
-  nb_poses_laize?: number | null;
+  // ⚠️ Lot C : la config choisie pilote la preview via cylindre_id/machine_id
+  // (champs existants). `DevisPreviewIn` est `extra="forbid"` → NE PAS ajouter
+  // config_id / écarts ici tant que le back ne les accepte pas (sinon 422).
 }
 
 export interface GeometriePreviewOut {
@@ -1042,7 +1038,8 @@ export interface AlertePreviewOut {
 // ⚠️ Contrat documenté (brief Lot C) ; types numériques au mieux, à confirmer
 // à l'intégration back. `sens` = code SE (1..9, 0/9 sans impression).
 export interface PreviewConfigOut {
-  id: number;
+  // Identifiant composite renvoyé par le back (ex. "1-1-4x2"), pas un entier.
+  id: string;
   cylindre_dents: number;
   developpe_mm: number;
   machine: string;
