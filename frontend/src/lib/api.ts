@@ -1086,6 +1086,21 @@ export interface DecompoGroupeeOut {
   refente: string;
 }
 
+// Lot F (contrat figé) — bloc bobinage/appro (sortie /preview). Floats
+// sérialisés en chaîne OU number selon le back → parse défensif côté front.
+export interface BobinagePreviewOut {
+  ml_total: number | string;
+  m2_total: number | string;
+  ml_par_bobine: number;
+  nb_bobines: number;
+  diametre_bobine_mm: number;
+  diametre_mandrin_mm: number;
+  diametre_max_presse_mm: number;
+  depasse_max: boolean;
+  nb_changements: number;
+  temps_arret_min: number;
+}
+
 export interface DevisPreviewOut {
   prix_ht: string | null; // HT BRUT (7 postes, sacré)
   cout_revient: string | null;
@@ -1103,6 +1118,8 @@ export interface DevisPreviewOut {
   remise_eur?: string | null;
   prix_ht_net?: string | null; // HT facturé après remise
   decompo_groupee?: DecompoGroupeeOut | null;
+  // Lot F — bloc bobinage/appro (absent = ancien endpoint → dégradation).
+  bobinage?: BobinagePreviewOut | null;
 }
 
 export const previewDevis = (

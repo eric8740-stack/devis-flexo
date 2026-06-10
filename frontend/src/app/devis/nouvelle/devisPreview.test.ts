@@ -221,6 +221,47 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
     expect(r.geometrie.epaisseur_fallback).toBe(true);
   });
 
+  it("Lot F : parse bobinage (number|string) ; absent → null (dégradation)", () => {
+    const base: DevisPreviewOut = {
+      prix_ht: "100.00",
+      cout_revient: "70.00",
+      marge_pct: "30.00",
+      prix_1000: "10.00",
+      geometrie: {
+        diametre_mm: 250,
+        nb_poses: 8,
+        nb_filles: null,
+        dechet_lateral_mm: null,
+      },
+      decompo: [],
+      options: [],
+      alertes: [],
+    };
+    expect(parsePreview(base).bobinage).toBeNull();
+    const r = parsePreview({
+      ...base,
+      bobinage: {
+        ml_total: "412.5", // string toléré
+        m2_total: 94.9, // number toléré
+        ml_par_bobine: 2000,
+        nb_bobines: 2,
+        diametre_bobine_mm: 291,
+        diametre_mandrin_mm: 76,
+        diametre_max_presse_mm: 1100,
+        depasse_max: false,
+        nb_changements: 1,
+        temps_arret_min: 15,
+      },
+    });
+    expect(r.bobinage).toMatchObject({
+      ml_total: 412.5,
+      m2_total: 94.9,
+      nb_bobines: 2,
+      diametre_max_presse_mm: 1100,
+      depasse_max: false,
+    });
+  });
+
   it("Lot C : parse configs (numériques défensifs) + ecarts", () => {
     const wire: DevisPreviewOut = {
       prix_ht: "100.00",

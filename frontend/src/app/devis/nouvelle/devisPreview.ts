@@ -115,6 +115,34 @@ export interface DevisPreviewDecompoGroupee {
   refente: number;
 }
 
+// Lot F — bobinage/appro parsé (tout en nombres).
+export interface DevisPreviewBobinage {
+  ml_total: number;
+  m2_total: number;
+  ml_par_bobine: number;
+  nb_bobines: number;
+  diametre_bobine_mm: number;
+  diametre_mandrin_mm: number;
+  diametre_max_presse_mm: number;
+  depasse_max: boolean;
+  nb_changements: number;
+  temps_arret_min: number;
+}
+
+// Lot F — bobinage/appro parsé (tout en nombres).
+export interface DevisPreviewBobinage {
+  ml_total: number;
+  m2_total: number;
+  ml_par_bobine: number;
+  nb_bobines: number;
+  diametre_bobine_mm: number;
+  diametre_mandrin_mm: number;
+  diametre_max_presse_mm: number;
+  depasse_max: boolean;
+  nb_changements: number;
+  temps_arret_min: number;
+}
+
 export interface DevisPreviewResult {
   prix_ht: number | null; // HT brut (7 postes)
   cout_revient: number | null;
@@ -132,6 +160,8 @@ export interface DevisPreviewResult {
   remise_eur: number | null;
   prix_ht_net: number | null;
   decompo_groupee: DevisPreviewDecompoGroupee | null;
+  // Lot F — bobinage/appro (null si back F absent).
+  bobinage: DevisPreviewBobinage | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -277,6 +307,21 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
           cliches_outil: Number(out.decompo_groupee.cliches_outil),
           option_finitions: Number(out.decompo_groupee.option_finitions),
           refente: Number(out.decompo_groupee.refente),
+        }
+      : null,
+    // Lot F — bobinage/appro (parse défensif ; null si back F absent).
+    bobinage: out.bobinage
+      ? {
+          ml_total: Number(out.bobinage.ml_total),
+          m2_total: Number(out.bobinage.m2_total),
+          ml_par_bobine: Number(out.bobinage.ml_par_bobine),
+          nb_bobines: Number(out.bobinage.nb_bobines),
+          diametre_bobine_mm: Number(out.bobinage.diametre_bobine_mm),
+          diametre_mandrin_mm: Number(out.bobinage.diametre_mandrin_mm),
+          diametre_max_presse_mm: Number(out.bobinage.diametre_max_presse_mm),
+          depasse_max: Boolean(out.bobinage.depasse_max),
+          nb_changements: Number(out.bobinage.nb_changements),
+          temps_arret_min: Number(out.bobinage.temps_arret_min),
         }
       : null,
   };
