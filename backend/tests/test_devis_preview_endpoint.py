@@ -64,6 +64,7 @@ def test_preview_contrat_de_sortie():
     assert isinstance(body["configs"], list)
     assert set(body["geometrie"].keys()) == {
         "diametre_mm", "nb_poses", "nb_filles", "dechet_lateral_mm",
+        "epaisseur_utilisee_microns", "epaisseur_fallback",
     }
     assert isinstance(body["decompo"], list)
     assert isinstance(body["alertes"], list)

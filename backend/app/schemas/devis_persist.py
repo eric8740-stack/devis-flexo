@@ -425,6 +425,10 @@ class GeometriePreview(BaseModel):
     nb_poses: int | None = None
     nb_filles: int | None = None
     dechet_lateral_mm: float | None = None
+    # Lot E — épaisseur réelle utilisée pour le Ø + flag fallback (150 µm jamais
+    # silencieux : `epaisseur_fallback=True` quand la matière n'a pas d'épaisseur).
+    epaisseur_utilisee_microns: int | None = None
+    epaisseur_fallback: bool = False
 
 
 class DecompoLignePreview(BaseModel):

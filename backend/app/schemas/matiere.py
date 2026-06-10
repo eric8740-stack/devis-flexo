@@ -5,7 +5,19 @@ Exposé via GET /api/matieres pour le sélecteur du formulaire /optimisation
 """
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class MatiereEpaisseurPatch(BaseModel):
+    """Lot E — mise à jour de l'épaisseur réelle d'une matière (µm).
+
+    Permet de renseigner `epaisseur_microns` sur les matières qui l'avaient à
+    NULL (le fallback 150 µm n'est qu'un pis-aller). `None` autorisé pour
+    re-vider explicitement le champ."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    epaisseur_microns: int | None = Field(None, ge=1, le=2000)
 
 
 class MatiereOut(BaseModel):
