@@ -38,6 +38,7 @@ import {
   listCylindres,
   listMachines,
   listMatieres,
+  updateMatiereEpaisseur,
   type Client,
   type CylindreParc,
   type Machine,
@@ -121,6 +122,8 @@ export default function DevisPageUnique() {
   // Matière.
   const [matiereId, setMatiereId] = useState<number | null>(null);
   const [epaisseur, setEpaisseur] = useState("150");
+  // Lot E — enregistrement d'une épaisseur manquante au catalogue (PATCH).
+  const [savingEpaisseur, setSavingEpaisseur] = useState(false);
   // Bobinage.
   const [mandrin, setMandrin] = useState("76");
   const [diametreMax, setDiametreMax] = useState("");
@@ -466,6 +469,31 @@ export default function DevisPageUnique() {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Lot E — enregistre l'épaisseur saisie dans le catalogue matière (PATCH),
+  // puis recharge les matières → le fallback se lève et /preview recalcule.
+  const handleSaveEpaisseur = async () => {
+    const um = parseFloat(epaisseur);
+    if (matiereId === null || !(um > 0)) return;
+    setSavingEpaisseur(true);
+    try {
+      await updateMatiereEpaisseur(matiereId, { epaisseur_microns: um });
+      const mats = await listMatieres();
+      setMatieres(mats);
+      toast({
+        title: "Épaisseur enregistrée ✓",
+        description: `${um} µm ajoutés au catalogue matière.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Enregistrement impossible",
+        description: err instanceof Error ? err.message : "Erreur inconnue",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEpaisseur(false);
     }
   };
 
@@ -1004,8 +1032,18 @@ export default function DevisPageUnique() {
           </SectionCard>
         </Collapsible>
 
-        {/* ── Matière ──────────────────────────────────────────────── */}
+        {/* ── Matière (Lot E) ──────────────────────────────────────── */}
         <SectionCard title="Matière">
+          {/* Bandeau fallback épaisseur — VISIBLE (pas de tooltip survol). */}
+          {geo?.epaisseur_fallback && (
+            <div
+              data-testid="m-fallback"
+              className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            >
+              ⚠ Épaisseur inconnue — Ø estimé à 150 µm. Renseigne
+              l&apos;épaisseur ↓
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Matière *">
               <select
@@ -1031,8 +1069,32 @@ export default function DevisPageUnique() {
                 onChange={(e) => setEpaisseur(e.target.value)}
                 data-testid="m-epaisseur"
               />
+              {/* Persiste l'épaisseur saisie au catalogue (PATCH matière). */}
+              {matiereId !== null && parseFloat(epaisseur) > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSaveEpaisseur}
+                  disabled={savingEpaisseur}
+                  data-testid="m-save-epaisseur"
+                  className="mt-1 text-xs font-semibold text-[#B8431D] disabled:opacity-50"
+                >
+                  {savingEpaisseur
+                    ? "Enregistrement…"
+                    : "Enregistrer cette épaisseur au catalogue ↑"}
+                </button>
+              )}
             </Field>
           </div>
+          {/* Ø bobine en direct (depuis la géométrie /preview). */}
+          {geo?.diametre_mm != null && (
+            <p data-testid="m-diametre" className="text-sm text-muted-foreground">
+              Ø bobine estimé :{" "}
+              <strong className="text-foreground">{geo.diametre_mm} mm</strong>
+              {geo.epaisseur_utilisee_microns != null && (
+                <> · épaisseur utilisée {geo.epaisseur_utilisee_microns} µm</>
+              )}
+            </p>
+          )}
         </SectionCard>
 
         {/* ── Bobinage ─────────────────────────────────────────────── */}

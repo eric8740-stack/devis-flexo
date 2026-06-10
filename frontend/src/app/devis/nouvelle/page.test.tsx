@@ -103,6 +103,14 @@ function installFetchMock() {
     if (url.includes("/api/entreprise")) {
       return ok({ chute_laterale_min_mm: "10" });
     }
+    if (/\/api\/matieres\/\d+$/.test(url) && method === "PATCH") {
+      const body = JSON.parse((init?.body as string) ?? "{}");
+      return ok({
+        id: 1,
+        libelle: "PET",
+        epaisseur_microns: body.epaisseur_microns,
+      });
+    }
     if (url.endsWith("/api/devis/preview") && method === "POST") {
       const body = JSON.parse((init?.body as string) ?? "{}");
       const sansOutil = body.mode_sans_outil === true;
@@ -133,12 +141,17 @@ function installFetchMock() {
               nb_poses: 3,
               nb_filles: 3,
               dechet_lateral_mm: 24.0,
+              // Lot E — fallback tant qu'aucune matière n'est choisie.
+              epaisseur_utilisee_microns: Number(body.epaisseur_um) || 150,
+              epaisseur_fallback: body.matiere_id == null,
             }
           : {
               diametre_mm: 250,
               nb_poses: 12,
               nb_filles: null,
               dechet_lateral_mm: null,
+              epaisseur_utilisee_microns: Number(body.epaisseur_um) || 150,
+              epaisseur_fallback: body.matiere_id == null,
             },
         decompo: sansOutil
           ? [
@@ -349,6 +362,31 @@ describe("DevisPageUnique — page devis réactive", () => {
       expect(screen.getByTestId("hero-prix-valeur")).not.toHaveTextContent(
         "123,45",
       ),
+    );
+  });
+
+  it("Lot E : bandeau fallback épaisseur + Ø live + enregistrement catalogue (PATCH)", async () => {
+    render(<DevisPageUnique />);
+    // Aucune matière au départ → fallback épaisseur visible + Ø live affiché.
+    await waitFor(() =>
+      expect(screen.getByTestId("m-fallback")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("m-diametre")).toHaveTextContent(/250 mm/);
+    // Choisir une matière → le fallback se lève.
+    await userEvent.selectOptions(screen.getByTestId("m-matiere"), "1");
+    await waitFor(() =>
+      expect(screen.queryByTestId("m-fallback")).toBeNull(),
+    );
+    // Enregistrer l'épaisseur au catalogue → PATCH /api/matieres/1.
+    await userEvent.click(screen.getByTestId("m-save-epaisseur"));
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            /\/api\/matieres\/1$/.test(String(c[0])) &&
+            (c[1] as RequestInit)?.method === "PATCH",
+        ),
+      ).toBe(true),
     );
   });
 

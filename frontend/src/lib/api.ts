@@ -1023,6 +1023,11 @@ export interface GeometriePreviewOut {
   nb_poses: number | null;
   nb_filles: number | null;
   dechet_lateral_mm: number | null;
+  // Lot E (contrat figé) — épaisseur réellement utilisée pour le Ø + flag
+  // fallback (matière sans épaisseur → 150 µm estimé). Absents = ancien
+  // endpoint → dégradation propre (pas de bandeau, Ø depuis diametre_mm).
+  epaisseur_utilisee_microns?: number | null;
+  epaisseur_fallback?: boolean;
 }
 
 export interface DecompoLignePreviewOut {
@@ -1637,6 +1642,22 @@ export interface MatiereOut {
 
 export const listMatieres = () =>
   apiFetch<MatiereOut[]>("/api/matieres");
+
+// Lot E (contrat figé CC1+CC2) — comble une épaisseur manquante au catalogue.
+// PATCH /api/matieres/{id} body { epaisseur_microns } (aligné sur le modèle
+// `epaisseur_microns`, scopé tenant) → renvoie MatiereOut.
+export interface MatiereEpaisseurUpdate {
+  epaisseur_microns: number;
+}
+
+export const updateMatiereEpaisseur = (
+  id: number,
+  body: MatiereEpaisseurUpdate,
+) =>
+  apiFetch<MatiereOut>(`/api/matieres/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 
 // ---------------------------------------------------------------------------
 // Paramètres > Options de fabrication (CRUD tenant)
