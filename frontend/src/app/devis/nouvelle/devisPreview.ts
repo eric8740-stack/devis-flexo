@@ -61,7 +61,7 @@ export interface DevisPreviewGeometrie {
   nb_filles: number | null;
   dechet_lateral_mm: number | null;
   // Lot E — épaisseur utilisée pour le Ø + flag fallback (absents = false/null).
-  epaisseur_utilisee_um: number | null;
+  epaisseur_utilisee_microns: number | null;
   epaisseur_fallback: boolean;
 }
 
@@ -223,7 +223,8 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
       nb_poses: out.geometrie.nb_poses,
       nb_filles: out.geometrie.nb_filles,
       dechet_lateral_mm: out.geometrie.dechet_lateral_mm,
-      epaisseur_utilisee_um: out.geometrie.epaisseur_utilisee_um ?? null,
+      epaisseur_utilisee_microns:
+        out.geometrie.epaisseur_utilisee_microns ?? null,
       epaisseur_fallback: out.geometrie.epaisseur_fallback ?? false,
     },
     decompo: out.decompo.map((l) => ({

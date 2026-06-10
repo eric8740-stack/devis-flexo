@@ -1023,10 +1023,10 @@ export interface GeometriePreviewOut {
   nb_poses: number | null;
   nb_filles: number | null;
   dechet_lateral_mm: number | null;
-  // Lot E (back à venir) — épaisseur réellement utilisée pour le Ø + flag
+  // Lot E (contrat figé) — épaisseur réellement utilisée pour le Ø + flag
   // fallback (matière sans épaisseur → 150 µm estimé). Absents = ancien
   // endpoint → dégradation propre (pas de bandeau, Ø depuis diametre_mm).
-  epaisseur_utilisee_um?: number | null;
+  epaisseur_utilisee_microns?: number | null;
   epaisseur_fallback?: boolean;
 }
 
@@ -1643,11 +1643,11 @@ export interface MatiereOut {
 export const listMatieres = () =>
   apiFetch<MatiereOut[]>("/api/matieres");
 
-// Lot E (back à venir) — comble une épaisseur manquante au catalogue. ⚠️
-// Endpoint + nom du champ à CONFIRMER à l'intégration (back E pas encore
-// mergé) ; isolé ici pour un swap sans toucher l'UI.
+// Lot E (contrat figé CC1+CC2) — comble une épaisseur manquante au catalogue.
+// PATCH /api/matieres/{id} body { epaisseur_microns } (aligné sur le modèle
+// `epaisseur_microns`, scopé tenant) → renvoie MatiereOut.
 export interface MatiereEpaisseurUpdate {
-  epaisseur_um: number;
+  epaisseur_microns: number;
 }
 
 export const updateMatiereEpaisseur = (

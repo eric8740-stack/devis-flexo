@@ -105,7 +105,11 @@ function installFetchMock() {
     }
     if (/\/api\/matieres\/\d+$/.test(url) && method === "PATCH") {
       const body = JSON.parse((init?.body as string) ?? "{}");
-      return ok({ id: 1, libelle: "PET", epaisseur_microns: body.epaisseur_um });
+      return ok({
+        id: 1,
+        libelle: "PET",
+        epaisseur_microns: body.epaisseur_microns,
+      });
     }
     if (url.endsWith("/api/devis/preview") && method === "POST") {
       const body = JSON.parse((init?.body as string) ?? "{}");
@@ -138,7 +142,7 @@ function installFetchMock() {
               nb_filles: 3,
               dechet_lateral_mm: 24.0,
               // Lot E — fallback tant qu'aucune matière n'est choisie.
-              epaisseur_utilisee_um: Number(body.epaisseur_um) || 150,
+              epaisseur_utilisee_microns: Number(body.epaisseur_um) || 150,
               epaisseur_fallback: body.matiere_id == null,
             }
           : {
@@ -146,7 +150,7 @@ function installFetchMock() {
               nb_poses: 12,
               nb_filles: null,
               dechet_lateral_mm: null,
-              epaisseur_utilisee_um: Number(body.epaisseur_um) || 150,
+              epaisseur_utilisee_microns: Number(body.epaisseur_um) || 150,
               epaisseur_fallback: body.matiere_id == null,
             },
         decompo: sansOutil

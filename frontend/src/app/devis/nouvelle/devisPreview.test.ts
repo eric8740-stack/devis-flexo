@@ -195,10 +195,10 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
     expect(r.ecarts).toBeNull();
     // Lot E : champs épaisseur absents → défauts propres (false / null).
     expect(r.geometrie.epaisseur_fallback).toBe(false);
-    expect(r.geometrie.epaisseur_utilisee_um).toBeNull();
+    expect(r.geometrie.epaisseur_utilisee_microns).toBeNull();
   });
 
-  it("Lot E : parse epaisseur_utilisee_um + epaisseur_fallback quand présents", () => {
+  it("Lot E : parse epaisseur_utilisee_microns + epaisseur_fallback quand présents", () => {
     const wire: DevisPreviewOut = {
       prix_ht: "100.00",
       cout_revient: "70.00",
@@ -209,7 +209,7 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
         nb_poses: 8,
         nb_filles: null,
         dechet_lateral_mm: null,
-        epaisseur_utilisee_um: 150,
+        epaisseur_utilisee_microns: 150,
         epaisseur_fallback: true,
       },
       decompo: [],
@@ -217,7 +217,7 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
       alertes: [],
     };
     const r = parsePreview(wire);
-    expect(r.geometrie.epaisseur_utilisee_um).toBe(150);
+    expect(r.geometrie.epaisseur_utilisee_microns).toBe(150);
     expect(r.geometrie.epaisseur_fallback).toBe(true);
   });
 

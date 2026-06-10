@@ -479,7 +479,7 @@ export default function DevisPageUnique() {
     if (matiereId === null || !(um > 0)) return;
     setSavingEpaisseur(true);
     try {
-      await updateMatiereEpaisseur(matiereId, { epaisseur_um: um });
+      await updateMatiereEpaisseur(matiereId, { epaisseur_microns: um });
       const mats = await listMatieres();
       setMatieres(mats);
       toast({
@@ -1090,8 +1090,8 @@ export default function DevisPageUnique() {
             <p data-testid="m-diametre" className="text-sm text-muted-foreground">
               Ø bobine estimé :{" "}
               <strong className="text-foreground">{geo.diametre_mm} mm</strong>
-              {geo.epaisseur_utilisee_um != null && (
-                <> · épaisseur utilisée {geo.epaisseur_utilisee_um} µm</>
+              {geo.epaisseur_utilisee_microns != null && (
+                <> · épaisseur utilisée {geo.epaisseur_utilisee_microns} µm</>
               )}
             </p>
           )}
