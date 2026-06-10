@@ -10,9 +10,9 @@
 ## En-tête
 
 - **Date** : 2026-06-10
-- **Branche active** : `main` = **`3e6bae9`** (après #144 — récap docs) ; **Lot E back** en PR (matière→épaisseur→Ø).
-- **Sprint en cours** : **Chantier « configurateur page unique »** — **E back livré** (matière→épaisseur→Ø, cf. section 2026-06-10). Boucle live V0+C COMPLÈTE antérieure (cf. récap 2026-06-09). Chantiers CLOS : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1** = E back (en PR) ; **CC2** = E front (épaisseur réelle + flag fallback) une fois Railway déployé. Prochain horizon : **F** (bobinage) → **D** (calage, débloqué).
+- **Branche active** : `main` = **`2ca56de`** (après #146 — **Lot E back mergé + Railway prod déployé** ; #145 E front CC2 mergé juste avant).
+- **Sprint en cours** : **Chantier « configurateur page unique »** — **Lot E COMPLET end-to-end EN PROD** (back #146 + front #145 : matière→épaisseur→Ø, cf. section 2026-06-10). Boucle live V0+C COMPLÈTE antérieure (cf. récap 2026-06-09). Chantiers CLOS : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1 / CC2 = libres** (Lot E livré). Prochain horizon : **F** (bobinage) → **D** (calage, débloqué) ; `config_id` à étendre sur E/F.
 
 ---
 
@@ -24,7 +24,8 @@
 - **PATCH `/api/matieres/{id}`** body `{ "epaisseur_microns": int }`, scopé tenant (`get_or_404_scoped` → **404 anti-énumération**) → renvoie `MatiereOut` ; renseigne la vraie épaisseur sur les matières à NULL (élimine le fallback). **Aucune migration** (colonne `epaisseur_microns` préexistante, nullable).
 - **Contrat figé microns** (source unique CC1+CC2) : `epaisseur_microns` (DB/PATCH), `epaisseur_utilisee_microns`/`epaisseur_fallback` (sortie).
 - **Sacrés EXACTS** : V1a **1 424,31** / P0b **695,36** · `cost_engine`/`optimiser_pose`/`rotation_se`/`bat_calculs` **intouchés** (diff vide) · **Baseline = 1212/0** (+6 tests E ; 6 nouveaux `test_matiere_epaisseur_e.py`).
-- **Leçon 422** : la sortie geometrie s'enrichit (entrée requête inchangée) → **déployer Railway AVANT** le front E (CC2).
+- **Leçon 422** : la sortie geometrie s'enrichit (entrée requête inchangée) → **déployer Railway AVANT** le front E (CC2). **Sans risque ici** : le front E (#145) n'envoie aucun nouveau champ `/preview` (juste `matiere_id` déjà accepté) + dégrade proprement si back absent ; PATCH user-triggered.
+- **EN PROD** : #146 mergé → `main`=`2ca56de` → **Railway prod déployé** (vérifié : `GET /` 200 ; OpenAPI prod expose `PATCH /api/matieres/{matiere_id}` + `geometrie.epaisseur_utilisee_microns`/`epaisseur_fallback`).
 
 ---
 
@@ -41,6 +42,8 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- **#146** — feat(devis): **Lot E back — matière → épaisseur réelle → Ø** (CC1). `matiere_id` (entrée A1) → Matiere scopée tenant → `epaisseur_microns` → `bat_calculs` (SSOT lecture pure, intouché) pour le Ø. Fallback **150 µm TRACÉ** (`geometrie.epaisseur_fallback` + alerte, jamais silencieux) ; matière prime sur `epaisseur_um` explicite. Sortie `geometrie.epaisseur_utilisee_microns`/`epaisseur_fallback`. **PATCH `/api/matieres/{id}`** `{epaisseur_microns:int}` scopé tenant (404 anti-énum). Aucune migration. **Sacrés EXACTS** V1a 1 424,31 / P0b 695,36 · `cost_engine`/`optimiser_pose`/`rotation_se`/`bat_calculs` intouchés. Baseline **1212**. Railway prod OK.
+- **#145** — feat(devis): **Lot E front** (CC2) — sélecteur matière : Ø bobine live + épaisseur utilisée + bandeau fallback visible + enregistrement épaisseur au catalogue (PATCH matière). Consomme `geometrie.epaisseur_utilisee_microns`/`epaisseur_fallback` (dégradation propre si back absent), input `/preview` `epaisseur_um` (A1) inchangé.
 - **#142** — feat(devis): **Étape 2 front** — réactive l'envoi `config_id` + forçage écarts vers `/preview` (boucle live complète). (CC2.)
 - **#139** — feat(devis): **V0 front** — panneau prix live (rail sticky + marge/remise), consomme `marge_pct`/`remise_pct`/`prix_ht_net`/`decompo_groupee`. (CC2.)
 - **#140** — feat(devis): **`/preview` contrat ENTRÉE Lot C** — `DevisPreviewIn` accepte `config_id` ('cyl-mach-DxL', **fige** cylindre/machine/poses → `geometrie.nb_poses` = poses_total config) + `force_intervalle_laize`/`intervalle_laize_mm` + `nb_poses_laize_force`, threadés dans `optimiser_pose` (params existants). **Ferme le 422 à la source** (dette stopgap #137). Défauts value-neutral, cost_engine intouché. Baseline **1206**.
