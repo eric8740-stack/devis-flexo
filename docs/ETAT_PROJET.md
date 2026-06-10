@@ -9,10 +9,22 @@
 
 ## En-tête
 
-- **Date** : 2026-06-09
-- **Branche active** : `main` = **`b4ea8b2`** (après #142 — **réactivation front `config_id` + écarts ; boucle live V0+C complète**).
-- **Sprint en cours** : **Chantier « configurateur page unique »** — **boucle live V0+C COMPLÈTE end-to-end** (cf. récap 2026-06-09 ci-dessous). Tout champ de `/preview` (configs/écarts/matière/finitions/marge/remise) bouge la marge en direct. Chantiers CLOS antérieurs : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1 / CC2 = libres** (boucle V0+C livrée). Prochain horizon : **E** (matière/Ø) → **F** (bobinage) → **D** (calage, débloqué).
+- **Date** : 2026-06-10
+- **Branche active** : `main` = **`3e6bae9`** (après #144 — récap docs) ; **Lot E back** en PR (matière→épaisseur→Ø).
+- **Sprint en cours** : **Chantier « configurateur page unique »** — **E back livré** (matière→épaisseur→Ø, cf. section 2026-06-10). Boucle live V0+C COMPLÈTE antérieure (cf. récap 2026-06-09). Chantiers CLOS : « format sans outil » (#118+#121+#120), L1, L2 (sacrés re-baselinés), Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1** = E back (en PR) ; **CC2** = E front (épaisseur réelle + flag fallback) une fois Railway déployé. Prochain horizon : **F** (bobinage) → **D** (calage, débloqué).
+
+---
+
+## 2026-06-10 — Lot E back : matière → épaisseur → Ø
+
+- **Cascade** : `matiere_id` (entrée A1 existante) → Matiere **scopée tenant** → `epaisseur_microns` lue → passée à **`bat_calculs`** (SSOT **lecture pure**, intouché) pour le Ø. Aucun nouveau champ requête.
+- **Fallback 150 µm TRACÉ** (jamais silencieux) : épaisseur NULL ou matière hors périmètre → `geometrie.epaisseur_fallback=true` + **alerte** (warn/info « Ø estimé sur 150 µm »). `epaisseur_um` explicite reste accepté si pas de `matiere_id` (value-neutral) ; la **matière prime** sur l'explicite.
+- **Sortie** enrichie : `geometrie.epaisseur_utilisee_microns` (int) + `geometrie.epaisseur_fallback` (bool).
+- **PATCH `/api/matieres/{id}`** body `{ "epaisseur_microns": int }`, scopé tenant (`get_or_404_scoped` → **404 anti-énumération**) → renvoie `MatiereOut` ; renseigne la vraie épaisseur sur les matières à NULL (élimine le fallback). **Aucune migration** (colonne `epaisseur_microns` préexistante, nullable).
+- **Contrat figé microns** (source unique CC1+CC2) : `epaisseur_microns` (DB/PATCH), `epaisseur_utilisee_microns`/`epaisseur_fallback` (sortie).
+- **Sacrés EXACTS** : V1a **1 424,31** / P0b **695,36** · `cost_engine`/`optimiser_pose`/`rotation_se`/`bat_calculs` **intouchés** (diff vide) · **Baseline = 1212/0** (+6 tests E ; 6 nouveaux `test_matiere_epaisseur_e.py`).
+- **Leçon 422** : la sortie geometrie s'enrichit (entrée requête inchangée) → **déployer Railway AVANT** le front E (CC2).
 
 ---
 

@@ -717,6 +717,8 @@ def preview_devis(
         "nb_poses": None,
         "nb_filles": None,
         "dechet_lateral_mm": None,
+        "epaisseur_utilisee_microns": None,
+        "epaisseur_fallback": False,
     }
     out: dict = {
         "prix_ht": None,
@@ -1005,6 +1007,43 @@ def preview_devis(
             {"niveau": "info", "message": "Quantité manquante — coûts non chiffrés."}
         )
 
+    # === Lot E — épaisseur réelle de la matière choisie pilote le Ø ===
+    # bat_calculs reste SSOT (lecture pure). matiere_id scopé tenant ; épaisseur
+    # NULL/absente → fallback 150 µm TRACÉ (jamais silencieux). `epaisseur_um`
+    # explicite reste accepté si pas de matiere_id (rétro-compat value-neutral).
+    epaisseur_utilisee_microns: int | None = None
+    epaisseur_fallback = False
+    if p.get("matiere_id"):
+        from app.models import Matiere
+        mat = (
+            db.query(Matiere)
+            .filter_by(id=p["matiere_id"], entreprise_id=entreprise_id)
+            .first()
+        )
+        if mat is None:
+            alertes.append(
+                {"niveau": "warn", "message": "Matière introuvable/hors périmètre — Ø estimé sur 150 µm."}
+            )
+        elif mat.epaisseur_microns:
+            epaisseur_utilisee_microns = int(mat.epaisseur_microns)
+        else:
+            epaisseur_fallback = True
+            alertes.append(
+                {"niveau": "warn", "message": "Épaisseur matière inconnue — Ø estimé sur 150 µm."}
+            )
+    if epaisseur_utilisee_microns is None:
+        if p.get("epaisseur_um"):
+            epaisseur_utilisee_microns = int(p["epaisseur_um"])
+        else:
+            epaisseur_utilisee_microns = 150
+            if not epaisseur_fallback:
+                epaisseur_fallback = True
+                alertes.append(
+                    {"niveau": "info", "message": "Épaisseur inconnue — Ø estimé sur 150 µm."}
+                )
+    geometrie["epaisseur_utilisee_microns"] = epaisseur_utilisee_microns
+    geometrie["epaisseur_fallback"] = epaisseur_fallback
+
     # === Géométrie : Ø (bat_calculs), nb_poses, nb_filles, déchet ===
     if devis_input is not None:
         laize_pap = (
@@ -1015,7 +1054,7 @@ def preview_devis(
         try:
             geometrie["diametre_mm"] = calcul_diametre_bobine(
                 devis_input.ml_total,
-                p.get("epaisseur_um") or 150,
+                epaisseur_utilisee_microns,
                 p.get("mandrin_mm") or 76,
                 laize_pap,
             )
