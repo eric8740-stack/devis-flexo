@@ -25,6 +25,8 @@ const NAV_ITEMS = [
   { href: "/fournisseurs", label: "Fournisseurs" },
   // Sprint 2
   { href: "/machines", label: "Machines" },
+  // Stock S1 — inventaire bobines (matière/laize/emplacement/ml restant).
+  { href: "/stock", label: "Stock" },
   { href: "/operations-finition", label: "Op. finition" },
   { href: "/partenaires-st", label: "Partenaires ST" },
   // "Charges" retiré de la nav — désormais géré dans Stratégique (7e onglet,
