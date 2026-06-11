@@ -730,6 +730,7 @@ def preview_devis(
         "prix_ht_net": None,
         "decompo_groupee": None,
         "geometrie": geometrie,
+        "bobinage": None,
         "decompo": [],
         "options": [],
         "alertes": alertes,
@@ -1059,6 +1060,62 @@ def preview_devis(
                 laize_pap,
             )
         except (ValueError, ArithmeticError):
+            pass
+
+        # === Lot F — bobinage + appro matière (géométrie/appro, LECTURE seule) ===
+        # ml_total = métrage matière du moteur (celui du coût P1), JAMAIS recalculé.
+        # Tout en lecture : bat_calculs (Ø d'UNE bobine livrée) + colonnes config.
+        # temps_arret_min AFFICHÉ, PAS facturé (cost_engine intouché).
+        try:
+            ml_total = float(devis_input.ml_total)
+            if ml_total > 0:
+                from app.models import Entreprise
+
+                entreprise = db.get(Entreprise, entreprise_id)
+                ml_par_bobine = int(
+                    p.get("ml_par_bobine")
+                    or (entreprise.ml_par_bobine_defaut if entreprise else 2000)
+                )
+                diametre_mandrin_mm = int(p.get("diametre_mandrin_mm") or 76)
+                diametre_max_presse_mm = int(
+                    machine.diametre_max_bobine_mm if machine is not None else 1100
+                )
+                temps_changement_bobine_min = int(
+                    machine.temps_changement_bobine_min if machine is not None else 15
+                )
+
+                nb_bobines = max(1, math.ceil(ml_total / ml_par_bobine))
+                diametre_bobine_mm = calcul_diametre_bobine(
+                    min(ml_total, ml_par_bobine),
+                    epaisseur_utilisee_microns,
+                    diametre_mandrin_mm,
+                    laize_pap,
+                )
+                nb_changements = max(0, nb_bobines - 1)
+                depasse_max = diametre_bobine_mm > diametre_max_presse_mm
+                if depasse_max:
+                    alertes.append(
+                        {
+                            "niveau": "warn",
+                            "message": (
+                                f"Ø bobine {diametre_bobine_mm} mm > Ø max presse "
+                                f"{diametre_max_presse_mm} mm — réduire ml/bobine."
+                            ),
+                        }
+                    )
+                out["bobinage"] = {
+                    "ml_total": round(ml_total, 1),
+                    "m2_total": round(ml_total * laize_pap / 1000, 2),
+                    "ml_par_bobine": ml_par_bobine,
+                    "nb_bobines": nb_bobines,
+                    "diametre_bobine_mm": diametre_bobine_mm,
+                    "diametre_mandrin_mm": diametre_mandrin_mm,
+                    "diametre_max_presse_mm": diametre_max_presse_mm,
+                    "depasse_max": depasse_max,
+                    "nb_changements": nb_changements,
+                    "temps_arret_min": nb_changements * temps_changement_bobine_min,
+                }
+        except (ValueError, ArithmeticError, ZeroDivisionError):
             pass
 
     if mode_sans_outil:

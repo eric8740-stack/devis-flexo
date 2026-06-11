@@ -42,6 +42,14 @@ class Entreprise(Base):
         Numeric(5, 2), nullable=False, default=Decimal("2.50")
     )
 
+    # Lot F — mode de livraison bobine par défaut (ml de matière par bobine
+    # livrée). Sert au bloc bobinage/appro de /preview (géométrie seule, AUCUN
+    # chiffrage). 2000 = standard ; 1000/4000 selon le client, surchargeable par
+    # requête (`ml_par_bobine`) ou via Paramètres > Entreprise.
+    ml_par_bobine_defaut: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=2000, server_default="2000"
+    )
+
     # Sprint 12 multi-tenant : flag pour identifier le compte démo Eric
     # (qui hérite des 148 records seedés). Les nouvelles entreprises créées
     # via inscription ont is_demo=False et démarrent avec un espace vierge.
