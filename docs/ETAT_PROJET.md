@@ -10,9 +10,23 @@
 ## En-tête
 
 - **Date** : 2026-06-11
-- **Branche active** : `feat/S2-back-stock-mouvements` (depuis `main`=`b560d17`) — **Module Stock S2 back implémenté, tests verts (1234/0), en attente validation Eric pour push**. `main` = `b560d17` (Stock S1 COMPLET end-to-end : back #150 + front #149).
-- **Sprint en cours** : **Module Stock (option B, granularité A)** — **S2 back** (mouvements : journal d'audit + ajustement transactionnel `ml_restant`, cf. section 2026-06-11 · Stock S2). Stock S1 COMPLET EN PROD (#150 back + #149 front). Lot F COMPLET EN PROD (#147 + #148). Lot E COMPLET EN PROD (#146 + #145). Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1** = Stock S2 back (prêt à pousser) ; **CC2** = Stock S2 front (mouvements entree/sortie/inventaire + historique bobine) une fois Railway déployé. Découpage Stock : S1 modèle+CRUD ✅ → **S2 mouvements** → **S3** lien devis↔stock, **puis D** (calage). Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Branche active** : `feat/S3-back-stock-lien-devis` (depuis `main`=`7e32c03`) — **Module Stock S3 back implémenté (+ amendement gap #4), tests verts (1244/0), en attente validation Eric pour push**. `main` = `7e32c03` (Stock S2 COMPLET end-to-end : back #151 + front S2).
+- **Sprint en cours** : **Module Stock (option B, granularité A)** — **S3 back** (lien devis↔stock : proposition FIFO + consommer/annuler via `MouvementStock`, cf. section 2026-06-11 · Stock S3). Stock S2 COMPLET EN PROD (#151 + front). Stock S1 COMPLET EN PROD (#150 + #149). Lots F/E COMPLETS EN PROD. Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1** = Stock S3 back (prêt à pousser) ; **CC2** = Stock S3 front (action « Consommer le stock » sur un devis : proposition FIFO ajustable + annulation) une fois Railway déployé. Découpage Stock : S1 ✅ → S2 ✅ → **S3 lien devis↔stock** → **puis D** (calage). Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-06-11 · Stock S3 back — lien devis↔stock (proposition FIFO + consommer/annuler)
+
+- **Module ADDITIF strict** : `cost_engine` / `bat_calculs` / `optimiser_pose` / `/preview` / **chiffrage devis** INTOUCHÉS (diff vide). **Modèle Devis INTOUCHÉ**, **AUCUNE migration** (réutilise `MouvementStock.devis_id`).
+- **`ml_requis` lu en LECTURE** depuis le moteur : `besoin_consommation` somme `devis_input.ml_total` par lot (= `bobinage.ml_total` du Lot F) via `_construire_devis_input_pour_lot` (réutilisé, non modifié). Devis n'a pas de `matiere_id` direct → matière/laize lues depuis ses `LotProduction`.
+- **`GET /api/devis/{id}/proposition-consommation`** → `{ ml_requis, lignes[{bobine_id, emplacement, laize_mm, ml_restant, ml_propose}], stock_suffisant, manque_ml }`. **FIFO** : `matiere_id` du devis + `laize_mm >= laize_requise`, `statut=en_stock`, `ml_restant>0`, tri `date_creation` asc (= date de réception en stock), allocation gloutonne. Insuffisance = **non bloquante** (`stock_suffisant=false` + `manque_ml`).
+- **`POST /api/devis/{id}/consommer`** `{ lignes:[{bobine_id, ml}] }` → 1 mouvement `sortie` (devis_id) par ligne + décrément `ml_restant`. **ATOMIQUE** : toutes les lignes validées AVANT écriture → **409 « stock insuffisant »** si une ligne dépasse, aucun effet partiel. Renvoie `{ mouvements, bobines }`.
+- **`POST /api/devis/{id}/annuler-consommation`** → mouvement `entree` inverse du **net** encore consommé par ce devis (Σsortie − Σentrée par bobine), ré-incrémente `ml_restant`. **Idempotent** (2ᵉ appel = no-op).
+- **Guard DELETE bobine (S1)** : une bobine avec historique de mouvements → **409 « bobine avec historique »** (la traçabilité prime). Seule modif d'un endpoint existant (stricte, non breaking).
+- **« Déjà consommé »** déduit des mouvements `sortie` portant `devis_id` (pas de flag sur Devis). **Amendement gap #4** : la proposition expose `deja_consomme` (bool), `consomme_ml` (NET = Σsortie−Σannulation), `mouvements` (du devis) → le front affiche « consommé + Annuler » au lieu de la proposition. **`POST consommer` refuse si déjà consommé → 409 « devis déjà consommé »** (garde back contre double conso, indépendante du front). Filtre `GET /api/mouvements?devis_id=` ajouté.
+- **Sacrés EXACTS** : V1a **1 424,31** / P0b **695,36** · **Baseline = 1244/0** (+10 tests S3 ; `test_stock_consommation_s3.py`).
+- **Leçon 422** : API **nouvelle** → **déployer Railway AVANT** le front S3 (CC2). **Suite : D (calage).**
 
 ---
 
@@ -80,7 +94,8 @@
 
 ## PRs récemment mergées (10 dernières)
 
-- **(en attente push) Stock S2 back** — feat(stock): **`MouvementStock` + endpoints mouvements** (CC1). Journal d'audit append-only, ajustement TRANSACTIONNEL de `ml_restant` (entree/sortie/inventaire), sortie insuffisante → 409, module ADDITIF (cost_engine/devis/preview intouchés). Migration `e6f8a0b2c4d6` (create_table natif). PATCH ml_restant S1 déprécié (sans casse). Baseline **1234**.
+- **(en attente push) Stock S3 back** — feat(stock): **lien devis↔stock** (CC1). `GET proposition-consommation` (FIFO + `deja_consomme`/`consomme_ml`/`mouvements`), `POST consommer` (mouvements sortie devis_id, atomique 409, **refus si déjà consommé**), `POST annuler-consommation` (entree inverse idempotente), guard DELETE bobine 409, filtre `GET /api/mouvements?devis_id=`. Modèle Devis intouché, **aucune migration** (réutilise `MouvementStock.devis_id`), chiffrage devis intouché. Baseline **1244**.
+- **(mergé) Stock S2 back** — feat(stock): **`MouvementStock` + endpoints mouvements** (CC1). Journal d'audit append-only, ajustement TRANSACTIONNEL de `ml_restant` (entree/sortie/inventaire), sortie insuffisante → 409, module ADDITIF (cost_engine/devis/preview intouchés). Migration `e6f8a0b2c4d6` (create_table natif). PATCH ml_restant S1 déprécié (sans casse). Baseline **1234**.
 - **#150** — feat(stock): **Stock S1 back** — modèle `Bobine` + CRUD `/api/bobines` (CC1). Module ADDITIF, granularité A, emplacement `A.0.25`, multi-tenant strict, epaisseur pré-remplie. Migration `d5e7f9a1b3c5`. Baseline **1227**. → **Stock S1 COMPLET EN PROD** (+ front #149).
 - **#149** — feat(stock): **Stock S1 front** (CC2) — page `/stock` CRUD bobines + inventaire (emplacement A.0.25), consomme `/api/bobines`. Module ADDITIF (cost_engine/devis/preview intouchés), granularité A (1 ligne = 1 bobine physique), emplacement calculé `A.0.25`, multi-tenant strict (404 anti-énum), epaisseur pré-remplie depuis la matière. Migration `d5e7f9a1b3c5` (create_table natif). Baseline **1227**.
 - **#148** — feat(devis): **F front** (CC2) — réactive `ml_par_bobine` + `diametre_mandrin_mm` vers `/preview` (le réglage ml/bobine + Ø mandrin bougent nb_bobines/Ø en direct). → **Lot F COMPLET end-to-end EN PROD**.

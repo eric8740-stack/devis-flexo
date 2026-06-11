@@ -9,12 +9,12 @@ existant modifié, aucune lecture par le cost_engine / bat_calculs / optimiser_p
 hors périmètre) et `epaisseur_microns` est pré-rempli depuis la matière si non
 fourni. `ml_restant` initial = `ml_initial`.
 """
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_current_user
-from app.models import Bobine, Matiere, User
+from app.models import Bobine, Matiere, MouvementStock, User
 from app.schemas.bobine import BobineCreate, BobineOut, BobineUpdate
 from app.services.scope_service import get_or_404_scoped, scope_to_entreprise
 
@@ -108,9 +108,23 @@ def delete_bobine(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    """Supprime une bobine (scopé tenant). Suppression dure : en S1 la bobine
-    n'a pas d'enfants (les mouvements arrivent en S2)."""
+    """Supprime une bobine (scopé tenant).
+
+    Guard S3 : une bobine ayant un historique de mouvements ne peut pas être
+    supprimée (409) — la traçabilité du stock prime. Inventorier/solder via un
+    mouvement plutôt que supprimer."""
     bobine = get_or_404_scoped(db, Bobine, bobine_id, user)
+    a_des_mouvements = (
+        db.query(MouvementStock.id)
+        .filter(MouvementStock.bobine_id == bobine.id)
+        .first()
+        is not None
+    )
+    if a_des_mouvements:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bobine avec historique de mouvements — suppression interdite.",
+        )
     db.delete(bobine)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
