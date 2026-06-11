@@ -58,7 +58,7 @@ def test_preview_contrat_de_sortie():
     assert set(body.keys()) == {
         "prix_ht", "cout_revient", "marge_pct", "prix_1000",
         "remise_pct", "remise_eur", "prix_ht_net", "decompo_groupee",
-        "geometrie", "decompo", "options", "configs", "ecarts", "alertes",
+        "geometrie", "bobinage", "decompo", "options", "configs", "ecarts", "alertes",
     }
     assert isinstance(body["options"], list)
     assert isinstance(body["configs"], list)

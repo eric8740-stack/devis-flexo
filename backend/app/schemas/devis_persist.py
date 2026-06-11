@@ -389,6 +389,10 @@ class DevisPreviewIn(BaseModel):
     epaisseur_um: int | None = Field(None, gt=0)
     mandrin_mm: int | None = Field(None, gt=0)
     diam_max_mm: int | None = Field(None, gt=0)
+    # Lot F — bobinage/appro (overrides, sinon défauts config). `ml_par_bobine`
+    # → sinon Entreprise.ml_par_bobine_defaut ; `diametre_mandrin_mm` → défaut 76.
+    ml_par_bobine: int | None = Field(None, gt=0)
+    diametre_mandrin_mm: int | None = Field(None, gt=0)
     nb_filles_force: int | None = Field(None, ge=1)
     mode_sans_outil: bool = False
     laize_stock_mm: float | None = Field(None, gt=0)
@@ -429,6 +433,29 @@ class GeometriePreview(BaseModel):
     # silencieux : `epaisseur_fallback=True` quand la matière n'a pas d'épaisseur).
     epaisseur_utilisee_microns: int | None = None
     epaisseur_fallback: bool = False
+
+
+class BobinagePreview(BaseModel):
+    """Lot F — bobinage + appro matière (géométrie/appro, AUCUN chiffrage).
+
+    Convention bobine métier : laize × Ø × mandrin – longueur. `temps_arret_min`
+    est AFFICHÉ (indicatif), JAMAIS facturé (la facturation du temps d'arrêt est
+    un lot dédié ultérieur qui touchera le cost_engine). `None` quand l'état est
+    trop partiel (pas de métrage matière) → dégradation propre côté front.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ml_total: float
+    m2_total: float
+    ml_par_bobine: int
+    nb_bobines: int
+    diametre_bobine_mm: int
+    diametre_mandrin_mm: int
+    diametre_max_presse_mm: int
+    depasse_max: bool
+    nb_changements: int
+    temps_arret_min: int
 
 
 class DecompoLignePreview(BaseModel):
@@ -530,6 +557,9 @@ class DevisPreviewOut(BaseModel):
     # V0 — décompo coût regroupée (5 lignes métier), en plus de `decompo` plate.
     decompo_groupee: DecompoGroupee | None = None
     geometrie: GeometriePreview
+    # Lot F — bobinage + appro matière (géométrie/appro, AUCUN chiffrage). None
+    # quand l'état est trop partiel pour un métrage matière.
+    bobinage: BobinagePreview | None = None
     decompo: list[DecompoLignePreview] = Field(default_factory=list)
     # Impact marginal serveur de chaque levier activable (finition, +1 couleur).
     options: list[OptionDeltaPreview] = Field(default_factory=list)

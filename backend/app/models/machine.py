@@ -92,6 +92,17 @@ class Machine(Base):
         String(20), nullable=False, default="presse", server_default="presse"
     )
 
+    # Lot F — paramètres bobinage (bloc géométrie/appro de /preview, AUCUN
+    # chiffrage). Ø max de bobine admissible sur la presse (alerte `depasse_max`
+    # si le Ø calculé le dépasse) + durée d'un changement de bobine (temps d'arrêt
+    # AFFICHÉ, jamais facturé ici — la facturation est un lot dédié ultérieur).
+    diametre_max_bobine_mm: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1100, server_default="1100"
+    )
+    temps_changement_bobine_min: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=15, server_default="15"
+    )
+
     commentaire: Mapped[str | None] = mapped_column(Text)
 
     date_creation: Mapped[datetime] = mapped_column(
