@@ -1755,6 +1755,58 @@ export const updateBobine = (id: number, data: BobineUpdate) =>
 export const deleteBobine = (id: number) =>
   apiFetch<void>(`/api/bobines/${id}`, { method: "DELETE" });
 
+// ── Mouvements de stock — S2 (contrat figé). L'ajustement de ml_restant passe
+// désormais par un mouvement (le PATCH ml_restant est déprécié). ────────────
+
+export type MouvementType = "entree" | "sortie" | "inventaire";
+
+export interface MouvementOut {
+  id: number;
+  bobine_id: number;
+  type: MouvementType;
+  ml: number;
+  date: string; // datetime ISO
+  motif: string | null;
+  reference: string | null;
+  devis_id: number | null;
+}
+
+export interface MouvementCreate {
+  type: MouvementType;
+  ml: number;
+  motif?: string | null;
+  reference?: string | null;
+}
+
+// POST renvoie le mouvement créé + la bobine à jour (ml_restant recalculé).
+export interface MouvementResult {
+  mouvement: MouvementOut;
+  bobine: BobineOut;
+}
+
+// Sortie > ml_restant → ApiError status 409 « stock insuffisant ».
+export const createMouvement = (bobineId: number, body: MouvementCreate) =>
+  apiFetch<MouvementResult>(`/api/bobines/${bobineId}/mouvements`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const listMouvementsBobine = (bobineId: number) =>
+  apiFetch<MouvementOut[]>(`/api/bobines/${bobineId}/mouvements`);
+
+export interface ListMouvementsParams {
+  type?: MouvementType;
+  bobine_id?: number;
+}
+
+export const listMouvements = (params: ListMouvementsParams = {}) => {
+  const qs = new URLSearchParams();
+  if (params.type) qs.set("type", params.type);
+  if (params.bobine_id != null) qs.set("bobine_id", String(params.bobine_id));
+  const suffix = qs.toString();
+  return apiFetch<MouvementOut[]>(`/api/mouvements${suffix ? `?${suffix}` : ""}`);
+};
+
 // ---------------------------------------------------------------------------
 // Paramètres > Options de fabrication (CRUD tenant)
 // ---------------------------------------------------------------------------
