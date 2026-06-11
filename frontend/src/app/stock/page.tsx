@@ -9,7 +9,14 @@
  *
  * Hors S1 : mouvements auto (S2), lien devis↔stock (S3).
  */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,15 +29,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
+  ApiError,
   createBobine,
+  createMouvement,
   deleteBobine,
   listBobines,
   listMatieres,
+  listMouvementsBobine,
   updateBobine,
   type BobineCreate,
   type BobineOut,
   type BobineStatut,
   type MatiereOut,
+  type MouvementOut,
+  type MouvementType,
 } from "@/lib/api";
 
 const STATUTS: { value: BobineStatut; label: string }[] = [
@@ -45,6 +57,19 @@ const STATUT_CLASS: Record<BobineStatut, string> = {
   en_stock: "bg-emerald-100 text-emerald-800",
   reservee: "bg-amber-100 text-amber-800",
   consommee: "bg-muted text-muted-foreground",
+};
+
+// S2 — mouvements de stock.
+const MVT_LABELS: Record<MouvementType, string> = {
+  entree: "Entrée",
+  sortie: "Sortie",
+  inventaire: "Ajuster (inventaire)",
+};
+// Libellé du champ ml selon le type (entrée/sortie = delta ; inventaire = cible).
+const MVT_ML_LABEL: Record<MouvementType, string> = {
+  entree: "ml à ajouter",
+  sortie: "ml à sortir",
+  inventaire: "nouveau ml restant",
 };
 
 interface FormState {
@@ -114,6 +139,19 @@ export default function StockPage() {
 
   // Suppression confirmée.
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  // S2 — mouvement (modal) + historique par bobine.
+  const [mvt, setMvt] = useState<{
+    bobineId: number;
+    type: MouvementType;
+  } | null>(null);
+  const [mvtMl, setMvtMl] = useState("");
+  const [mvtMotif, setMvtMotif] = useState("");
+  const [mvtReference, setMvtReference] = useState("");
+  const [mvtSubmitting, setMvtSubmitting] = useState(false);
+  const [historyOf, setHistoryOf] = useState<number | null>(null);
+  const [history, setHistory] = useState<MouvementOut[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const matiereById = useMemo(
     () => new Map(matieres.map((m) => [m.id, m])),
@@ -220,7 +258,18 @@ export default function StockPage() {
     setSubmitting(true);
     try {
       if (editingId !== null) {
-        await updateBobine(editingId, payload);
+        // S2 — figés en édition : matiere_id / ml_initial / ml_restant (ce
+        // dernier s'ajuste via un mouvement « inventaire », plus par PATCH).
+        const {
+          matiere_id: _m,
+          ml_initial: _i,
+          ml_restant: _r,
+          ...editable
+        } = payload;
+        void _m;
+        void _i;
+        void _r;
+        await updateBobine(editingId, editable);
         toast({ title: "Bobine modifiée ✓" });
       } else {
         await createBobine(payload);
@@ -254,6 +303,74 @@ export default function StockPage() {
     }
   };
 
+  // S2 — ouvre le modal mouvement (entrée / sortie / inventaire).
+  const openMvt = (bobineId: number, type: MouvementType) => {
+    setMvt({ bobineId, type });
+    setMvtMl("");
+    setMvtMotif("");
+    setMvtReference("");
+  };
+
+  const submitMvt = async (e: FormEvent) => {
+    e.preventDefault();
+    if (mvt === null) return;
+    const ml = parseFloat(mvtMl);
+    if (!(ml > 0)) return;
+    setMvtSubmitting(true);
+    try {
+      const res = await createMouvement(mvt.bobineId, {
+        type: mvt.type,
+        ml,
+        motif: mvtMotif.trim() || null,
+        reference: mvtReference.trim() || null,
+      });
+      // Remplace la bobine par sa version à jour (ml_restant recalculé back).
+      setBobines((list) =>
+        list.map((b) => (b.id === res.bobine.id ? res.bobine : b)),
+      );
+      setMvt(null);
+      toast({ title: `${MVT_LABELS[res.mouvement.type]} enregistrée ✓` });
+      // Historique ouvert sur cette bobine → recharge.
+      if (historyOf === mvt.bobineId) await loadHistory(mvt.bobineId);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast({
+          title: "Stock insuffisant",
+          description: "La sortie dépasse le ml restant de la bobine.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Mouvement impossible",
+          description: err instanceof Error ? err.message : "Erreur inconnue",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setMvtSubmitting(false);
+    }
+  };
+
+  const loadHistory = async (bobineId: number) => {
+    setHistoryLoading(true);
+    try {
+      setHistory(await listMouvementsBobine(bobineId));
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const toggleHistory = async (bobineId: number) => {
+    if (historyOf === bobineId) {
+      setHistoryOf(null);
+      return;
+    }
+    setHistoryOf(bobineId);
+    await loadHistory(bobineId);
+  };
+
   // Rangées présentes (pour le filtre).
   const rangees = useMemo(
     () => Array.from(new Set(bobines.map((b) => b.rangee))).sort(),
@@ -270,7 +387,7 @@ export default function StockPage() {
             </h1>
             <p className="text-sm text-muted-foreground">
               Emplacement = rangée.étage.position (ex. A.0.25). ml restant
-              éditable à la main.
+              ajusté par mouvement (Entrée / Sortie / Ajuster).
             </p>
           </div>
           <Button
@@ -360,6 +477,7 @@ export default function StockPage() {
                     className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={form.matiere_id}
                     onChange={(e) => onFormMatiere(e.target.value)}
+                    disabled={editingId !== null}
                     data-testid="f-matiere"
                     aria-label="Matière"
                   >
@@ -404,10 +522,17 @@ export default function StockPage() {
                     onChange={(e) =>
                       setForm((f) => ({ ...f, ml_initial: e.target.value }))
                     }
+                    disabled={editingId !== null}
                     data-testid="f-ml-initial"
                   />
                 </Field>
-                <Field label="ml restant (éditable)">
+                <Field
+                  label={
+                    editingId !== null
+                      ? "ml restant (via mouvement)"
+                      : "ml restant"
+                  }
+                >
                   <Input
                     type="number"
                     min={0}
@@ -416,8 +541,15 @@ export default function StockPage() {
                       setForm((f) => ({ ...f, ml_restant: e.target.value }))
                     }
                     placeholder="défaut = ml initial"
+                    disabled={editingId !== null}
                     data-testid="f-ml-restant"
                   />
+                  {editingId !== null && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Ajuste le stock via « Entrée / Sortie / Ajuster » sur la
+                      ligne.
+                    </p>
+                  )}
                 </Field>
                 <Field label="Statut">
                   <select
@@ -553,81 +685,166 @@ export default function StockPage() {
                       <th className="p-3">Emplacement</th>
                       <th className="p-3">ml restant</th>
                       <th className="p-3">Statut</th>
-                      <th className="p-3"></th>
+                      <th className="p-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {bobines.map((b) => (
-                      <tr
-                        key={b.id}
-                        data-testid={`stock-row-${b.id}`}
-                        className="border-b border-border"
-                      >
-                        <td className="p-3">{matiereLibelle(b.matiere_id)}</td>
-                        <td className="p-3">{b.laize_mm} mm</td>
-                        <td className="p-3 font-mono">
-                          {b.emplacement ||
-                            `${b.rangee}.${b.etage}.${b.position}`}
-                        </td>
-                        <td className="p-3">
-                          {b.ml_restant.toLocaleString("fr-FR", {
-                            maximumFractionDigits: 0,
-                          })}{" "}
-                          ml
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={
-                              "rounded px-2 py-0.5 text-xs font-medium " +
-                              STATUT_CLASS[b.statut]
-                            }
-                          >
-                            {statutLabel(b.statut)}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          {confirmDeleteId === b.id ? (
-                            <span className="inline-flex items-center gap-2 text-xs">
-                              Supprimer ?
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(b.id)}
-                                data-testid={`del-confirm-${b.id}`}
-                                className="font-semibold text-red-600"
-                              >
-                                Oui
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDeleteId(null)}
-                                className="text-muted-foreground"
-                              >
-                                Non
-                              </button>
+                      <Fragment key={b.id}>
+                        <tr
+                          data-testid={`stock-row-${b.id}`}
+                          className="border-b border-border"
+                        >
+                          <td className="p-3">
+                            {matiereLibelle(b.matiere_id)}
+                          </td>
+                          <td className="p-3">{b.laize_mm} mm</td>
+                          <td className="p-3 font-mono">
+                            {b.emplacement ||
+                              `${b.rangee}.${b.etage}.${b.position}`}
+                          </td>
+                          <td className="p-3" data-testid={`ml-restant-${b.id}`}>
+                            {b.ml_restant.toLocaleString("fr-FR", {
+                              maximumFractionDigits: 0,
+                            })}{" "}
+                            ml
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={
+                                "rounded px-2 py-0.5 text-xs font-medium " +
+                                STATUT_CLASS[b.statut]
+                              }
+                            >
+                              {statutLabel(b.statut)}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-3">
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => openMvt(b.id, "entree")}
+                                data-testid={`mvt-entree-${b.id}`}
+                                className="rounded border border-emerald-300 px-2 py-1 font-medium text-emerald-800 hover:bg-emerald-50"
+                              >
+                                Entrée
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openMvt(b.id, "sortie")}
+                                data-testid={`mvt-sortie-${b.id}`}
+                                className="rounded border border-amber-300 px-2 py-1 font-medium text-amber-800 hover:bg-amber-50"
+                              >
+                                Sortie
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openMvt(b.id, "inventaire")}
+                                data-testid={`mvt-ajuster-${b.id}`}
+                                className="rounded border border-border px-2 py-1 font-medium hover:bg-muted/50"
+                              >
+                                Ajuster
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleHistory(b.id)}
+                                data-testid={`hist-${b.id}`}
+                                aria-expanded={
+                                  historyOf === b.id ? "true" : "false"
+                                }
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                Historique
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => openEdit(b)}
                                 data-testid={`edit-${b.id}`}
-                                className="text-xs font-semibold text-[#B8431D]"
+                                className="font-semibold text-[#B8431D]"
                               >
                                 Éditer
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDeleteId(b.id)}
-                                data-testid={`del-${b.id}`}
-                                className="text-xs text-muted-foreground hover:text-red-600"
-                                aria-label="Supprimer"
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
+                              {confirmDeleteId === b.id ? (
+                                <span className="inline-flex items-center gap-2">
+                                  Supprimer ?
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(b.id)}
+                                    data-testid={`del-confirm-${b.id}`}
+                                    className="font-semibold text-red-600"
+                                  >
+                                    Oui
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    className="text-muted-foreground"
+                                  >
+                                    Non
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(b.id)}
+                                  data-testid={`del-${b.id}`}
+                                  className="text-muted-foreground hover:text-red-600"
+                                  aria-label="Supprimer"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {historyOf === b.id && (
+                          <tr
+                            data-testid={`hist-row-${b.id}`}
+                            className="border-b border-border bg-muted/30"
+                          >
+                            <td colSpan={6} className="p-3">
+                              <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                Historique des mouvements
+                              </p>
+                              {historyLoading ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Chargement…
+                                </p>
+                              ) : history.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Aucun mouvement enregistré.
+                                </p>
+                              ) : (
+                                <ul className="space-y-1 text-xs">
+                                  {history.map((m) => (
+                                    <li
+                                      key={m.id}
+                                      className="flex flex-wrap gap-x-3"
+                                    >
+                                      <span className="font-semibold">
+                                        {MVT_LABELS[m.type]}
+                                      </span>
+                                      <span className="font-mono">
+                                        {m.ml} ml
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {new Date(m.date).toLocaleString(
+                                          "fr-FR",
+                                        )}
+                                      </span>
+                                      {m.motif && (
+                                        <span className="text-muted-foreground">
+                                          · {m.motif}
+                                        </span>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -635,6 +852,73 @@ export default function StockPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* ── Modal mouvement (entrée / sortie / inventaire) ────────── */}
+        {mvt && (
+          <div
+            data-testid="mvt-modal"
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          >
+            <Card className="w-full max-w-md border-[#E85D2F]/30 bg-white shadow-lg">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  {MVT_LABELS[mvt.type]} — bobine #{mvt.bobineId}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={submitMvt} className="space-y-3">
+                  <Field label={`${MVT_ML_LABEL[mvt.type]} *`}>
+                    <Input
+                      type="number"
+                      min={0.1}
+                      step="0.1"
+                      value={mvtMl}
+                      onChange={(e) => setMvtMl(e.target.value)}
+                      data-testid="mvt-ml"
+                      autoFocus
+                    />
+                  </Field>
+                  <Field label="Motif">
+                    <Input
+                      value={mvtMotif}
+                      onChange={(e) => setMvtMotif(e.target.value)}
+                      placeholder="optionnel"
+                      data-testid="mvt-motif"
+                    />
+                  </Field>
+                  <Field label="Référence">
+                    <Input
+                      value={mvtReference}
+                      onChange={(e) => setMvtReference(e.target.value)}
+                      placeholder="optionnel"
+                      data-testid="mvt-reference"
+                    />
+                  </Field>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      type="submit"
+                      disabled={!(parseFloat(mvtMl) > 0) || mvtSubmitting}
+                      data-testid="mvt-submit"
+                      className="bg-[#E85D2F] text-white hover:bg-[#d24f24] disabled:opacity-50"
+                    >
+                      {mvtSubmitting ? "Enregistrement…" : "Valider"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setMvt(null)}
+                      data-testid="mvt-cancel"
+                    >
+                      Annuler
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </main>
   );
