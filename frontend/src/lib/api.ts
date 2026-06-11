@@ -1682,6 +1682,80 @@ export const updateMatiereEpaisseur = (
   });
 
 // ---------------------------------------------------------------------------
+// Stock / inventaire bobines — S1 (contrat figé CC1+CC2). CRUD scopé tenant.
+// ---------------------------------------------------------------------------
+
+export type BobineStatut = "en_stock" | "reservee" | "consommee";
+
+export interface BobineOut {
+  id: number;
+  matiere_id: number;
+  laize_mm: number;
+  epaisseur_microns: number;
+  ml_initial: number;
+  ml_restant: number;
+  rangee: string;
+  etage: number;
+  position: number;
+  statut: BobineStatut;
+  date_reception: string | null;
+  fournisseur: string | null;
+  reference_lot: string | null;
+  // Propriété calculée back : "{rangee}.{etage}.{position}" (ex. "A.0.25").
+  emplacement: string;
+}
+
+export interface BobineCreate {
+  matiere_id: number;
+  laize_mm: number;
+  epaisseur_microns: number;
+  ml_initial: number;
+  ml_restant: number;
+  rangee: string;
+  etage: number;
+  position: number;
+  statut?: BobineStatut;
+  date_reception?: string | null;
+  fournisseur?: string | null;
+  reference_lot?: string | null;
+}
+
+export type BobineUpdate = Partial<BobineCreate>;
+
+export interface ListBobinesParams {
+  matiere_id?: number;
+  rangee?: string;
+  statut?: BobineStatut;
+}
+
+export const listBobines = (params: ListBobinesParams = {}) => {
+  const qs = new URLSearchParams();
+  if (params.matiere_id != null) qs.set("matiere_id", String(params.matiere_id));
+  if (params.rangee) qs.set("rangee", params.rangee);
+  if (params.statut) qs.set("statut", params.statut);
+  const suffix = qs.toString();
+  return apiFetch<BobineOut[]>(`/api/bobines${suffix ? `?${suffix}` : ""}`);
+};
+
+export const getBobine = (id: number) =>
+  apiFetch<BobineOut>(`/api/bobines/${id}`);
+
+export const createBobine = (data: BobineCreate) =>
+  apiFetch<BobineOut>("/api/bobines", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const updateBobine = (id: number, data: BobineUpdate) =>
+  apiFetch<BobineOut>(`/api/bobines/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
+export const deleteBobine = (id: number) =>
+  apiFetch<void>(`/api/bobines/${id}`, { method: "DELETE" });
+
+// ---------------------------------------------------------------------------
 // Paramètres > Options de fabrication (CRUD tenant)
 // ---------------------------------------------------------------------------
 
