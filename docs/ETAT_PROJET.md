@@ -10,9 +10,21 @@
 ## En-tête
 
 - **Date** : 2026-06-11
-- **Branche active** : `feat/F-back-bobinage-appro` (depuis `main`=`2ca56de`) — **Lot F back implémenté, tests verts, en attente validation Eric pour push**. `main` = `2ca56de` (après #146).
-- **Sprint en cours** : **Chantier « configurateur page unique »** — **Lot F back** (bobinage + appro matière : géométrie/appro, AUCUN chiffrage, cf. section 2026-06-11). Lot E COMPLET end-to-end EN PROD (back #146 + front #145). Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1** = F back (prêt à pousser) ; **CC2** = F front (bloc bobinage : ml/m²/nb bobines/Ø/temps d'arrêt/alerte depasse_max) une fois Railway déployé. Horizon suivant : **D** (calage) ; **Module Stock option B** (suivi bobines) séquencé APRÈS clôture F. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Branche active** : `feat/S1-back-stock-bobine` (depuis `main`=`56ea51c`) — **Module Stock S1 back implémenté, tests verts (1227/0), en attente validation Eric pour push**. `main` = `56ea51c` (Lot F COMPLET end-to-end : back #147 + front #148).
+- **Sprint en cours** : **Module Stock (option B, granularité A)** — **S1 back** (modèle `Bobine` + CRUD scopé, cf. section 2026-06-11 · Stock S1). Lot F COMPLET EN PROD (#147 back + #148 front). Lot E COMPLET EN PROD (#146 + #145). Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1** = Stock S1 back (prêt à pousser) ; **CC2** = Stock S1 front (CRUD bobines + emplacement A.0.25) une fois Railway déployé. Découpage Stock : **S1** modèle+CRUD → **S2** mouvements → **S3** lien devis↔stock, **puis D** (calage). Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-06-11 · Stock S1 back — modèle Bobine + CRUD (option B, granularité A)
+
+- **Module ADDITIF strict** : `cost_engine` / `bat_calculs` / `optimiser_pose` / `devis` / `/preview` **INTOUCHÉS** (diff vide). Aucun endpoint existant modifié.
+- **Granularité A** : 1 ligne = **1 bobine physique unique** (emplacement + ml restant propres).
+- **Table `bobine`** (migration `d5e7f9a1b3c5`, `create_table` natif FK-safe) : `entreprise_id` FK CASCADE, `matiere_id` FK, `laize_mm`, `epaisseur_microns` (pré-rempli depuis la matière à la création, éditable), `ml_initial` (figé) / `ml_restant` (éditable), `rangee`/`etage`/`position`, `statut` (défaut `en_stock`). Emplacement exposé **calculé `A.0.25`**.
+- **CRUD `/api/bobines`** scopé tenant strict (`get_or_404_scoped` → **404 anti-énumération**) : POST / GET liste (filtre `statut`, tri emplacement) / GET id / PATCH (champs partiels, `matiere_id`/`ml_initial` figés) / DELETE (suppression dure — pas d'enfants en S1). POST vérifie `matiere_id` scopé tenant + `ml_restant` initial = `ml_initial`.
+- **Sacrés EXACTS** : V1a **1 424,31** / P0b **695,36** · **Baseline = 1227/0** (+9 tests S1 ; `test_stock_bobine_s1.py` : création/prefill, emplacement calculé, ml_restant éditable, isolation tenant, 404 anti-énum, suppression scopée, matière hors périmètre).
+- **Leçon 422** : API **nouvelle** (aucun contrat existant modifié) → **déployer Railway AVANT** le front S1 (CC2).
+- **Suite** : S2 mouvements (décrémentent `ml_restant`) → S3 lien devis↔stock (devis confirmé consomme le ml). Pas de gating produit `has_flexostock` en S1.
 
 ---
 
@@ -54,7 +66,10 @@
 
 ## PRs récemment mergées (10 dernières)
 
-- **(en attente push) Lot F back** — feat(devis): **bobinage + appro matière** (CC1). Bloc `bobinage` sur `/preview` (ml/m²/nb bobines/Ø bobine/temps d'arrêt/alerte depasse_max), géométrie/appro **AUCUN chiffrage** (cost_engine intouché, bat_calculs/optimiser_pose lecture seule). 3 colonnes (Entreprise.ml_par_bobine_defaut 2000, Machine.diametre_max_bobine_mm 1100, Machine.temps_changement_bobine_min 15) + migration `c4d6e8f0a1b3` (DDL natif FK-safe). Baseline **1218**. Temps d'arrêt AFFICHÉ, pas facturé.
+- **(en attente push) Stock S1 back** — feat(stock): **modèle `Bobine` + CRUD `/api/bobines`** (CC1). Module ADDITIF (cost_engine/devis/preview intouchés), granularité A (1 ligne = 1 bobine physique), emplacement calculé `A.0.25`, multi-tenant strict (404 anti-énum), epaisseur pré-remplie depuis la matière. Migration `d5e7f9a1b3c5` (create_table natif). Baseline **1227**.
+- **#148** — feat(devis): **F front** (CC2) — réactive `ml_par_bobine` + `diametre_mandrin_mm` vers `/preview` (le réglage ml/bobine + Ø mandrin bougent nb_bobines/Ø en direct). → **Lot F COMPLET end-to-end EN PROD**.
+- **#147** — feat(devis): **Lot F back — bobinage + appro matière** (CC1). Bloc `bobinage` sur `/preview` (ml/m²/nb bobines/Ø bobine/temps d'arrêt/alerte depasse_max), géométrie/appro **AUCUN chiffrage** (cost_engine intouché, bat_calculs/optimiser_pose lecture seule). 3 colonnes (Entreprise.ml_par_bobine_defaut 2000, Machine.diametre_max_bobine_mm 1100, Machine.temps_changement_bobine_min 15) + migration `c4d6e8f0a1b3` (DDL natif FK-safe). Baseline **1218**. Temps d'arrêt AFFICHÉ, pas facturé.
+- **#146** — feat(devis): **Lot E back — matière → épaisseur réelle → Ø** (CC1). Bloc `bobinage` sur `/preview` (ml/m²/nb bobines/Ø bobine/temps d'arrêt/alerte depasse_max), géométrie/appro **AUCUN chiffrage** (cost_engine intouché, bat_calculs/optimiser_pose lecture seule). 3 colonnes (Entreprise.ml_par_bobine_defaut 2000, Machine.diametre_max_bobine_mm 1100, Machine.temps_changement_bobine_min 15) + migration `c4d6e8f0a1b3` (DDL natif FK-safe). Baseline **1218**. Temps d'arrêt AFFICHÉ, pas facturé.
 - **#146** — feat(devis): **Lot E back — matière → épaisseur réelle → Ø** (CC1). `matiere_id` (entrée A1) → Matiere scopée tenant → `epaisseur_microns` → `bat_calculs` (SSOT lecture pure, intouché) pour le Ø. Fallback **150 µm TRACÉ** (`geometrie.epaisseur_fallback` + alerte, jamais silencieux) ; matière prime sur `epaisseur_um` explicite. Sortie `geometrie.epaisseur_utilisee_microns`/`epaisseur_fallback`. **PATCH `/api/matieres/{id}`** `{epaisseur_microns:int}` scopé tenant (404 anti-énum). Aucune migration. **Sacrés EXACTS** V1a 1 424,31 / P0b 695,36 · `cost_engine`/`optimiser_pose`/`rotation_se`/`bat_calculs` intouchés. Baseline **1212**. Railway prod OK.
 - **#145** — feat(devis): **Lot E front** (CC2) — sélecteur matière : Ø bobine live + épaisseur utilisée + bandeau fallback visible + enregistrement épaisseur au catalogue (PATCH matière). Consomme `geometrie.epaisseur_utilisee_microns`/`epaisseur_fallback` (dégradation propre si back absent), input `/preview` `epaisseur_um` (A1) inchangé.
 - **#142** — feat(devis): **Étape 2 front** — réactive l'envoi `config_id` + forçage écarts vers `/preview` (boucle live complète). (CC2.)

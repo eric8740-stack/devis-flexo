@@ -9,6 +9,7 @@ from app.routers import (
     admin,
     admin_audit,
     auth,
+    bobine,
     catalogue,
     charge_mensuelle,
     client,
@@ -72,6 +73,8 @@ app.include_router(catalogue.router)
 app.include_router(cost.router)
 # Sprint 5 Lot 5b
 app.include_router(outil_decoupe.router)
+
+app.include_router(bobine.router)
 # Sprint 4 Lot 4b — persistance devis
 app.include_router(devis.router)
 # Sprint 9 v2 Lot 9c — paramétrabilité tarifs
