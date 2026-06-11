@@ -128,6 +128,9 @@ export default function DevisPageUnique() {
   const [mandrin, setMandrin] = useState("76");
   const [diametreMax, setDiametreMax] = useState("");
   const [sens, setSens] = useState("1");
+  // Lot F — mode de livraison : ml par bobine ("" = défaut entreprise).
+  // Envoyé à /preview (#147) → pilote nb_bobines / Ø en direct.
+  const [mlParBobine, setMlParBobine] = useState("");
   // Finitions.
   const [optionsCodes, setOptionsCodes] = useState<Set<string>>(new Set());
   // Bord latéral (défaut entreprise, rempli au mount).
@@ -267,6 +270,10 @@ export default function DevisPageUnique() {
           : null,
       marge_pct_override: margePct.trim() !== "" ? parseFloat(margePct) : null,
       remise_pct: remisePct.trim() !== "" ? parseFloat(remisePct) : 0,
+      // Lot F (#147) — ml/bobine override + Ø mandrin (même valeur que mandrin).
+      ml_par_bobine:
+        mlParBobine.trim() !== "" ? parseInt(mlParBobine, 10) : null,
+      diametre_mandrin_mm: parseInt(mandrin, 10) || null,
     }),
     [
       laize,
@@ -289,6 +296,7 @@ export default function DevisPageUnique() {
       nbPosesLaizeForce,
       margePct,
       remisePct,
+      mlParBobine,
     ],
   );
 
@@ -498,6 +506,7 @@ export default function DevisPageUnique() {
   };
 
   const geo = preview?.geometrie;
+  const bob = preview?.bobinage; // Lot F — null tant que back F absent.
 
   // Delta marginal par code (depuis preview.options) pour les chips finitions
   // + couleur_plus. Le serveur price ; le front ne fait qu'afficher.
@@ -1095,10 +1104,27 @@ export default function DevisPageUnique() {
               )}
             </p>
           )}
+          {/* Lot F — besoin matière à commander (commande fournisseur en m²). */}
+          {bob && (
+            <p
+              data-testid="m-appro"
+              className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800"
+            >
+              Besoin matière à commander :{" "}
+              <strong>
+                {bob.m2_total.toLocaleString("fr-FR", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                m²
+              </strong>{" "}
+              ({bob.ml_total.toLocaleString("fr-FR", { maximumFractionDigits: 0 })}{" "}
+              ml linéaires)
+            </p>
+          )}
         </SectionCard>
 
-        {/* ── Bobinage ─────────────────────────────────────────────── */}
-        <SectionCard title="Bobinage">
+        {/* ── Bobinage & livraison (Lot F) ─────────────────────────── */}
+        <SectionCard title="Bobinage & livraison">
           <div className="grid grid-cols-3 gap-3">
             <Field label="Ø mandrin (mm)">
               <Input
@@ -1109,7 +1135,7 @@ export default function DevisPageUnique() {
                 data-testid="b-mandrin"
               />
             </Field>
-            <Field label="Ø max bobine (mm)">
+            <Field label="Ø max bobine livrée (mm)">
               <Input
                 type="number"
                 min={50}
@@ -1130,6 +1156,55 @@ export default function DevisPageUnique() {
               />
             </Field>
           </div>
+          {/* Mode de livraison — ml par bobine (#147) → nb_bobines / Ø live. */}
+          <Field label="ml par bobine (mode de livraison)">
+            <Input
+              type="number"
+              min={1}
+              value={mlParBobine}
+              onChange={(e) => setMlParBobine(e.target.value)}
+              placeholder={
+                bob ? `défaut ${bob.ml_par_bobine}` : "défaut entreprise"
+              }
+              data-testid="b-ml-par-bobine"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Longueur par bobine (vide = défaut entreprise) — bouge le nombre
+              de bobines et le Ø en direct.
+            </p>
+          </Field>
+
+          {/* Bandeau dépassement Ø max presse — VISIBLE (pas de tooltip). */}
+          {bob?.depasse_max && (
+            <div
+              data-testid="b-depasse-max"
+              className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            >
+              ⚠ Ø bobine {bob.diametre_bobine_mm} mm &gt; max presse{" "}
+              {bob.diametre_max_presse_mm} mm — réduire le ml/bobine.
+            </div>
+          )}
+
+          {/* Plan bobines (depuis le bloc bobinage /preview). */}
+          {bob && (
+            <div data-testid="b-plan" className="space-y-1 text-sm">
+              <p>
+                <strong>{bob.nb_bobines}</strong> bobine(s) · Ø{" "}
+                <strong>{bob.diametre_bobine_mm} mm</strong> ·{" "}
+                {bob.ml_par_bobine} ml/bobine
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Ø max presse {bob.diametre_max_presse_mm} mm ·{" "}
+                {bob.nb_changements} changement(s) · arrêt estimé{" "}
+                {bob.temps_arret_min} min
+              </p>
+              {/* Convention bobine : laize × Ø × mandrin – longueur. */}
+              <p className="font-mono text-xs text-muted-foreground">
+                {parseFloat(laize) || "—"} × {bob.diametre_bobine_mm} ×{" "}
+                {bob.diametre_mandrin_mm} – {bob.ml_par_bobine} m
+              </p>
+            </div>
+          )}
         </SectionCard>
 
         {/* ── Finitions (chips) ─────────────────────────────────────── */}

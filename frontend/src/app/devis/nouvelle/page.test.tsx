@@ -128,6 +128,19 @@ function installFetchMock() {
         remise_pct: remisePct.toFixed(2),
         remise_eur: remiseEur.toFixed(2),
         prix_ht_net: prixHtNet.toFixed(2),
+        bobinage: {
+          ml_total: 412.5,
+          m2_total: 94.9,
+          ml_par_bobine: Number(body.ml_par_bobine) || 2000,
+          nb_bobines: 2,
+          // Ø dépasse la presse au-delà d'une grosse quantité (pour le bandeau).
+          diametre_bobine_mm: Number(body.quantite) > 50000 ? 1200 : 291,
+          diametre_mandrin_mm: Number(body.mandrin_mm) || 76,
+          diametre_max_presse_mm: 1100,
+          depasse_max: Number(body.quantite) > 50000,
+          nb_changements: 1,
+          temps_arret_min: 15,
+        },
         decompo_groupee: {
           matiere_p1: "40.00",
           impression_presse_calage: "25.00",
@@ -387,6 +400,24 @@ describe("DevisPageUnique — page devis réactive", () => {
             (c[1] as RequestInit)?.method === "PATCH",
         ),
       ).toBe(true),
+    );
+  });
+
+  it("Lot F : appro m² + plan bobines + bandeau dépassement Ø max presse", async () => {
+    render(<DevisPageUnique />);
+    // Besoin matière à commander (m²) dans la carte Matière.
+    await waitFor(() =>
+      expect(screen.getByTestId("m-appro")).toHaveTextContent(/m²/),
+    );
+    // Plan bobines (nb_bobines / Ø / temps).
+    expect(screen.getByTestId("b-plan")).toHaveTextContent(/bobine/);
+    // Pas de dépassement au format par défaut.
+    expect(screen.queryByTestId("b-depasse-max")).toBeNull();
+    // Grosse quantité → Ø bobine dépasse la presse → bandeau visible.
+    await userEvent.clear(screen.getByTestId("f-qte"));
+    await userEvent.type(screen.getByTestId("f-qte"), "100000");
+    await waitFor(() =>
+      expect(screen.getByTestId("b-depasse-max")).toBeInTheDocument(),
     );
   });
 

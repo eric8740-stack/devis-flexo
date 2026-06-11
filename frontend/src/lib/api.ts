@@ -1016,6 +1016,11 @@ export interface DevisPreviewRequest {
   // remise commerciale (en %, par-dessus le HT brut, hors coût de revient).
   marge_pct?: number | null;
   remise_pct?: number;
+  // Lot F (#147) — overrides bobinage. `diametre_mandrin_mm` pilote le bloc
+  // bobinage (`mandrin_mm` reste pour l'Ø géométrie) ; `ml_par_bobine` → sinon
+  // Entreprise.ml_par_bobine_defaut. Tous deux `int gt 0`.
+  ml_par_bobine?: number | null;
+  diametre_mandrin_mm?: number | null;
 }
 
 export interface GeometriePreviewOut {
@@ -1086,6 +1091,21 @@ export interface DecompoGroupeeOut {
   refente: string;
 }
 
+// Lot F (contrat figé) — bloc bobinage/appro (sortie /preview). Floats
+// sérialisés en chaîne OU number selon le back → parse défensif côté front.
+export interface BobinagePreviewOut {
+  ml_total: number | string;
+  m2_total: number | string;
+  ml_par_bobine: number;
+  nb_bobines: number;
+  diametre_bobine_mm: number;
+  diametre_mandrin_mm: number;
+  diametre_max_presse_mm: number;
+  depasse_max: boolean;
+  nb_changements: number;
+  temps_arret_min: number;
+}
+
 export interface DevisPreviewOut {
   prix_ht: string | null; // HT BRUT (7 postes, sacré)
   cout_revient: string | null;
@@ -1103,6 +1123,8 @@ export interface DevisPreviewOut {
   remise_eur?: string | null;
   prix_ht_net?: string | null; // HT facturé après remise
   decompo_groupee?: DecompoGroupeeOut | null;
+  // Lot F — bloc bobinage/appro (absent = ancien endpoint → dégradation).
+  bobinage?: BobinagePreviewOut | null;
 }
 
 export const previewDevis = (
