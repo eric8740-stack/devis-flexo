@@ -43,6 +43,9 @@ class BobineUpdate(BaseModel):
 
     laize_mm: float | None = Field(None, gt=0, le=2000)
     epaisseur_microns: int | None = Field(None, ge=1, le=2000)
+    # DÉPRÉCIÉ (S2) : éditer `ml_restant` en direct ne laisse pas de trace
+    # d'audit. Préférer un mouvement `inventaire` (POST /api/bobines/{id}/
+    # mouvements) qui journalise ancien→nouveau. Conservé sans casse (S1).
     ml_restant: int | None = Field(None, ge=0)
     rangee: str | None = Field(None, min_length=1, max_length=10)
     etage: int | None = Field(None, ge=0)

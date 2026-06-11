@@ -26,6 +26,7 @@ from app.models.fournisseur import Fournisseur
 from app.models.machine import Machine
 from app.models.machine_rebobineuse import MachineRebobineuse
 from app.models.matiere import Matiere
+from app.models.mouvement_stock import MouvementStock
 from app.models.parametre_mandrin import MODES_PAR_DEFAUT, ParametreMandrin
 from app.models.operation_finition import OperationFinition
 from app.models.option_fabrication import OptionFabrication
@@ -48,6 +49,7 @@ __all__ = [
     "BAREME_TYPES",
     "Bareme",
     "Bobine",
+    "MouvementStock",
     "CylindreMagnetique",
     "Matiere",
     "OptionFabrication",

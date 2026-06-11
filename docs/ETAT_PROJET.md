@@ -10,9 +10,23 @@
 ## En-tête
 
 - **Date** : 2026-06-11
-- **Branche active** : `feat/S1-back-stock-bobine` (depuis `main`=`56ea51c`) — **Module Stock S1 back implémenté, tests verts (1227/0), en attente validation Eric pour push**. `main` = `56ea51c` (Lot F COMPLET end-to-end : back #147 + front #148).
-- **Sprint en cours** : **Module Stock (option B, granularité A)** — **S1 back** (modèle `Bobine` + CRUD scopé, cf. section 2026-06-11 · Stock S1). Lot F COMPLET EN PROD (#147 back + #148 front). Lot E COMPLET EN PROD (#146 + #145). Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
-- **Carte qui-fait-quoi** : **CC1** = Stock S1 back (prêt à pousser) ; **CC2** = Stock S1 front (CRUD bobines + emplacement A.0.25) une fois Railway déployé. Découpage Stock : **S1** modèle+CRUD → **S2** mouvements → **S3** lien devis↔stock, **puis D** (calage). Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Branche active** : `feat/S2-back-stock-mouvements` (depuis `main`=`b560d17`) — **Module Stock S2 back implémenté, tests verts (1234/0), en attente validation Eric pour push**. `main` = `b560d17` (Stock S1 COMPLET end-to-end : back #150 + front #149).
+- **Sprint en cours** : **Module Stock (option B, granularité A)** — **S2 back** (mouvements : journal d'audit + ajustement transactionnel `ml_restant`, cf. section 2026-06-11 · Stock S2). Stock S1 COMPLET EN PROD (#150 back + #149 front). Lot F COMPLET EN PROD (#147 + #148). Lot E COMPLET EN PROD (#146 + #145). Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
+- **Carte qui-fait-quoi** : **CC1** = Stock S2 back (prêt à pousser) ; **CC2** = Stock S2 front (mouvements entree/sortie/inventaire + historique bobine) une fois Railway déployé. Découpage Stock : S1 modèle+CRUD ✅ → **S2 mouvements** → **S3** lien devis↔stock, **puis D** (calage). Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-06-11 · Stock S2 back — mouvements (journal d'audit + ajustement transactionnel)
+
+- **Module ADDITIF strict** : `cost_engine` / `bat_calculs` / `optimiser_pose` / `devis` / `/preview` **INTOUCHÉS** (diff vide). Aucun endpoint existant modifié (seule la note de dépréciation `BobineUpdate.ml_restant` ajoutée — pas de breaking).
+- **Modèle `MouvementStock`** (migration `e6f8a0b2c4d6`, `create_table` natif FK-safe) : `entreprise_id` FK CASCADE, `bobine_id` FK **CASCADE** (la suppression dure d'une bobine S1 emporte son historique), `devis_id` FK **SET NULL** (nullable, renseigné en S3), `type` (`entree`/`sortie`/`inventaire`), `ml` (>0), `ml_avant`/`ml_apres` (audit), `motif`/`reference` (nullable), `date_creation`.
+- **Endpoints TRANSACTIONNELS** (un seul commit = mouvement + `bobine.ml_restant` atomiques) :
+  - `POST /api/bobines/{id}/mouvements` → `{ mouvement, bobine }`. `entree` +ml · `sortie` −ml (**409 « stock insuffisant »** si `ml > ml_restant`, jamais négatif) · `inventaire` `ml_restant = ml` (audit ancien→nouveau).
+  - `GET /api/bobines/{id}/mouvements` (historique d'une bobine, récent d'abord) · `GET /api/mouvements` (journal tenant, filtre `?type=`, paginé).
+- **`ml` toujours positif** : le `type` porte le sens. PATCH `ml_restant` direct (S1) **DÉPRÉCIÉ** au profit du mouvement `inventaire` (mais conservé sans casse).
+- **Sacrés EXACTS** : V1a **1 424,31** / P0b **695,36** · **Baseline = 1234/0** (+7 tests S2 ; `test_stock_mouvement_s2.py` : entree/sortie/inventaire ajustent `ml_restant`, sortie insuffisante → 409 atomique, historique + journal tenant, isolation cross-tenant 404).
+- **Leçon 422** : API **nouvelle** → **déployer Railway AVANT** le front S2 (CC2).
+- **Suite** : S3 lien devis↔stock (devis confirmé → mouvement `sortie` avec `devis_id`), puis D (calage).
 
 ---
 
@@ -66,7 +80,9 @@
 
 ## PRs récemment mergées (10 dernières)
 
-- **(en attente push) Stock S1 back** — feat(stock): **modèle `Bobine` + CRUD `/api/bobines`** (CC1). Module ADDITIF (cost_engine/devis/preview intouchés), granularité A (1 ligne = 1 bobine physique), emplacement calculé `A.0.25`, multi-tenant strict (404 anti-énum), epaisseur pré-remplie depuis la matière. Migration `d5e7f9a1b3c5` (create_table natif). Baseline **1227**.
+- **(en attente push) Stock S2 back** — feat(stock): **`MouvementStock` + endpoints mouvements** (CC1). Journal d'audit append-only, ajustement TRANSACTIONNEL de `ml_restant` (entree/sortie/inventaire), sortie insuffisante → 409, module ADDITIF (cost_engine/devis/preview intouchés). Migration `e6f8a0b2c4d6` (create_table natif). PATCH ml_restant S1 déprécié (sans casse). Baseline **1234**.
+- **#150** — feat(stock): **Stock S1 back** — modèle `Bobine` + CRUD `/api/bobines` (CC1). Module ADDITIF, granularité A, emplacement `A.0.25`, multi-tenant strict, epaisseur pré-remplie. Migration `d5e7f9a1b3c5`. Baseline **1227**. → **Stock S1 COMPLET EN PROD** (+ front #149).
+- **#149** — feat(stock): **Stock S1 front** (CC2) — page `/stock` CRUD bobines + inventaire (emplacement A.0.25), consomme `/api/bobines`. Module ADDITIF (cost_engine/devis/preview intouchés), granularité A (1 ligne = 1 bobine physique), emplacement calculé `A.0.25`, multi-tenant strict (404 anti-énum), epaisseur pré-remplie depuis la matière. Migration `d5e7f9a1b3c5` (create_table natif). Baseline **1227**.
 - **#148** — feat(devis): **F front** (CC2) — réactive `ml_par_bobine` + `diametre_mandrin_mm` vers `/preview` (le réglage ml/bobine + Ø mandrin bougent nb_bobines/Ø en direct). → **Lot F COMPLET end-to-end EN PROD**.
 - **#147** — feat(devis): **Lot F back — bobinage + appro matière** (CC1). Bloc `bobinage` sur `/preview` (ml/m²/nb bobines/Ø bobine/temps d'arrêt/alerte depasse_max), géométrie/appro **AUCUN chiffrage** (cost_engine intouché, bat_calculs/optimiser_pose lecture seule). 3 colonnes (Entreprise.ml_par_bobine_defaut 2000, Machine.diametre_max_bobine_mm 1100, Machine.temps_changement_bobine_min 15) + migration `c4d6e8f0a1b3` (DDL natif FK-safe). Baseline **1218**. Temps d'arrêt AFFICHÉ, pas facturé.
 - **#146** — feat(devis): **Lot E back — matière → épaisseur réelle → Ø** (CC1). Bloc `bobinage` sur `/preview` (ml/m²/nb bobines/Ø bobine/temps d'arrêt/alerte depasse_max), géométrie/appro **AUCUN chiffrage** (cost_engine intouché, bat_calculs/optimiser_pose lecture seule). 3 colonnes (Entreprise.ml_par_bobine_defaut 2000, Machine.diametre_max_bobine_mm 1100, Machine.temps_changement_bobine_min 15) + migration `c4d6e8f0a1b3` (DDL natif FK-safe). Baseline **1218**. Temps d'arrêt AFFICHÉ, pas facturé.

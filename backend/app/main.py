@@ -24,6 +24,7 @@ from app.routers import (
     ia,
     machine,
     matiere,
+    mouvement_stock,
     onboarding,
     operation_finition,
     optimisation,
@@ -75,6 +76,7 @@ app.include_router(cost.router)
 app.include_router(outil_decoupe.router)
 
 app.include_router(bobine.router)
+app.include_router(mouvement_stock.router)
 # Sprint 4 Lot 4b — persistance devis
 app.include_router(devis.router)
 # Sprint 9 v2 Lot 9c — paramétrabilité tarifs
