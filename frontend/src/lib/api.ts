@@ -1823,6 +1823,12 @@ export interface PropositionConsommation {
   lignes: PropositionLigne[];
   stock_suffisant: boolean;
   manque_ml: number; // 0 si suffisant
+  // Gap #4 — état de consommation persisté (déduit des mouvements du devis).
+  // Si `deja_consomme` : afficher « consommé + Annuler » au lieu de la
+  // proposition. `mouvements` = sorties de ce devis (audit).
+  deja_consomme: boolean;
+  consomme_ml: number;
+  mouvements: MouvementOut[];
 }
 
 export interface ConsommerLigne {

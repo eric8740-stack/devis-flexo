@@ -6,6 +6,18 @@ import { ConsommationStock } from "./ConsommationStock";
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 let conso409 = false;
+let dejaConsomme = false; // gap #4 — état persisté.
+
+const MVT_SORTIE = {
+  id: 1,
+  bobine_id: 10,
+  type: "sortie",
+  ml: 1000,
+  date: "2026-06-11T10:00:00",
+  motif: null,
+  reference: null,
+  devis_id: 5,
+};
 
 const PROPOSITION = {
   ml_requis: 1000,
@@ -20,6 +32,9 @@ const PROPOSITION = {
   ],
   stock_suffisant: true,
   manque_ml: 0,
+  deja_consomme: false,
+  consomme_ml: 0,
+  mouvements: [],
 };
 
 function installFetchMock() {
@@ -29,7 +44,17 @@ function installFetchMock() {
     const ok = (body: unknown, status = 200) =>
       ({ ok: true, status, statusText: "OK", json: async () => body }) as Response;
 
-    if (url.includes("/proposition-consommation")) return ok(PROPOSITION);
+    if (url.includes("/proposition-consommation")) {
+      if (dejaConsomme) {
+        return ok({
+          ...PROPOSITION,
+          deja_consomme: true,
+          consomme_ml: 1000,
+          mouvements: [MVT_SORTIE],
+        });
+      }
+      return ok(PROPOSITION);
+    }
     if (url.includes("/consommer") && method === "POST") {
       if (conso409) {
         return {
@@ -82,6 +107,7 @@ describe("ConsommationStock — S3 consommer le stock", () => {
   beforeEach(() => {
     window.localStorage.clear();
     conso409 = false;
+    dejaConsomme = false;
     installFetchMock();
   });
   afterEach(() => vi.restoreAllMocks());
@@ -114,6 +140,17 @@ describe("ConsommationStock — S3 consommer le stock", () => {
     await waitFor(() => expect(calledConsommer()).toBe(true));
     await screen.findByTestId("consomme-view");
     expect(screen.getByTestId("annuler-consommation")).toBeInTheDocument();
+  });
+
+  it("deja_consomme (persisté) → vue « consommé » au chargement + Annuler", async () => {
+    dejaConsomme = true;
+    render(<ConsommationStock devisId={5} />);
+    // Au reload, l'état consommé est rendu directement (gap #4 résolu).
+    await screen.findByTestId("consomme-view");
+    expect(screen.getByTestId("consomme-view")).toHaveTextContent(/1\s?000 ml/);
+    expect(screen.getByTestId("annuler-consommation")).toBeInTheDocument();
+    // Pas la proposition.
+    expect(screen.queryByTestId("consommer")).toBeNull();
   });
 
   it("409 stock insuffisant → géré (pas de crash, reste en proposition)", async () => {

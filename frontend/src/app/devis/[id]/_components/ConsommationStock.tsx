@@ -89,13 +89,21 @@ export function ConsommationStock({ devisId }: { devisId: number }) {
   const insuffisant = !prop.stock_suffisant || totalSelect < prop.ml_requis;
   const manque = prop.manque_ml || Math.max(0, prop.ml_requis - totalSelect);
 
+  // Vue « consommé » : in-session (result) OU persisté (proposition, gap #4).
+  const estConsomme = result !== null || prop.deja_consomme;
+  const consommeMvts = result ? result.mouvements : prop.mouvements;
+  const consommeMl = result
+    ? result.mouvements.reduce((s, m) => s + m.ml, 0)
+    : prop.consomme_ml;
+
   const setLigne = (id: number, patch: Partial<Ligne>) =>
     setLignes((ls) => ls.map((l) => (l.bobine_id === id ? { ...l, ...patch } : l)));
 
   const consommer = async () => {
+    // Le back attend `ml` entier (> 0) → on arrondit.
     const payload = lignes
       .filter((l) => l.included && parseFloat(l.ml) > 0)
-      .map((l) => ({ bobine_id: l.bobine_id, ml: parseFloat(l.ml) }));
+      .map((l) => ({ bobine_id: l.bobine_id, ml: Math.round(parseFloat(l.ml)) }));
     if (payload.length === 0) return;
     setConsuming(true);
     try {
@@ -143,18 +151,15 @@ export function ConsommationStock({ devisId }: { devisId: number }) {
         <CardTitle className="text-base">Consommer le stock</CardTitle>
       </CardHeader>
       <CardContent>
-        {result ? (
-          // ── Consommé (in-session) ──────────────────────────────────
+        {estConsomme ? (
+          // ── Consommé (in-session OU persisté via deja_consomme) ─────
           <div data-testid="consomme-view" className="space-y-3 text-sm">
             <p className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-800">
-              Consommé{" "}
-              <strong>
-                {mlFr(result.mouvements.reduce((s, m) => s + m.ml, 0))} ml
-              </strong>{" "}
-              depuis <strong>{result.mouvements.length}</strong> bobine(s).
+              Ce devis a consommé <strong>{mlFr(consommeMl)} ml</strong> depuis{" "}
+              <strong>{consommeMvts.length}</strong> bobine(s).
             </p>
             <ul className="space-y-1">
-              {result.mouvements.map((m) => (
+              {consommeMvts.map((m) => (
                 <li key={m.id} className="font-mono text-xs text-muted-foreground">
                   bobine #{m.bobine_id} · −{mlFr(m.ml)} ml
                 </li>
