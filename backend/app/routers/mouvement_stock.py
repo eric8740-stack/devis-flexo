@@ -100,6 +100,9 @@ def liste_mouvements(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     type: str | None = Query(None, description="Filtre optionnel sur le type."),
+    devis_id: int | None = Query(
+        None, description="Filtre optionnel : mouvements d'un devis (S3)."
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[MouvementStock]:
@@ -107,6 +110,8 @@ def liste_mouvements(
     query = scope_to_entreprise(db.query(MouvementStock), MouvementStock, user)
     if type is not None:
         query = query.filter(MouvementStock.type == type)
+    if devis_id is not None:
+        query = query.filter(MouvementStock.devis_id == devis_id)
     return (
         query.order_by(
             MouvementStock.date_creation.desc(), MouvementStock.id.desc()

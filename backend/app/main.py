@@ -33,6 +33,7 @@ from app.routers import (
     partenaire_st,
     porte_cliche,
     rebobinage,
+    stock_consommation,
     tarif_encre,
     tarif_poste,
 )
@@ -77,6 +78,7 @@ app.include_router(outil_decoupe.router)
 
 app.include_router(bobine.router)
 app.include_router(mouvement_stock.router)
+app.include_router(stock_consommation.router)
 # Sprint 4 Lot 4b — persistance devis
 app.include_router(devis.router)
 # Sprint 9 v2 Lot 9c — paramétrabilité tarifs
