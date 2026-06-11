@@ -1807,6 +1807,58 @@ export const listMouvements = (params: ListMouvementsParams = {}) => {
   return apiFetch<MouvementOut[]>(`/api/mouvements${suffix ? `?${suffix}` : ""}`);
 };
 
+// ── Lien devis ↔ stock — S3 (contrat figé). Proposition FIFO + consommation
+// transactionnelle (sortie par bobine, devis_id) + annulation. ──────────────
+
+export interface PropositionLigne {
+  bobine_id: number;
+  emplacement: string;
+  laize_mm: number;
+  ml_restant: number;
+  ml_propose: number;
+}
+
+export interface PropositionConsommation {
+  ml_requis: number; // = bobinage.ml_total du devis
+  lignes: PropositionLigne[];
+  stock_suffisant: boolean;
+  manque_ml: number; // 0 si suffisant
+  // Gap #4 — état de consommation persisté (déduit des mouvements du devis).
+  // Si `deja_consomme` : afficher « consommé + Annuler » au lieu de la
+  // proposition. `mouvements` = sorties de ce devis (audit).
+  deja_consomme: boolean;
+  consomme_ml: number;
+  mouvements: MouvementOut[];
+}
+
+export interface ConsommerLigne {
+  bobine_id: number;
+  ml: number;
+}
+
+// Consommer/Annuler renvoient les mouvements créés + les bobines à jour.
+export interface ConsommationResult {
+  mouvements: MouvementOut[];
+  bobines: BobineOut[];
+}
+
+export const getPropositionConsommation = (devisId: number) =>
+  apiFetch<PropositionConsommation>(
+    `/api/devis/${devisId}/proposition-consommation`,
+  );
+
+// 409 atomique « stock insuffisant » si une ligne ml > ml_restant.
+export const consommerStock = (devisId: number, lignes: ConsommerLigne[]) =>
+  apiFetch<ConsommationResult>(`/api/devis/${devisId}/consommer`, {
+    method: "POST",
+    body: JSON.stringify({ lignes }),
+  });
+
+export const annulerConsommation = (devisId: number) =>
+  apiFetch<ConsommationResult>(`/api/devis/${devisId}/annuler-consommation`, {
+    method: "POST",
+  });
+
 // ---------------------------------------------------------------------------
 // Paramètres > Options de fabrication (CRUD tenant)
 // ---------------------------------------------------------------------------
