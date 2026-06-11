@@ -129,7 +129,7 @@ export default function DevisPageUnique() {
   const [diametreMax, setDiametreMax] = useState("");
   const [sens, setSens] = useState("1");
   // Lot F — mode de livraison : ml par bobine ("" = défaut entreprise).
-  // ⚠️ envoi à /preview DIFFÉRÉ (Étape 2, après back F) pour ne pas 422.
+  // Envoyé à /preview (#147) → pilote nb_bobines / Ø en direct.
   const [mlParBobine, setMlParBobine] = useState("");
   // Finitions.
   const [optionsCodes, setOptionsCodes] = useState<Set<string>>(new Set());
@@ -270,6 +270,10 @@ export default function DevisPageUnique() {
           : null,
       marge_pct_override: margePct.trim() !== "" ? parseFloat(margePct) : null,
       remise_pct: remisePct.trim() !== "" ? parseFloat(remisePct) : 0,
+      // Lot F (#147) — ml/bobine override + Ø mandrin (même valeur que mandrin).
+      ml_par_bobine:
+        mlParBobine.trim() !== "" ? parseInt(mlParBobine, 10) : null,
+      diametre_mandrin_mm: parseInt(mandrin, 10) || null,
     }),
     [
       laize,
@@ -292,6 +296,7 @@ export default function DevisPageUnique() {
       nbPosesLaizeForce,
       margePct,
       remisePct,
+      mlParBobine,
     ],
   );
 
@@ -1151,8 +1156,7 @@ export default function DevisPageUnique() {
               />
             </Field>
           </div>
-          {/* Mode de livraison — ml par bobine. ⚠️ envoi /preview DIFFÉRÉ
-              (Étape 2, après back F) : le back ne l'accepte pas encore. */}
+          {/* Mode de livraison — ml par bobine (#147) → nb_bobines / Ø live. */}
           <Field label="ml par bobine (mode de livraison)">
             <Input
               type="number"
@@ -1165,8 +1169,8 @@ export default function DevisPageUnique() {
               data-testid="b-ml-par-bobine"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Réglage de la longueur par bobine — pris en compte au calcul dès
-              le déploiement du back F.
+              Longueur par bobine (vide = défaut entreprise) — bouge le nombre
+              de bobines et le Ø en direct.
             </p>
           </Field>
 

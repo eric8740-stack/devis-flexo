@@ -51,6 +51,9 @@ export interface DevisPreviewInput {
   // remise commerciale (%).
   marge_pct_override: number | null;
   remise_pct: number;
+  // Lot F (#147) — ml par bobine (livraison) + Ø mandrin bobinage.
+  ml_par_bobine: number | null;
+  diametre_mandrin_mm: number | null;
 }
 
 // ── Résultat parsé (consommé par l'UI) ───────────────────────────────
@@ -238,6 +241,15 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
         ? i.marge_pct_override
         : null,
     remise_pct: i.remise_pct > 0 ? i.remise_pct : 0,
+    // Lot F (#147) — int gt 0 ; sinon null (défauts back : entreprise / 76).
+    ml_par_bobine:
+      i.ml_par_bobine !== null && i.ml_par_bobine > 0
+        ? Math.round(i.ml_par_bobine)
+        : null,
+    diametre_mandrin_mm:
+      i.diametre_mandrin_mm !== null && i.diametre_mandrin_mm > 0
+        ? Math.round(i.diametre_mandrin_mm)
+        : null,
   };
 }
 

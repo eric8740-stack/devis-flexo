@@ -1016,6 +1016,11 @@ export interface DevisPreviewRequest {
   // remise commerciale (en %, par-dessus le HT brut, hors coût de revient).
   marge_pct?: number | null;
   remise_pct?: number;
+  // Lot F (#147) — overrides bobinage. `diametre_mandrin_mm` pilote le bloc
+  // bobinage (`mandrin_mm` reste pour l'Ø géométrie) ; `ml_par_bobine` → sinon
+  // Entreprise.ml_par_bobine_defaut. Tous deux `int gt 0`.
+  ml_par_bobine?: number | null;
+  diametre_mandrin_mm?: number | null;
 }
 
 export interface GeometriePreviewOut {

@@ -33,6 +33,8 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     nb_poses_laize_force: null,
     marge_pct_override: null,
     remise_pct: 0,
+    ml_par_bobine: null,
+    diametre_mandrin_mm: null,
     ...over,
   };
 }
@@ -124,6 +126,17 @@ describe("buildPreviewRequest — état page → body wire", () => {
     );
     expect(r1.marge_pct).toBe(42);
     expect(r1.remise_pct).toBe(5);
+  });
+
+  it("Lot F (#147) : ml_par_bobine si saisi ; diametre_mandrin_mm transmis", () => {
+    const r0 = buildPreviewRequest(baseInput({ diametre_mandrin_mm: 76 }));
+    expect(r0.ml_par_bobine).toBeNull(); // vide → défaut entreprise
+    expect(r0.diametre_mandrin_mm).toBe(76);
+    const r1 = buildPreviewRequest(
+      baseInput({ ml_par_bobine: 2500, diametre_mandrin_mm: 40 }),
+    );
+    expect(r1.ml_par_bobine).toBe(2500);
+    expect(r1.diametre_mandrin_mm).toBe(40);
   });
 });
 
