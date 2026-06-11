@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StockPage from "./page";
 
 let fetchSpy: ReturnType<typeof vi.fn>;
+let delete409 = false; // S3 — DELETE bloqué (bobine avec historique).
 
 const BOBINE = {
   id: 10,
@@ -83,7 +84,19 @@ function installFetchMock() {
       return ok({ ...BOBINE, id: 11 }, 201);
     }
     if (/\/api\/bobines\/\d+$/.test(url) && method === "DELETE") {
+      if (delete409) {
+        return {
+          ok: false,
+          status: 409,
+          statusText: "Conflict",
+          json: async () => ({ detail: "bobine avec historique" }),
+        } as Response;
+      }
       return { ok: true, status: 204, statusText: "No Content" } as Response;
+    }
+    if (/\/api\/bobines\/\d+$/.test(url) && method === "PATCH") {
+      const body = JSON.parse((init?.body as string) ?? "{}");
+      return ok({ ...BOBINE, ...body });
     }
     if (url.includes("/api/bobines") && method === "GET") {
       // Filtre statut=consommee → liste vide (pour le test de filtre).
@@ -104,6 +117,7 @@ function calledWith(predicate: (url: string, init?: RequestInit) => boolean) {
 describe("StockPage — inventaire bobines", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    delete409 = false;
     installFetchMock();
   });
   afterEach(() => {
@@ -207,6 +221,27 @@ describe("StockPage — inventaire bobines", () => {
     );
     expect(screen.getByTestId("hist-row-10")).toHaveTextContent("Entrée");
     expect(screen.getByTestId("hist-row-10")).toHaveTextContent("500 ml");
+  });
+
+  it("S3 : DELETE 409 (bobine avec historique) → propose l'archivage", async () => {
+    delete409 = true;
+    render(<StockPage />);
+    await screen.findByTestId("stock-row-10");
+    await userEvent.click(screen.getByTestId("del-10"));
+    await userEvent.click(screen.getByTestId("del-confirm-10"));
+    // 409 → action « Archiver » proposée.
+    await waitFor(() =>
+      expect(screen.getByTestId("archive-10")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByTestId("archive-10"));
+    await waitFor(() =>
+      expect(
+        calledWith(
+          (u, i) =>
+            /\/api\/bobines\/10$/.test(u) && (i?.method ?? "") === "PATCH",
+        ),
+      ).toBe(true),
+    );
   });
 
   it("suppression : confirmation puis DELETE /api/bobines/{id}", async () => {

@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { DevisResult } from "@/components/DevisResult";
 import { DevisResultMultiLots } from "@/components/devis/DevisResultMultiLots";
+
+import { ConsommationStock } from "./_components/ConsommationStock";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -154,6 +156,9 @@ export default function DevisDetailPage() {
           onDupliquer={handleDuplicate}
           onSupprimer={handleDelete}
         />
+        <div className="mt-6">
+          <ConsommationStock devisId={devis.id} />
+        </div>
       </main>
     );
   }
@@ -319,6 +324,8 @@ export default function DevisDetailPage() {
         </Card>
 
         <DevisResult data={calculResult} />
+
+        <ConsommationStock devisId={devis.id} />
       </div>
     </main>
   );

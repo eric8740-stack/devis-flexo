@@ -139,6 +139,8 @@ export default function StockPage() {
 
   // Suppression confirmée.
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  // S3 — suppression bloquée (409 historique) → proposition d'archivage.
+  const [archiveBlocked, setArchiveBlocked] = useState<number | null>(null);
 
   // S2 — mouvement (modal) + historique par bobine.
   const [mvt, setMvt] = useState<{
@@ -295,8 +297,37 @@ export default function StockPage() {
       toast({ title: "Bobine supprimée ✓" });
       await reloadBobines();
     } catch (err) {
+      // S3 — guard : bobine avec historique de mouvements → 409, on propose
+      // l'archivage (statut « consommée ») plutôt que la suppression.
+      if (err instanceof ApiError && err.status === 409) {
+        setConfirmDeleteId(null);
+        setArchiveBlocked(id);
+        toast({
+          title: "Suppression bloquée",
+          description: "Bobine avec historique de mouvements — archive-la.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Suppression impossible",
+          description: err instanceof Error ? err.message : "Erreur inconnue",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // S3 — archive une bobine (statut « consommée ») quand la suppression est
+  // bloquée par son historique.
+  const handleArchive = async (id: number) => {
+    try {
+      await updateBobine(id, { statut: "consommee" });
+      setArchiveBlocked(null);
+      toast({ title: "Bobine archivée ✓" });
+      await reloadBobines();
+    } catch (err) {
       toast({
-        title: "Suppression impossible",
+        title: "Archivage impossible",
         description: err instanceof Error ? err.message : "Erreur inconnue",
         variant: "destructive",
       });
@@ -764,7 +795,26 @@ export default function StockPage() {
                               >
                                 Éditer
                               </button>
-                              {confirmDeleteId === b.id ? (
+                              {archiveBlocked === b.id ? (
+                                <span className="inline-flex items-center gap-2 text-amber-800">
+                                  Historique — archiver ?
+                                  <button
+                                    type="button"
+                                    onClick={() => handleArchive(b.id)}
+                                    data-testid={`archive-${b.id}`}
+                                    className="font-semibold text-[#B8431D]"
+                                  >
+                                    Archiver
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setArchiveBlocked(null)}
+                                    className="text-muted-foreground"
+                                  >
+                                    Non
+                                  </button>
+                                </span>
+                              ) : confirmDeleteId === b.id ? (
                                 <span className="inline-flex items-center gap-2">
                                   Supprimer ?
                                   <button
