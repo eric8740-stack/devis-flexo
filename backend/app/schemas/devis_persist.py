@@ -57,6 +57,11 @@ class LotProductionCreate(BaseModel):
     # Lot back B — override opérateur du nb de filles de refente (≠ nb_poses_laize).
     nb_filles_force: int | None = None
 
+    # Lot D1 — calage lié au montage. True = vrai changement d'outil/cliché →
+    # un calage supplémentaire. Défaut False (value-neutral) : un front ancien
+    # qui ne l'envoie pas reste 100 % compatible (1 calage par montage).
+    changement_outil_cliche: bool = False
+
     # Brief #33 — snapshot visuel pour SchemaImplantation par lot (laize
     # papier, liner, chute latérale, diamètre bobine, lacets, rotations).
     # Stocké tel quel en JSONB côté DB.
@@ -95,6 +100,8 @@ class LotProductionRead(BaseModel):
     mode_sans_outil: bool = False
     laize_stock_mm: Decimal | None = None
     nb_filles_force: int | None = None
+    # Lot D1 — flag calage/montage rechargé (survit au reload du devis).
+    changement_outil_cliche: bool = False
 
     # Brief #32 — joints pour l'UI multi-lots. Défauts à None pour
     # rester rétro-compatible avec les rows historiques (créées sans
@@ -396,6 +403,9 @@ class DevisPreviewIn(BaseModel):
     nb_filles_force: int | None = Field(None, ge=1)
     mode_sans_outil: bool = False
     laize_stock_mm: float | None = Field(None, gt=0)
+    # Lot D1 — flag calage/montage (parité API, default False). Sans effet sur le
+    # preview mono-config (1 calage) ; gouverne le comptage en multi-lots.
+    changement_outil_cliche: bool = False
     # Lot C-inputs — sélection de config + forçage des écarts (Règle 7). Défauts
     # (None/False) = comportement actuel STRICTEMENT inchangé.
     config_id: str | None = Field(
