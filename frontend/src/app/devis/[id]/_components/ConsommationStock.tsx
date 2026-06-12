@@ -43,6 +43,15 @@ interface Ligne {
 const mlFr = (n: number) =>
   n.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 
+/** Mappe le `detail` d'un 409 « consommer » vers le message utilisateur.
+ * Le back renvoie 2 cas : « stock insuffisant » et « devis déjà consommé ». */
+export function message409Consommer(detail: string | undefined): string {
+  const d = (detail ?? "").toLowerCase();
+  if (d.includes("insuffisant")) return "Stock insuffisant";
+  if (d.includes("déjà") || d.includes("deja")) return "Devis déjà consommé";
+  return "Opération impossible";
+}
+
 export function ConsommationStock({ devisId }: { devisId: number }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -112,10 +121,15 @@ export function ConsommationStock({ devisId }: { devisId: number }) {
       toast({ title: "Stock consommé ✓" });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
+        const titre = message409Consommer(err.detail);
         toast({
-          title: "Stock insuffisant",
+          title: titre,
           description:
-            "Une ligne dépasse le ml restant de sa bobine — rien n'a été consommé.",
+            titre === "Stock insuffisant"
+              ? "Une ligne dépasse le ml restant de sa bobine — rien n'a été consommé."
+              : titre === "Devis déjà consommé"
+                ? "Ce devis a déjà consommé du stock — recharge la page pour voir/annuler."
+                : "La consommation n'a pas pu aboutir.",
           variant: "destructive",
         });
       } else {

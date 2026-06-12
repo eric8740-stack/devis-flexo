@@ -12,7 +12,13 @@ const ACCESS_TOKEN_KEY = "devis_flexo_access_token";
 const REFRESH_TOKEN_KEY = "devis_flexo_refresh_token";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  // `detail` = champ `detail` brut de la réponse (sans le préfixe statut),
+  // utile pour distinguer plusieurs cas d'un même code (ex. 2× 409).
+  constructor(
+    public status: number,
+    message: string,
+    public detail?: string,
+  ) {
     super(message);
   }
 }
@@ -88,15 +94,20 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
+    let rawDetail: string | undefined;
     try {
       const body = await response.json();
-      if (body?.detail) detail = `${response.status} ${body.detail}`;
+      if (body?.detail) {
+        rawDetail = String(body.detail);
+        detail = `${response.status} ${body.detail}`;
+      }
     } catch {
       /* body non JSON */
     }
     throw new ApiError(
       response.status,
-      `${init?.method ?? "GET"} ${path} → ${detail}`
+      `${init?.method ?? "GET"} ${path} → ${detail}`,
+      rawDetail
     );
   }
   if (response.status === 204) return undefined as T;

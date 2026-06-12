@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConsommationStock } from "./ConsommationStock";
+import { ConsommationStock, message409Consommer } from "./ConsommationStock";
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 let conso409 = false;
@@ -102,6 +102,21 @@ const calledConsommer = () =>
       /\/api\/devis\/5\/consommer$/.test(String(c[0])) &&
       (c[1] as RequestInit)?.method === "POST",
   );
+
+describe("message409Consommer — mapping des deux 409", () => {
+  it("distingue insuffisant / déjà consommé / inconnu", () => {
+    expect(message409Consommer("stock insuffisant")).toBe("Stock insuffisant");
+    expect(message409Consommer("devis déjà consommé")).toBe(
+      "Devis déjà consommé",
+    );
+    // accent-insensible + casse.
+    expect(message409Consommer("Devis deja consomme")).toBe(
+      "Devis déjà consommé",
+    );
+    expect(message409Consommer("autre chose")).toBe("Opération impossible");
+    expect(message409Consommer(undefined)).toBe("Opération impossible");
+  });
+});
 
 describe("ConsommationStock — S3 consommer le stock", () => {
   beforeEach(() => {
