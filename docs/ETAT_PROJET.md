@@ -9,11 +9,24 @@
 
 ## En-tête
 
-- **Date** : 2026-06-11
-- **Branche active** : `main` = **`8c56c95`** (après #153 — S3 front). **0 PR ouverte.** **CC1 / CC2 = libres.**
-- **Sprint en cours** : **Module Stock (option B, granularité A) COMPLET end-to-end EN PROD** — S1 inventaire (#149/#150) · S2 mouvements + audit (#151/#152) · S3 lien devis↔stock + FIFO + persistance gap #4 (#153/#154). Lots F/E COMPLETS EN PROD. Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
-- **Baseline** : **1244/0** · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36**.
-- **Carte qui-fait-quoi** : **CC1 / CC2 = libres** (Module Stock livré). **Prochain lot : D (calage)** — **sensible** : sur-facturation par lot vs par montage, proche du chiffrage/sacrés → **à cadrer à frais** (lot dédié, re-baseline contrôlée probable). Lot « facturation temps d'arrêt » = autre lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Date** : 2026-06-12
+- **Branche active** : `feat/D1-back-calage-montage` (rebasée sur `main`=`db1a8b7`) — **Lot D1 back implémenté, tests verts (1251/0), en attente validation/merge**. `main` = `db1a8b7` (après #155 — **fix 409 consommation front CC2**, distingue stock insuffisant / devis déjà consommé).
+- **Sprint en cours** : **Lot D1 — calage lié au montage** (bug sur-facturation : calage par lot → par montage, cf. section 2026-06-12 · Lot D1). Module Stock COMPLET EN PROD (S1 #149/#150 · S2 #151/#152 · S3 #153/#154 · fix 409 #155). Lots F/E COMPLETS EN PROD. Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
+- **Baseline** : **1251/0** · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** (inchangés) · **+ nouveau sacré D1** : 1 calage **1 125,22 €** / 2 calages **1 390,72 €**.
+- **Carte qui-fait-quoi** : **CC1 = Lot D1** (calage montage, prêt à merger) ; **CC2 = fix 409** (mergé `db1a8b7`). **Prochain lot : D suite** (autres facettes calage) ; lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-06-12 · Lot D1 back — calage lié au montage (`changement_outil_cliche`)
+
+- **Bug métier corrigé** : le calage était compté PAR LOT → sur-facturation. Règle flexo : le calage est lié à l'**OUTIL (plaque + clichés)**, pas à la bobine. Changer de bobine mère (matière/laize) sur le même montage = **0 calage supplémentaire**.
+- **Règle** : `nb_calages = 1 + nb_lots(changement_outil_cliche=True)`. Le 1er lot porte le calage du montage ; un lot 2+ n'ajoute un calage que sur un **vrai changement d'outil/cliché** (flag explicite). Remplace l'heuristique « signature de montage » (bug #5) par le flag.
+- **Modèle** : `LotProduction.changement_outil_cliche` (bool, NOT NULL, default False) + **migration `f7a9c1e3d5b7`** (`op.add_column` natif FK-safe, leçon F). **Périmètre cost_engine : SEUL `cost_engine_aggregator.py`** (comptage calage) modifié ; `poste_4_calage`, orchestrator, autres postes, optimisation, rotation_se **INTOUCHÉS**.
+- **API** : champ optionnel `changement_outil_cliche` (default False) sur `LotProductionCreate` / `LotProductionRead` / `DevisPreviewIn` → front ancien 100 % compatible (leçon #137). Câblé sur les 2 flux multi-lots (POST persist + preview/edit `preview_couts_multilots`).
+- **SACRÉS** : V1a **1 424,31 € EXACT** (mono-lot, inchangé). **P0b 695,36 € EXACT INCHANGÉ** — P0b est un scénario **mono-lot** (asserte `len(details_par_lot)==1`) : `nb_calages=1` avant comme après ; la règle ne modifie QUE les devis ≥ 2 lots. **Aucun re-baseline**, aucun `xfail`.
+- **Nouveau benchmark SACRÉ D1** (`test_benchmark_calage_montage_sacred.py`) : 2 lots même montage flags False → 1 calage → **1 125,22 €** ; lot 2 `changement_outil_cliche=True` → 2 calages → **1 390,72 €** (delta 265,50 = 1 calage 225,00 × 1,18). Lot 1 seul = 695,36 € (cohérent P0b).
+- **Baseline = 1251/0** (+4 e2e D1 + 3 benchmark sacré D1 ; tests aggregator réécrits API flag).
+- **Leçon 422** : contrat ENTRÉE enrichi (champ optionnel default False, non breaking) → déployer Railway avant un éventuel front D1.
 
 ---
 
@@ -95,6 +108,8 @@
 
 ## PRs récemment mergées (10 dernières)
 
+- **(en attente) Lot D1 back** — feat(devis): **calage lié au montage** (CC1). Flag `LotProduction.changement_outil_cliche` → `nb_calages = 1 + nb_lots(flag=True)` (remplace l'heuristique signature bug #5). Migration `f7a9c1e3d5b7`. SEUL `cost_engine_aggregator` touché. V1a/P0b EXACTS inchangés (P0b mono-lot) + nouveau sacré D1 (1 125,22 / 1 390,72 €). Baseline **1251**.
+- **#155** — fix(stock): **fix 409 consommation front** (CC2) — distingue les deux 409 (stock insuffisant / devis déjà consommé) via le `detail` de la réponse ; `ApiError` expose `detail`.
 - **#154** — feat(stock): **Stock S3 back — lien devis↔stock** (CC1). `GET proposition-consommation` (FIFO + `deja_consomme`/`consomme_ml`/`mouvements`), `POST consommer` (mouvements sortie devis_id, atomique 409, **refus si déjà consommé**), `POST annuler-consommation` (entree inverse idempotente), guard DELETE bobine 409, filtre `GET /api/mouvements?devis_id=`. Modèle Devis intouché, **aucune migration** (réutilise `MouvementStock.devis_id`), chiffrage devis intouché. Baseline **1244**.
 - **#153** — feat(stock): **Stock S3 front** (CC2) — action « Consommer le stock » sur un devis (proposition FIFO ajustable + bandeau manque non bloquant + 409 atomique géré + annuler), persistance `deja_consomme` au rechargement. → **Stock S3 COMPLET EN PROD**.
 - **#152** — feat(stock): **Stock S2 front** (CC2) — mouvements entree/sortie/inventaire + historique bobine, consomme `/api/mouvements`. → **Stock S2 COMPLET EN PROD**.

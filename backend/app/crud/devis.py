@@ -384,6 +384,8 @@ def create_devis(
                 mode_sans_outil=lot_in.mode_sans_outil,
                 laize_stock_mm=lot_in.laize_stock_mm,
                 nb_filles_force=lot_in.nb_filles_force,
+                # Lot D1 — flag calage/montage persisté (survit au reload).
+                changement_outil_cliche=lot_in.changement_outil_cliche,
             )
             db.add(lot)
             lots_persistes.append(lot)
@@ -439,6 +441,7 @@ def preview_couts_multilots(
             sens_enroulement=ld["sens_enroulement"],
             quantite=ld["quantite"],
             matiere_id=ld["matiere_id"],
+            changement_outil_cliche=bool(ld.get("changement_outil_cliche", False)),
         )
         for idx, ld in enumerate(lots_data)
     ]
@@ -450,7 +453,15 @@ def preview_couts_multilots(
             )
             for lot in lots_transitoires
         ]
-        cout_agrege = calculer_devis_multilots(db, entreprise_id, devis_inputs)
+        # Lot D1 — calage lié au montage (cf. _chiffrer_devis_multilots).
+        cout_agrege = calculer_devis_multilots(
+            db,
+            entreprise_id,
+            devis_inputs,
+            changements_outil_cliche=[
+                bool(lot.changement_outil_cliche) for lot in lots_transitoires
+            ],
+        )
         cout_brut = cout_agrege.prix_vente_ht_total_eur
         chiffrage_auto_erreur = None
     except (CostEngineError, ValueError) as exc:
@@ -1216,20 +1227,19 @@ def _chiffrer_devis_multilots(
             )
             for lot in lots
         ]
-        # Bug #5 — 1 calage par montage : signature = (cylindre, machine,
-        # poses dev). `nb_poses_laize` est VOLONTAIREMENT exclu : changer la
-        # laize (poses en travers) sur le même cylindre + presse = même
-        # montage (mêmes clichés montés) → AUCUN nouveau calage (convention
-        # métier Eric). `nb_poses_dev` reste un garde-fou : une disposition de
-        # clichés AUTOUR du cylindre différente = montage réellement distinct.
-        # Le vrai 2e jeu de die/clichés (même cylindre) = override
-        # `changement_outil_cliche` à venir (backlog).
-        montage_signatures = [
-            (lot.cylindre_id, lot.machine_id, lot.nb_poses_dev)
-            for lot in lots
+        # Lot D1 — calage lié au montage, piloté par le flag explicite
+        # `changement_outil_cliche` (remplace l'heuristique signature). Le 1er
+        # lot porte le calage du montage ; un lot 2+ n'ajoute un calage que sur
+        # un VRAI changement d'outil/cliché. Changer de bobine mère (matière ou
+        # laize) sur le même montage = flag False = 0 calage supplémentaire.
+        changements_outil_cliche = [
+            bool(lot.changement_outil_cliche) for lot in lots
         ]
         cout_agrege = calculer_devis_multilots(
-            db, entreprise_id, devis_inputs, montage_signatures=montage_signatures
+            db,
+            entreprise_id,
+            devis_inputs,
+            changements_outil_cliche=changements_outil_cliche,
         )
     except (CostEngineError, ValueError) as exc:
         # Échec MÉTIER attendu (matière non reliée à un complexe, complexe
@@ -1762,6 +1772,10 @@ def update_devis(
                 mode_sans_outil=lot_dict.get("mode_sans_outil", False),
                 laize_stock_mm=lot_dict.get("laize_stock_mm"),
                 nb_filles_force=lot_dict.get("nb_filles_force"),
+                # Lot D1 — flag calage/montage persisté à l'édition.
+                changement_outil_cliche=lot_dict.get(
+                    "changement_outil_cliche", False
+                ),
             )
             db.add(lot)
             nouveaux_lots.append(lot)
