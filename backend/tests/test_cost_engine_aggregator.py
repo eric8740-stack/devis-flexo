@@ -71,10 +71,9 @@ def test_aggregateur_appelle_cost_engine_n_fois():
     assert len(result.details_par_lot) == 3
 
 
-def test_aggregateur_somme_avec_dedup_signatures_distinctes():
-    """Bug #5 : Σ avec dédup calage active. Deux lots de montages DISTINCTS
-    (signatures différentes) → AUCUNE dédup → somme pleine (les 2 calages
-    sont conservés car ce sont 2 vrais montages)."""
+def test_aggregateur_changement_outil_cliche_conserve_les_2_calages():
+    """Lot D1 : 2e lot avec `changement_outil_cliche=True` → vrai changement
+    d'outil → son calage est CONSERVÉ → somme pleine (2 calages = 2 montages)."""
     mock_moteur = MagicMock()
     mock_moteur.calculer.side_effect = [
         _devis_output_mock(123.45, 100, calage=50),
@@ -88,15 +87,16 @@ def test_aggregateur_somme_avec_dedup_signatures_distinctes():
             db=MagicMock(),
             entreprise_id=1,
             devis_inputs=[MagicMock(), MagicMock()],
-            montage_signatures=[(1, 1, 1), (2, 1, 1)],  # cylindres ≠ → montages ≠
+            changements_outil_cliche=[False, True],  # lot 2 = vrai changement
         )
-    # Signatures distinctes → pas de dédup → 123.45 + 876.55 = 1000.00.
+    # Lot 2 flag True → calage conservé → 123.45 + 876.55 = 1000.00.
     assert result.prix_vente_ht_total_eur == Decimal("1000.00")
     assert result.cout_revient_total_eur == Decimal("800.00")
+    assert Decimal(result.details_par_lot[1].details["calage_montage_deduplique_eur"]) == 0
 
 
-def test_aggregateur_sans_signatures_somme_pure():
-    """`montage_signatures=None` → comportement historique : somme pure,
+def test_aggregateur_sans_flags_somme_pure():
+    """`changements_outil_cliche=None` → comportement historique : somme pure,
     calage par lot (non-régressif pour les appelants legacy)."""
     mock_moteur = MagicMock()
     mock_moteur.calculer.side_effect = [
@@ -115,9 +115,9 @@ def test_aggregateur_sans_signatures_somme_pure():
     assert result.cout_revient_total_eur == Decimal("800.00")
 
 
-def test_aggregateur_dedup_calage_meme_montage():
-    """Bug #5 cœur : 2 lots de MÊME signature (même outil, bobine différente)
-    → le calage du 2e lot est DÉDUIT (1 seul calage pour le montage)."""
+def test_aggregateur_lot_sans_changement_deduit_calage():
+    """Lot D1 cœur : 2e lot SANS changement d'outil (flag False = bobine/laize
+    différente, même montage) → son calage est DÉDUIT (1 seul calage)."""
     mock_moteur = MagicMock()
     # 2 lots identiques : cout_revient=1000 dont calage=225 ; prix=1000×1.18.
     mock_moteur.calculer.side_effect = [
@@ -131,7 +131,7 @@ def test_aggregateur_dedup_calage_meme_montage():
         result = calculer_devis_multilots(
             db=MagicMock(), entreprise_id=1,
             devis_inputs=[MagicMock(), MagicMock()],
-            montage_signatures=[(7, 1, 1), (7, 1, 1)],  # même montage
+            changements_outil_cliche=[False, False],  # même montage
         )
     # Lot 1 intact (1180 / 1000). Lot 2 dédup : cout 1000-225=775,
     # prix 775×1.18=914.50. Total = 2094.50 / 1775.
@@ -145,8 +145,8 @@ def test_aggregateur_dedup_calage_meme_montage():
 
 
 def test_aggregateur_un_lot_jamais_dedup_sacred():
-    """SACRED : un devis à 1 lot n'est JAMAIS touché (1ʳᵉ signature toujours
-    conservée) — garantit tripwire P0b 704,07 € inchangé."""
+    """SACRED : un devis à 1 lot n'est JAMAIS touché (le 1er lot conserve
+    toujours son calage) — garantit tripwire P0b inchangé."""
     mock_moteur = MagicMock()
     mock_moteur.calculer.return_value = _devis_output_mock(704.07, 596.67, calage=225)
     with patch(
@@ -156,7 +156,7 @@ def test_aggregateur_un_lot_jamais_dedup_sacred():
         result = calculer_devis_multilots(
             db=MagicMock(), entreprise_id=1,
             devis_inputs=[MagicMock()],
-            montage_signatures=[(7, 1, 1)],
+            changements_outil_cliche=[False],
         )
     assert result.prix_vente_ht_total_eur == Decimal("704.07")  # calage conservé
     assert Decimal(result.details_par_lot[0].details["calage_montage_deduplique_eur"]) == 0
