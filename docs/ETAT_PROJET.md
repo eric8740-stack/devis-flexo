@@ -17,6 +17,13 @@
 
 ---
 
+## 2026-07-05 · Flux optim→devis : Encres chiffrées dès la création (#158)
+
+- **Vérification du bug historique** (`audit_liaison_optimisation_devis.md` du 27/05) par test de reproduction : (a) 0 € silencieux et (c) erreur UI = déjà corrigés (HT `None` + `chiffrage_auto_erreur` + bandeau) ; **(b) Encres = TOUJOURS CASSÉ sur POST + preview-couts** — le front optim pose les couleurs dans `payload_input.nb_couleurs`, jamais au champ racine → P2 = 0 €, devis sous-évalué ~25 % (repro : 696,12 € au lieu de 933,49 € pour 4 couleurs), prix qui « sautait » à la 1ʳᵉ réédition (PUT corrigé par E1). **(d) doublons : aucun doublon structurel** dans la boucle des lots (calage même dédupliqué) ; seul cas de devis en double = double-clic (pas d'idempotence serveur, non traité — reste tracé).
+- **Fix (#158, mergé CI 100 % verte)** : fallback `_nb_couleurs_depuis_payload_input` symétrique au fix E1 dans `create_devis` et `preview-couts` ; priorité champ racine inchangée ; « aucune couleur nulle part → P2=0 » conservé. +3 tests (`test_optim_devis_nb_couleurs_fallback.py`) : égalité de prix shape front optim vs champ racine, priorité racine, preview. **Baseline : 1280/0.**
+
+---
+
 ## 2026-07-05 · Audit complet + sprint blindage pilote (#157)
 
 - **Audit 5 axes** (sécurité multi-tenant, correctness back, front, hygiène repo, cartographie) → `docs/AUDIT_2026-07-05.md` (findings avec fichier:ligne + plan). Verdict archi : **pas de refonte** — fondations saines (Decimal partout, scoping tenant discipliné, CI sérieuse).
