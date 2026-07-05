@@ -19,7 +19,7 @@ from app.dependencies import get_current_user
 from app.main import app
 from app.models import Entreprise, User
 from app.services.auth_service import hash_password
-from scripts.seed import run_seed
+from scripts.seed import modeles_purge_ordonnes, run_seed
 
 DEMO_ENTREPRISE_ID = 1
 DEMO_ADMIN_EMAIL = "admin@devis-flexo.fr"
@@ -93,6 +93,42 @@ def _ensure_user_b() -> User:
         db.close()
 
 
+def _reset_tous_les_tenants() -> None:
+    """Remet la base de test à zéro : supprime TOUTES les entreprises
+    (démo comprise) avant le re-seed.
+
+    Blindage C1 (05/07/2026) : `run_seed` est désormais scopé tenant démo et
+    ne supprime plus la row Entreprise (les DELETE globaux détruisaient les
+    autres comptes en prod). Or les tests comptaient sur la cascade DB du
+    `DELETE entreprise` pour repartir d'un état vierge à CHAQUE test
+    (matières, cylindres, barèmes, options, users... créés par les tests
+    eux-mêmes). On restaure cette sémantique ICI, côté tests uniquement.
+
+    Wipe GLOBAL table par table (pas tenant par tenant) : d'éventuelles
+    lignes cross-tenant (données IDOR créées par un test) rendraient un
+    DELETE scopé impossible (FK). Ordre FK-safe partagé avec le seed
+    (`modeles_purge_ordonnes`), puis DELETE users + entreprises — la
+    cascade DB (PRAGMA foreign_keys=ON garanti par app/db.py) balaie le
+    reste (matiere, cylindre, baremes, options...). `run_seed` recrée
+    ensuite le tenant démo complet.
+    """
+    from app.models import Bobine, MouvementStock
+
+    db: Session = SessionLocal()
+    try:
+        # Bobine porte une FK NO ACTION vers matiere : à vider AVANT le
+        # DELETE entreprise (ordre des cascades SQLite non garanti).
+        db.query(MouvementStock).delete(synchronize_session=False)
+        db.query(Bobine).delete(synchronize_session=False)
+        for modele in modeles_purge_ordonnes():
+            db.query(modele).delete(synchronize_session=False)
+        db.query(User).delete(synchronize_session=False)
+        db.query(Entreprise).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
 def pytest_configure(config):
     """Déclare le marker `no_auth_override` (utilisé par les tests d'auth)."""
     config.addinivalue_line(
@@ -114,6 +150,7 @@ def seed_db_before_each_test(request):
     Exception : les tests marqués `@pytest.mark.no_auth_override`
     (test_auth_router, test_auth_service) gardent l'auth réelle.
     """
+    _reset_tous_les_tenants()
     run_seed()
     if request.node.get_closest_marker("no_auth_override") is None:
         app.dependency_overrides[get_current_user] = _get_demo_admin

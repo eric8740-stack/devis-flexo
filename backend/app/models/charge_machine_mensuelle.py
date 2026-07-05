@@ -29,7 +29,15 @@ class ChargeMachineMensuelle(Base):
     __table_args__ = (
         CheckConstraint("mois BETWEEN 1 AND 12", name="ck_charge_machine_mois"),
         CheckConstraint("annee >= 2024", name="ck_charge_machine_annee"),
-        UniqueConstraint("mois", "annee", name="uq_charge_machine_mois_annee"),
+        # Blindage pilote (audit 05/07/2026 E2) — UNIQUE composite scopé
+        # tenant (migration r7t2u9w4x1z6) : chaque entreprise a SA charge
+        # de juin 2026, sans bloquer celle des autres.
+        UniqueConstraint(
+            "entreprise_id",
+            "mois",
+            "annee",
+            name="uq_charge_machine_entreprise_mois_annee",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -10,6 +10,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,6 +26,13 @@ class Complexe(Base):
     """
 
     __tablename__ = "complexe"
+    __table_args__ = (
+        # Blindage pilote (audit 05/07/2026 E2) — UNIQUE composite scopé
+        # tenant (migration r7t2u9w4x1z6).
+        UniqueConstraint(
+            "entreprise_id", "reference", name="uq_complexe_entreprise_reference"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
@@ -35,7 +43,7 @@ class Complexe(Base):
         index=True,
     )
 
-    reference: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    reference: Mapped[str] = mapped_column(String(50), nullable=False)
 
     # bopp / pp / pe / pvc_vinyle / thermique / papier_couche /
     # papier_standard / papier_epais / papier_kraft / papier_verge

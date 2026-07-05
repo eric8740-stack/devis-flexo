@@ -30,15 +30,26 @@ export default function OperationsFinitionPage() {
   const [items, setItems] = useState<OperationFinition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () =>
+  // `isCancelled` (audit 05/07/2026 M5) : le useEffect passe un flag lu
+  // avant chaque setState pour ignorer une réponse arrivée après unmount.
+  const load = (isCancelled: () => boolean = () => false) =>
     listOperationsFinition()
-      .then(setItems)
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : String(err))
-      );
+      .then((res) => {
+        if (!isCancelled()) setItems(res);
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled()) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      });
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+    void load(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDelete = async (op: OperationFinition) => {

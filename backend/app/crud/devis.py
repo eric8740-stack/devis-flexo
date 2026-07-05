@@ -12,6 +12,7 @@ import math
 from decimal import Decimal
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -106,6 +107,71 @@ def _mapper_nb_couleurs(nb_couleurs: NbCouleursIn | None) -> dict[str, int]:
     return result
 
 
+def _nb_couleurs_depuis_payload_input(payload_input: Any) -> dict[str, int]:
+    """Audit 05/07/2026 (E1) — fallback PUT : relit les compteurs couleurs
+    persistés dans `payload_input.nb_couleurs` (posé par le workflow optim
+    étape 1) quand le body du PUT ne fournit pas `nb_couleurs`.
+
+    Best-effort : payload legacy sans la clé, clé mal formée ou clés
+    inattendues → {} (P2 = 0 €, comportement pré-E1 — jamais un 500 sur
+    une simple édition).
+    """
+    if not isinstance(payload_input, dict):
+        return {}
+    brut = payload_input.get("nb_couleurs")
+    if not isinstance(brut, dict):
+        return {}
+    try:
+        return _mapper_nb_couleurs(NbCouleursIn(**brut))
+    except ValidationError:
+        return {}
+
+
+def _valider_fks_tenant_devis(
+    db: Session,
+    entreprise_id: int,
+    client_id: int | None,
+    machine_id_payload: Any,
+    lots: list[tuple[int | None, int, int]],
+) -> None:
+    """Audit 05/07/2026 (E5, IDOR) — valide l'appartenance tenant de toutes
+    les FK insérées par create/update devis : `client_id`, `machine_id` du
+    payload_input (dénormalisé sur devis.machine_id) et, par lot, le
+    triplet (cylindre_id, machine_id, matiere_id).
+
+    Modèle suivi : routers/cost.py (validate_id_belongs_to_user). 404
+    anti-énumération (même contrat que scope_service) si un ID n'existe
+    pas OU appartient à une autre entreprise.
+    """
+    # Imports locaux : Matiere pour éviter l'import circulaire au chargement
+    # (même pattern que _enrichir_lot_pour_read).
+    from app.models import Matiere
+    from app.services.scope_service import validate_id_belongs_to_entreprise
+
+    if client_id is not None:
+        validate_id_belongs_to_entreprise(db, Client, client_id, entreprise_id)
+
+    # machine_id du payload_input : JSON libre → coercition prudente. Une
+    # valeur non entière est laissée au comportement antérieur (erreur de
+    # validation/DB en aval), on ne valide que les IDs exploitables.
+    try:
+        machine_id_denorm = int(machine_id_payload)
+    except (TypeError, ValueError):
+        machine_id_denorm = None
+    if machine_id_denorm is not None:
+        validate_id_belongs_to_entreprise(
+            db, Machine, machine_id_denorm, entreprise_id
+        )
+
+    for cylindre_id, machine_id, matiere_id in lots:
+        validate_id_belongs_to_entreprise(db, Machine, machine_id, entreprise_id)
+        validate_id_belongs_to_entreprise(db, Matiere, matiere_id, entreprise_id)
+        if cylindre_id is not None:
+            validate_id_belongs_to_entreprise(
+                db, CylindreMagnetique, cylindre_id, entreprise_id
+            )
+
+
 # ---------------------------------------------------------------------------
 # Extraction des dénormalisés depuis payload_input / payload_output
 # ---------------------------------------------------------------------------
@@ -159,11 +225,23 @@ def _attach_relation_names(devis: Devis, db: Session) -> Devis:
     joints (machine_nom, cylindre_nb_dents, matiere_libelle,
     sens_enroulement_libelle, rotation_vue_a/c_deg) pour permettre
     `DevisResultMultiLots` côté UI sans N+1.
+
+    Audit 05/07/2026 (E5) — lookups SCOPÉS sur devis.entreprise_id : un
+    `db.get()` nu résolvait les noms client/machine de n'importe quel
+    tenant si un id étranger s'était glissé dans le devis (fuite de noms).
     """
-    machine = db.get(Machine, devis.machine_id)
+    machine = (
+        db.query(Machine)
+        .filter_by(id=devis.machine_id, entreprise_id=devis.entreprise_id)
+        .first()
+    )
     setattr(devis, "machine_nom", machine.nom if machine else "")
     if devis.client_id is not None:
-        client = db.get(Client, devis.client_id)
+        client = (
+            db.query(Client)
+            .filter_by(id=devis.client_id, entreprise_id=devis.entreprise_id)
+            .first()
+        )
         setattr(
             devis,
             "client_nom",
@@ -191,7 +269,13 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
     )
 
     # P1+P2 : repoint sur Machine (parc unique). Voir migration b2c3d4e5f6g7.
-    machine = db.get(Machine, lot.machine_id)
+    # Audit 05/07/2026 (E5) — lookups scopés sur lot.entreprise_id (comme
+    # _attach_relation_names) : pas de résolution de noms cross-tenant.
+    machine = (
+        db.query(Machine)
+        .filter_by(id=lot.machine_id, entreprise_id=lot.entreprise_id)
+        .first()
+    )
     setattr(
         lot,
         "machine_nom",
@@ -200,7 +284,9 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
     # Lot back A/B — cylindre_id NULL en mode sans outil (pas d'outil) : on
     # évite `db.get(..., None)` (SAWarning « fully NULL primary key »).
     cyl = (
-        db.get(CylindreMagnetique, lot.cylindre_id)
+        db.query(CylindreMagnetique)
+        .filter_by(id=lot.cylindre_id, entreprise_id=lot.entreprise_id)
+        .first()
         if lot.cylindre_id is not None
         else None
     )
@@ -215,7 +301,11 @@ def _enrichir_lot_pour_read(lot: LotProduction, db: Session) -> None:
     else:
         setattr(lot, "cylindre_developpe_mm", None)
         setattr(lot, "cylindre_nb_dents", None)
-    mat = db.get(Matiere, lot.matiere_id)
+    mat = (
+        db.query(Matiere)
+        .filter_by(id=lot.matiere_id, entreprise_id=lot.entreprise_id)
+        .first()
+    )
     setattr(lot, "matiere_libelle", mat.libelle if mat else None)
     # Métadonnées sens : façade sens_metadata (1-8 délégués à rotation_se
     # verrouillé, 0/9 = bobines vierges sans impression gérées localement).
@@ -303,8 +393,23 @@ def create_devis(
     reconstruction des DevisInput échoue (champs manquants, complexe
     introuvable), fallback gracieux : devis créé avec prix=0 + note
     "chiffrage à compléter via /devis/[id]/edit".
+
+    Audit 05/07/2026 (E5, IDOR) : toutes les FK du payload (client_id,
+    machine_id, et par lot machine/matière/cylindre) sont validées contre
+    le tenant AVANT insertion — 404 anti-énumération sinon.
     """
     denorm = _extract_denormalised_fields(data.payload_input, data.payload_output)
+
+    _valider_fks_tenant_devis(
+        db,
+        entreprise_id,
+        data.client_id,
+        denorm["machine_id"],
+        [
+            (lot.cylindre_id, lot.machine_id, lot.matiere_id)
+            for lot in (data.lots or [])
+        ],
+    )
 
     # Fix 409 — retry loop sur collision UNIQUE(entreprise_id, numero).
     # Cause historique : generate_next_numero etait `count+1` non scope
@@ -765,8 +870,12 @@ def preview_devis(
             {"niveau": "warn", "message": "Aucune presse active — chiffrage indisponible."}
         )
 
+    # Audit 05/07/2026 (E5) — lookup scopé tenant (pas de lecture du
+    # développé d'un cylindre d'une autre entreprise via id deviné).
     cyl = (
-        db.get(CylindreMagnetique, p["cylindre_id"])
+        db.query(CylindreMagnetique)
+        .filter_by(id=p["cylindre_id"], entreprise_id=entreprise_id)
+        .first()
         if p.get("cylindre_id")
         else None
     )
@@ -1720,6 +1829,32 @@ def update_devis(
     # Brief #32 — lots éditables. Si fourni, replace + recalcul cost_engine.
     lots_in = fields.pop("lots", None)
     quantite_totale_in = fields.pop("quantite_totale", None)
+    # Audit 05/07/2026 (E1) — nb_couleurs : consommé par le rechiffrage,
+    # jamais un attribut du modèle Devis (le setattr silencieux d'avant le
+    # perdait). Pop inconditionnel : fourni ou non, il ne doit pas finir
+    # dans la boucle setattr.
+    nb_couleurs_in = fields.pop("nb_couleurs", None)
+
+    # Audit 05/07/2026 (E5, IDOR) — validation tenant des FK transmises par
+    # le body AVANT toute mutation : client_id, machine_id du payload_input
+    # (re-dérivé en dénormalisé plus bas) et FK de chaque lot.
+    payload_input_body = fields.get("payload_input")
+    _valider_fks_tenant_devis(
+        db,
+        devis.entreprise_id,
+        fields.get("client_id"),
+        payload_input_body.get("machine_id")
+        if isinstance(payload_input_body, dict)
+        else None,
+        [
+            (
+                lot_dict.get("cylindre_id"),
+                lot_dict["machine_id"],
+                lot_dict["matiere_id"],
+            )
+            for lot_dict in (lots_in or [])
+        ],
+    )
     if lots_in is not None:
         # Validation cohérence somme (déjà partiellement faite côté Pydantic
         # DevisCreate mais DevisUpdate accepte les 2 séparément).
@@ -1766,9 +1901,26 @@ def update_devis(
             db.add(lot)
             nouveaux_lots.append(lot)
         db.flush()
+        # Audit 05/07/2026 (E1) — propage nb_couleurs au rechiffrage (comme
+        # le POST, fixé au Sprint 16). Priorité au body du PUT ; sinon
+        # fallback sur les compteurs persistés dans payload_input. Sans ça,
+        # toute édition faisait retomber P2 Encres et P3a Clichés à 0 €.
+        if nb_couleurs_in is not None:
+            nb_couleurs_par_type = _mapper_nb_couleurs(
+                NbCouleursIn(**nb_couleurs_in)
+            )
+        else:
+            nb_couleurs_par_type = _nb_couleurs_depuis_payload_input(
+                devis.payload_input
+            )
         # Recalcul cost_engine_aggregator avec les nouveaux lots.
         _chiffrer_devis_multilots(
-            db, devis, nouveaux_lots, devis.payload_input, devis.entreprise_id
+            db,
+            devis,
+            nouveaux_lots,
+            devis.payload_input,
+            devis.entreprise_id,
+            nb_couleurs_par_type,
         )
         # Fix regression rapport + plan : quand le serveur vient de recalculer
         # payload_output via `_chiffrer_devis_multilots`, un payload_output

@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -19,6 +27,13 @@ class OutilDecoupe(Base):
     """
 
     __tablename__ = "outil_decoupe"
+    __table_args__ = (
+        # Blindage pilote (audit 05/07/2026 E2) — UNIQUE composite scopé
+        # tenant (migration r7t2u9w4x1z6).
+        UniqueConstraint(
+            "entreprise_id", "libelle", name="uq_outil_decoupe_entreprise_libelle"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
@@ -29,7 +44,7 @@ class OutilDecoupe(Base):
         index=True,
     )
 
-    libelle: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    libelle: Mapped[str] = mapped_column(String(100), nullable=False)
 
     format_l_mm: Mapped[int] = mapped_column(Integer, nullable=False)
     format_h_mm: Mapped[int] = mapped_column(Integer, nullable=False)

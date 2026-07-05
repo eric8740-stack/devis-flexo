@@ -2,7 +2,18 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -37,6 +48,12 @@ class Machine(Base):
     """
 
     __tablename__ = "machine"
+    __table_args__ = (
+        # Blindage pilote (audit 05/07/2026 E2) — UNIQUE composite scopé
+        # tenant (migration r7t2u9w4x1z6) : deux entreprises peuvent posséder
+        # chacune une « Mark Andy 2200 ». Même pattern que devis.numero.
+        UniqueConstraint("entreprise_id", "nom", name="uq_machine_entreprise_nom"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
@@ -47,7 +64,7 @@ class Machine(Base):
         index=True,
     )
 
-    nom: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    nom: Mapped[str] = mapped_column(String(100), nullable=False)
     largeur_max_mm: Mapped[int | None] = mapped_column(Integer)
     vitesse_max_m_min: Mapped[int | None] = mapped_column(Integer)
     # B1 : renomme depuis `nb_couleurs` (migration z0p4n6r8s1t3). Aligne sur

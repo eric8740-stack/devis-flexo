@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api";
+import { API_URL, getAccessToken } from "@/lib/auth-tokens";
 
 // Client isolé pour le module Contrôle BAT IA (FlexoCheck) — Sprint 15.
 // Types alignés sur les schémas Pydantic de `backend/app/schemas/controle_bat.py`
@@ -9,16 +10,8 @@ import { ApiError } from "@/lib/api";
 // `lib/api.ts`). Si on tombe sur un 401, on remonte l'erreur — l'appel
 // suivant via apiFetch principal déclenchera le refresh.
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-const ACCESS_TOKEN_KEY = "devis_flexo_access_token";
-
 function authHeader(): Record<string, string> {
-  const token =
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(ACCESS_TOKEN_KEY)
-      : null;
+  const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

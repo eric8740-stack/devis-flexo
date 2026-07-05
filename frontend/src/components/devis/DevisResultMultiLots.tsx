@@ -162,12 +162,17 @@ export function extractLotChiffrageParLot(
 
 export function DevisResultMultiLots({
   devis,
-  pdfUrl,
+  onImprimer,
+  impressionEnCours = false,
   onDupliquer,
   onSupprimer,
 }: {
   devis: DevisDetail;
-  pdfUrl: string;
+  // Fix E4 (audit 05/07/2026) — l'endpoint PDF est authentifié : plus de
+  // lien <a href> direct (401 garanti). Le parent fournit un handler qui
+  // fetch le blob avec le Bearer et l'ouvre dans un nouvel onglet.
+  onImprimer: () => void;
+  impressionEnCours?: boolean;
   onDupliquer: () => void;
   onSupprimer: () => void;
 }) {
@@ -245,10 +250,13 @@ export function DevisResultMultiLots({
             <Button asChild variant="outline" size="sm">
               <Link href="/devis">↩ Liste</Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
-              <a href={pdfUrl} download={`${devis.numero}.pdf`}>
-                🖨️ Imprime
-              </a>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onImprimer}
+              disabled={impressionEnCours}
+            >
+              {impressionEnCours ? "🖨️ Ouverture…" : "🖨️ Imprime"}
             </Button>
             <Button variant="outline" size="sm" onClick={onDupliquer}>
               📑 Duplique

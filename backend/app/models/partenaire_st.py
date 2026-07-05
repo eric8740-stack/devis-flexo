@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -10,6 +19,15 @@ class PartenaireST(Base):
     """Partenaire sous-traitance finition (différent des fournisseurs matière)."""
 
     __tablename__ = "partenaire_st"
+    __table_args__ = (
+        # Blindage pilote (audit 05/07/2026 E2) — UNIQUE composite scopé
+        # tenant (migration r7t2u9w4x1z6).
+        UniqueConstraint(
+            "entreprise_id",
+            "raison_sociale",
+            name="uq_partenaire_st_entreprise_rs",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
@@ -20,9 +38,7 @@ class PartenaireST(Base):
         index=True,
     )
 
-    raison_sociale: Mapped[str] = mapped_column(
-        String(150), nullable=False, unique=True
-    )
+    raison_sociale: Mapped[str] = mapped_column(String(150), nullable=False)
     siret: Mapped[str | None] = mapped_column(String(14))
 
     contact_nom: Mapped[str | None] = mapped_column(String(100))

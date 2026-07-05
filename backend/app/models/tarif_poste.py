@@ -10,6 +10,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -33,20 +34,24 @@ class TarifPoste(Base):
         CheckConstraint(
             "poste_numero BETWEEN 1 AND 7", name="ck_tarif_poste_poste_numero"
         ),
+        # Blindage pilote (audit 05/07/2026 E2) — dette S12 résorbée :
+        # UNIQUE composite scopé tenant (migration r7t2u9w4x1z6), cohérent
+        # tarif_encre.
+        UniqueConstraint(
+            "entreprise_id", "cle", name="uq_tarif_poste_entreprise_cle"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Sprint 12 multi-tenant — scope par entreprise (cf. client.py).
-    # `cle` UNIQUE devient cross-tenant ; à composer en (entreprise_id, cle)
-    # au S12-C si besoin (cohérent tarif_encre).
     entreprise_id: Mapped[int] = mapped_column(
         ForeignKey("entreprise.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    cle: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    cle: Mapped[str] = mapped_column(String(50), nullable=False)
     poste_numero: Mapped[int] = mapped_column(Integer, nullable=False)
     libelle: Mapped[str] = mapped_column(String(150), nullable=False)
     valeur_defaut: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)

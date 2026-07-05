@@ -68,11 +68,24 @@ def validate_id_belongs_to_user(
 
     Lève 404 si l'ID n'existe pas OU n'appartient pas à `user.entreprise_id`.
     """
+    validate_id_belongs_to_entreprise(db, model_class, item_id, user.entreprise_id)
+
+
+def validate_id_belongs_to_entreprise(
+    db: Session, model_class: Type[T], item_id: int, entreprise_id: int
+) -> None:
+    """Variante de `validate_id_belongs_to_user` pour les couches CRUD qui
+    ne reçoivent que l'`entreprise_id` (audit 05/07/2026 E5 — validation
+    des FK tenant dans create/update devis).
+
+    Même contrat : 404 anti-énumération si l'ID n'existe pas OU appartient
+    à une autre entreprise.
+    """
     exists = (
         db.query(model_class.id)
         .filter(
             model_class.id == item_id,
-            model_class.entreprise_id == user.entreprise_id,
+            model_class.entreprise_id == entreprise_id,
         )
         .first()
     )

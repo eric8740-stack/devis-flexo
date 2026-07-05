@@ -1,7 +1,16 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -11,6 +20,13 @@ class OperationFinition(Base):
     """Opération de finition réalisée en interne (vernis, laminage, dorure...)."""
 
     __tablename__ = "operation_finition"
+    __table_args__ = (
+        # Blindage pilote (audit 05/07/2026 E2) — UNIQUE composite scopé
+        # tenant (migration r7t2u9w4x1z6).
+        UniqueConstraint(
+            "entreprise_id", "nom", name="uq_operation_finition_entreprise_nom"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
@@ -21,7 +37,7 @@ class OperationFinition(Base):
         index=True,
     )
 
-    nom: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    nom: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # m2 / ml / unite / millier
     unite_facturation: Mapped[str] = mapped_column(String(20), nullable=False)

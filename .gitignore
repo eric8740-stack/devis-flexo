@@ -16,9 +16,11 @@ venv/
 .env.local
 .env.*.local
 
-# Base de données dev
-backend/*.db
-backend/*.db-journal
+# Base de données dev — règle GLOBALE (audit 05/07/2026 M8) : couvre aussi
+# la db orpheline créée à la racine quand uvicorn/pytest est lancé du
+# mauvais cwd (repo public, risque `git add -A`).
+*.db
+*.db-journal
 
 # Uploads photos analyses (storage local dev, prod = Railway Volume)
 backend/.uploads/

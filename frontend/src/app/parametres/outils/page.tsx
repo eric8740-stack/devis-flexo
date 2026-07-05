@@ -26,18 +26,29 @@ export default function ParametresOutilsPage() {
   const [mode, setMode] = useState<FormMode>(null);
   const [editing, setEditing] = useState<OutilDecoupeRead | null>(null);
 
+  // `isCancelled` (audit 05/07/2026 M5) : au toggle actifs/inactifs, une
+  // réponse périmée pouvait écraser la plus récente. Le useEffect passe un
+  // flag lu avant chaque setState.
   const load = useCallback(
-    () =>
+    (isCancelled: () => boolean = () => false) =>
       listOutilsDecoupe(includeInactives)
-        .then(setItems)
-        .catch((err: unknown) =>
-          setError(err instanceof Error ? err.message : String(err))
-        ),
+        .then((res) => {
+          if (!isCancelled()) setItems(res);
+        })
+        .catch((err: unknown) => {
+          if (!isCancelled()) {
+            setError(err instanceof Error ? err.message : String(err));
+          }
+        }),
     [includeInactives]
   );
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void load(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const handleCreate = async (data: OutilDecoupeCreate) => {
