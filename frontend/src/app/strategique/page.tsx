@@ -13,19 +13,27 @@ import { cn } from "@/lib/utils";
 
 import { ChangementsSection } from "./_components/ChangementsSection";
 import { ChargesSection } from "./_components/ChargesSection";
+import {
+  CalageCoutsSection,
+  FinitionsCoutsSection,
+  MargeRoulageSection,
+  OutilsCoutsSection,
+} from "./_components/ConfigCoutsChamps";
 import { CoutsSection } from "./_components/CoutsSection";
 import {
   ComplexesSection,
   EncreSection,
   MachinesSection,
-  OutilsSection,
 } from "./_components/ReadonlySections";
 import { RoulageSection } from "./_components/RoulageSection";
 
-// Onglet Stratégique (Brief stratégique v2) — config par entreprise, 7 sections.
-// Sections 1-4 : tables existantes, lecture seule + lien de gestion (anti-doublon).
-// Sections 5-6 : config Phase 1 (Roulage, Coûts/Marges, Changements) → CRUD.
-// Section 7 (Charges) : CRUD inline des frais fixes mensuels (la page
+// Onglet Stratégique (Brief stratégique v2) — config par entreprise.
+// Machines/Complexes/Encre : tables existantes, lecture seule + lien de
+//   gestion (anti-doublon).
+// Outils/Calage/Finitions : coûts ConfigCouts migrés depuis TarifPoste
+//   (Lot 4a) → édition directe (Lot 4b).
+// Roulage, Coûts/Marges, Changements : config Phase 1 → CRUD.
+// Charges : CRUD inline des frais fixes mensuels (la page
 //   /charges-mensuelles standalone reste disponible).
 const SECTIONS: {
   id: string;
@@ -58,16 +66,39 @@ const SECTIONS: {
   {
     id: "outils",
     label: "Outils",
-    title: "Outils (clichés & plaques)",
-    description: "Coûts clichés/outils — lecture seule, édition dans Tarifs.",
-    node: <OutilsSection />,
+    title: "Outils (clichés & découpe)",
+    description:
+      "Coûts clichés et outils de découpe utilisés par le chiffrage (config tenant, éditable).",
+    node: <OutilsCoutsSection />,
+  },
+  {
+    id: "calage",
+    label: "Calage",
+    title: "Calage",
+    description: "Forfait de calage appliqué au chiffrage (config tenant).",
+    node: <CalageCoutsSection />,
+  },
+  {
+    id: "finitions",
+    label: "Finitions",
+    title: "Finitions",
+    description: "Prix des finitions au m² appliqué au chiffrage (config tenant).",
+    node: <FinitionsCoutsSection />,
   },
   {
     id: "roulage",
     label: "Roulage & Production",
     title: "Roulage & Production",
     description: "Débits et mode de roulage par format (configurable).",
-    node: <RoulageSection />,
+    node: (
+      <div className="space-y-8">
+        <RoulageSection />
+        <div>
+          <h3 className="mb-3 text-sm font-semibold">Marge de confort</h3>
+          <MargeRoulageSection />
+        </div>
+      </div>
+    ),
   },
   {
     id: "couts",

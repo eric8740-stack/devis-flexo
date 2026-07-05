@@ -29,6 +29,15 @@ const COUTS = {
   marge_standard_pct: 35,
   buffer_rebut_pct: 2.5,
   buffer_setup_pct: 1,
+  // Phase 2 Lot 4a — coûts migrés depuis TarifPoste (édités dans
+  // ConfigCoutsChamps, cf. ConfigCoutsChamps.test.tsx).
+  marge_confort_roulage_mm: 5,
+  cliche_prix_couleur_eur: 45,
+  outil_base_eur: 300,
+  outil_par_trace_eur: 0.8,
+  surcout_forme_speciale_facteur: 1.3,
+  calage_forfait_eur: 120,
+  finitions_prix_m2_eur: 0.35,
   date_creation: "2026-05-27T00:00:00Z",
   date_maj: "2026-05-27T00:00:00Z",
 };
