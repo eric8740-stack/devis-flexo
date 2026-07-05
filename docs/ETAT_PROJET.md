@@ -10,10 +10,18 @@
 ## En-tête
 
 - **Date** : 2026-07-05
-- **Branche active** : `main` = **`b286c8e`** (après #157 blindage + #158 fix optim→devis). **0 PR ouverte.** **CC1 / CC2 = libres.**
-- **Sprint en cours** : **Audit complet 05/07 (`docs/AUDIT_2026-07-05.md`) + sprint blindage EN PROD (#157)** — C1 seed scopé tenant · E1 nb_couleurs au PUT · E2 UNIQUE composites (8 tables, migration `r7t2u9w4x1z6`) · E3 fail-fast secrets · E4 PDF authentifié · E5 anti-IDOR FK devis · M5 races listes · deps npm 10→2 vulns. Antérieur : Lot D1 (calage lié au montage) mergé début 07/2026 ; Module Stock COMPLET EN PROD.
-- **Baseline** : **1280/0** (après #158 ; 1277 au run CI 28739634659 de #157) · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** / **D1 : 1 125,22** (2 lots même montage → 1 calage) et **1 390,72** (`changement_outil_cliche=True` lot 2 → 2 calages, delta 265,50 = 225,00 × 1,18) · `test_cost_router` legacy **1 449,09** (payload sans laize_papier — PÉRIMÉ comme référence courante) — tous verts au 05/07.
+- **Branche active** : `main` = **`4590880`** (après #157 blindage · #158 fix optim→devis · **#159 Lot D1 mergé**). **CC2 = Lot D2 front en cours** (branche `feat/D2-front-calage-checkbox`).
+- **Sprint en cours** : **Audit complet 05/07 (`docs/AUDIT_2026-07-05.md`) + sprint blindage EN PROD (#157)** — C1 seed scopé tenant · E1 nb_couleurs au PUT · E2 UNIQUE composites (8 tables, migration `r7t2u9w4x1z6`) · E3 fail-fast secrets · E4 PDF authentifié · E5 anti-IDOR FK devis · M5 races listes · deps npm 10→2 vulns. **Lot D1 mergé le 05/07 via #159** (rebase de #156, restée ouverte jusque-là) ; Module Stock COMPLET EN PROD.
+- **Baseline** : **1287/0** (CI Postgres #159 — 1280 après #158, +7 tests D1) · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** / **D1 : 1 125,22** (2 lots même montage → 1 calage) et **1 390,72** (`changement_outil_cliche=True` lot 2 → 2 calages, delta 265,50 = 225,00 × 1,18) · `test_cost_router` legacy **1 449,09** (payload sans laize_papier — PÉRIMÉ comme référence courante) — tous verts au 05/07.
 - **Carte qui-fait-quoi** : **CC1 / CC2 = libres.** **Prochain lot : D2 front** (checkbox `changement_outil_cliche` par lot — backend D1 live sur Railway, leçon #137 respectée). Puis : Lot 3 Phase 2 (P7 `cout_operateur_eur_h`, P5 `cout_exploitation_machine_eur_h`) · Lot 4 Phase 2 (7 champs manquants + UI Stratégique) · extension planificateur bobines (imposer nb bobines, surplus `n_laize`) · épaisseur paroi mandrin. **Restes d'audit (non urgents)** : M1 rate limiting auth · M2 rotation refresh + cookie HttpOnly · idempotence création devis (double-clic = 2 devis) · M3 `correspondance_laize_metrage` sans `entreprise_id` · M4 fallback silencieux laize papier · Next 15/16 · client API généré OpenAPI · lock requirements. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-07-05 · Lot D1 ENFIN mergé (#159, remplace #156) — ⚠️ erratum audit
+
+- **Erratum** : l'audit du matin avait conclu à tort que D1 était déjà dans `main` (erreur propagée quelques heures dans les docs). Réalité : la **PR #156 était restée OUVERTE** — comme le disait le RECAP Claude.ai (« premier point à reprendre »).
+- **Fait** : branche #156 rebasée sur main post-#157/#158 (conflits docs résolus côté main, `crud/devis.py`/`devis_persist.py` auto-mergés puis validés par tests), migration `f7a9c1e3d5b7` **rechaînée** sur `r7t2u9w4x1z6` → 1 seule head. Nouvelle **PR #159** (pas de force-push sur la branche CC1), #156 fermée avec renvoi. CI complète verte AVANT merge : **1287/0**, sacrés D1 validés pour la 1ʳᵉ fois en CI.
+- D1 en prod Railway. **CC2 lancé sur le Lot D2 front** (checkbox `changement_outil_cliche` par lot).
 
 ---
 
