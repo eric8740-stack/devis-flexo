@@ -108,9 +108,9 @@ def _mapper_nb_couleurs(nb_couleurs: NbCouleursIn | None) -> dict[str, int]:
 
 
 def _nb_couleurs_depuis_payload_input(payload_input: Any) -> dict[str, int]:
-    """Audit 05/07/2026 (E1) — fallback PUT : relit les compteurs couleurs
-    persistés dans `payload_input.nb_couleurs` (posé par le workflow optim
-    étape 1) quand le body du PUT ne fournit pas `nb_couleurs`.
+    """Audit 05/07/2026 (E1, étendu au POST/preview) — relit les compteurs
+    couleurs persistés dans `payload_input.nb_couleurs` (posé par le
+    workflow optim étape 1) quand le body ne fournit pas `nb_couleurs`.
 
     Best-effort : payload legacy sans la clé, clé mal formée ou clés
     inattendues → {} (P2 = 0 €, comportement pré-E1 — jamais un 500 sur
@@ -497,13 +497,24 @@ def create_devis(
 
         # Brief #32 commit 1 — chiffrage cost_engine automatique.
         # Sprint 16 fix : propage les compteurs couleurs (Poste 2 Encres).
+        # Audit 05/07/2026 (flux optim→devis) — même fallback que le PUT
+        # (E1) : le front optim pose les couleurs dans
+        # payload_input.nb_couleurs sans renseigner le champ racine → sans
+        # fallback, P2 Encres restait à 0 € à la création (devis sous-
+        # évalué, prix qui « sautait » à la première réédition).
+        if data.nb_couleurs is not None:
+            nb_couleurs_par_type = _mapper_nb_couleurs(data.nb_couleurs)
+        else:
+            nb_couleurs_par_type = _nb_couleurs_depuis_payload_input(
+                data.payload_input
+            )
         _chiffrer_devis_multilots(
             db,
             devis,
             lots_persistes,
             data.payload_input,
             entreprise_id,
-            _mapper_nb_couleurs(data.nb_couleurs),
+            nb_couleurs_par_type,
         )
 
     db.commit()

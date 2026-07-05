@@ -70,7 +70,13 @@ def preview_couts_devis(
         payload_input=payload.payload_input,
         reduction_pct=payload.reduction_pct,
         # Sprint 16 fix chiffrage : propage les compteurs couleurs (P2 Encres).
-        nb_couleurs_par_type=crud._mapper_nb_couleurs(payload.nb_couleurs),
+        # Audit 05/07/2026 (flux optim→devis) — fallback payload_input comme
+        # le POST/PUT : le preview du flux optim n'envoie pas le champ racine.
+        nb_couleurs_par_type=(
+            crud._mapper_nb_couleurs(payload.nb_couleurs)
+            if payload.nb_couleurs is not None
+            else crud._nb_couleurs_depuis_payload_input(payload.payload_input)
+        ),
     )
     return PreviewCoutsOut(**result)
 
