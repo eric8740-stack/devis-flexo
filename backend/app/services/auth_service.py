@@ -34,17 +34,46 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_EXPIRE_DAYS", "7"))
 
 
+def _is_environnement_prod() -> bool:
+    """Heuristique « on tourne en prod » (audit 05/07/2026 E3).
+
+    Deux signaux, l'un OU l'autre suffit :
+    - `RAILWAY_ENVIRONMENT` défini (injecté par Railway sur tout service) ;
+    - `DATABASE_URL` pointe vers PostgreSQL (la prod est la SEULE base
+      Postgres du projet — le dev local et les tests tournent sur SQLite).
+    """
+    if os.getenv("RAILWAY_ENVIRONMENT"):
+        return True
+    url = os.getenv("DATABASE_URL", "")
+    return url.startswith(("postgres://", "postgresql://"))
+
+
 def _resolve_jwt_secret() -> str:
-    """Lit JWT_SECRET en env. Fallback dev avec WARNING explicite."""
+    """Lit JWT_SECRET en env.
+
+    Audit 05/07/2026 (E3) — fail-fast en prod : sans JWT_SECRET, n'importe
+    qui lisant le code pouvait forger un token admin avec le fallback en
+    dur. Si l'environnement ressemble à de la prod (Postgres ou Railway),
+    on REFUSE de démarrer. En dev local SQLite, fallback conservé avec
+    WARNING (confort dev inchangé).
+    """
     secret = os.getenv("JWT_SECRET")
-    if secret is None:
-        logger.warning(
-            "JWT_SECRET env var not set — using fallback 'dev-secret-change-me'. "
-            "ANYONE WHO READS THE CODE CAN FORGE TOKENS. "
-            "CHANGE IN PRODUCTION via Railway env var (openssl rand -hex 64)."
+    if secret:
+        return secret
+    if _is_environnement_prod():
+        raise RuntimeError(
+            "JWT_SECRET absent alors que l'environnement est de la prod "
+            "(DATABASE_URL Postgres ou RAILWAY_ENVIRONMENT défini). "
+            "Démarrage refusé : un secret en dur permettrait de forger des "
+            "tokens admin. Définir JWT_SECRET sur Railway "
+            "(ex. `openssl rand -hex 64`) puis redéployer."
         )
-        return "dev-secret-change-me"
-    return secret
+    logger.warning(
+        "JWT_SECRET env var not set — using fallback 'dev-secret-change-me'. "
+        "ANYONE WHO READS THE CODE CAN FORGE TOKENS. "
+        "CHANGE IN PRODUCTION via Railway env var (openssl rand -hex 64)."
+    )
+    return "dev-secret-change-me"
 
 
 # Lecture lazy : une seule fois à l'import du module. Si JWT_SECRET change
