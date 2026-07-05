@@ -225,6 +225,12 @@ class DevisUpdate(BaseModel):
     quantite_totale: int | None = Field(None, ge=1)
     lots: list[LotProductionCreate] | None = Field(None, min_length=1)
 
+    # Audit 05/07/2026 (E1) — compteurs couleurs au PUT. Sans eux, le
+    # rechiffrage des lots repartait avec nb_couleurs_par_type={} → P2
+    # Encres et P3a Clichés retombaient à 0 € à chaque édition. None →
+    # fallback sur payload_input.nb_couleurs persisté (cf. update_devis).
+    nb_couleurs: NbCouleursIn | None = None
+
     # Sprint 14 Lot 1 — brief client unifié. Tous None par défaut (partial
     # update via exclude_unset côté CRUD : seuls les champs effectivement
     # transmis sont écrits).
