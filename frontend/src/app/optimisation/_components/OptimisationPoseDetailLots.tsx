@@ -42,6 +42,7 @@ export function OptimisationPoseDetailLots() {
     selection,
     setMatiereLot,
     setEpaisseurSaisieLot,
+    setChangementOutilLot,
     quantiteTotale,
     laizeEtiqMm,
     devEtiqMm,
@@ -196,6 +197,45 @@ export function OptimisationPoseDetailLots() {
                     Cette matière n&apos;a pas d&apos;épaisseur au catalogue.
                     Renseigne-la pour un Ø bobine juste — sinon le calcul
                     retombe sur 150 µm par défaut.
+                  </p>
+                </div>
+              )}
+
+              {/* Lot D2 — calage lié au MONTAGE (outil + clichés), backend D1.
+                  Lot 1 : pas de checkbox (son calage = celui du montage,
+                  toujours inclus). Lots suivants : décoché par défaut =
+                  même montage, pas de nouveau calage facturé. */}
+              {idx === 0 ? (
+                <p
+                  data-testid={`calage-inclus-${idx}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  🔧 1er calage inclus — calage du montage (outil + clichés).
+                </p>
+              ) : (
+                <div className="space-y-1 rounded-md border border-border bg-muted/20 p-3">
+                  <label
+                    htmlFor={`changement-outil-${idx}`}
+                    className="flex cursor-pointer items-center gap-2 text-sm font-medium"
+                  >
+                    <input
+                      id={`changement-outil-${idx}`}
+                      data-testid={`changement-outil-${idx}`}
+                      type="checkbox"
+                      className="h-4 w-4 cursor-pointer accent-foreground"
+                      checked={lot.changement_outil_cliche}
+                      onChange={(e) =>
+                        setChangementOutilLot(
+                          lot.id_candidat,
+                          e.target.checked,
+                        )
+                      }
+                    />
+                    Changement d&apos;outil / cliché
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Coché = nouveau calage facturé · décoché = même montage
+                    que le lot précédent.
                   </p>
                 </div>
               )}

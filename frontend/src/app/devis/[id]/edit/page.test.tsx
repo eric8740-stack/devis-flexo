@@ -108,6 +108,7 @@ describe("EditDevisPage — fix multi-lots redirect", () => {
             rotation_vue_a_deg: null,
             rotation_vue_c_deg: null,
             payload_visuel: null,
+            changement_outil_cliche: false,
           },
         ],
       }),

@@ -661,3 +661,162 @@ describe("OptimisationChiffrage — Sprint 16 propagation auto-fill", () => {
     ).toBe(false);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────
+// Lot D2 — changement d'outil / cliché : flag dans les lots du
+// preview-couts (recalcul live) et du POST /api/devis (persistance).
+// ──────────────────────────────────────────────────────────────────
+
+describe("OptimisationChiffrage — changement d'outil / cliché (Lot D2)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    installFetchMock();
+    routerPushMock.mockReset();
+    useClientsListeMock.mockReturnValue({
+      clients: [],
+      loading: false,
+      error: null,
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function idOf(c: OptimisationConfigOut): string {
+    return `${c.cylindre_id}-${c.machine_id}-${c.nb_poses_dev}x${c.nb_poses_laize}-${c.sens_enroulement}`;
+  }
+
+  function setupDeuxLots(opts: { changementLot2?: boolean } = {}) {
+    const candidatA = buildFakeCandidat(); // cylindre_id=1
+    const candidatB = {
+      ...buildFakeCandidat(),
+      cylindre_id: 2,
+      nb_dents_cylindre: 80,
+    };
+    function Inner() {
+      const {
+        goChiffrage,
+        goCandidats,
+        toggleSelection,
+        setQuantiteLot,
+        setMatiereLot,
+        setChangementOutilLot,
+      } = useOptimisationPose();
+      useEffect(() => {
+        goCandidats([candidatA, candidatB], 12000, 100, 80, 76);
+        toggleSelection(candidatA);
+        toggleSelection(candidatB);
+        setQuantiteLot(idOf(candidatA), 6000);
+        setMatiereLot(idOf(candidatA), 1);
+        setQuantiteLot(idOf(candidatB), 6000);
+        setMatiereLot(idOf(candidatB), 1);
+        if (opts.changementLot2) {
+          setChangementOutilLot(idOf(candidatB), true);
+        }
+        goChiffrage();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return <OptimisationChiffrage />;
+    }
+    return render(
+      <OptimisationPoseProvider>
+        <Inner />
+      </OptimisationPoseProvider>,
+    );
+  }
+
+  const previewCalls = () =>
+    fetchSpy.mock.calls.filter((c) =>
+      String(c[0]).includes("/api/devis/preview-couts"),
+    );
+  const lastPreviewBody = () => {
+    const calls = previewCalls();
+    return JSON.parse(
+      (calls[calls.length - 1]![1] as RequestInit).body as string,
+    );
+  };
+
+  it("les lots du preview-couts portent le flag (lot 1 forcé à false)", async () => {
+    setupDeuxLots({ changementLot2: true });
+
+    await waitFor(
+      () => expect(previewCalls().length).toBeGreaterThan(0),
+      { timeout: 3000 },
+    );
+    const body = lastPreviewBody();
+    expect(body.lots).toHaveLength(2);
+    expect(body.lots[0].changement_outil_cliche).toBe(false);
+    expect(body.lots[1].changement_outil_cliche).toBe(true);
+  });
+
+  it("toggle de la checkbox lot 2 → nouveau preview-couts avec le flag à true (recalcul live)", async () => {
+    setupDeuxLots();
+
+    // Section calages : lot 1 en affichage neutre, checkbox lot 2 décochée.
+    const section = await screen.findByTestId("chiffrage-calages-section");
+    expect(section).toBeInTheDocument();
+    expect(screen.getByTestId("chiffrage-calage-lot-1")).toHaveTextContent(
+      /1er calage inclus/i,
+    );
+    const checkbox = screen.getByTestId(
+      "chiffrage-changement-outil-1",
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+
+    // Premier preview (flags false partout).
+    await waitFor(
+      () => expect(previewCalls().length).toBeGreaterThan(0),
+      { timeout: 3000 },
+    );
+    expect(lastPreviewBody().lots[1].changement_outil_cliche).toBe(false);
+    const nbAvant = previewCalls().length;
+
+    // Toggle → recalcul live avec le flag.
+    await userEvent.click(checkbox);
+    await waitFor(
+      () => expect(previewCalls().length).toBeGreaterThan(nbAvant),
+      { timeout: 3000 },
+    );
+    const body = lastPreviewBody();
+    expect(body.lots[0].changement_outil_cliche).toBe(false);
+    expect(body.lots[1].changement_outil_cliche).toBe(true);
+  });
+
+  it("le flag part au POST /api/devis (persistance)", async () => {
+    setupDeuxLots({ changementLot2: true });
+
+    const submitBtn = await screen.findByRole("button", {
+      name: /Créer le devis/i,
+    });
+    await waitFor(() => expect(submitBtn).not.toBeDisabled());
+    await userEvent.click(submitBtn);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/api/devis") &&
+            (c[1] as RequestInit)?.method === "POST",
+        ),
+      ).toBe(true),
+    );
+    const call = fetchSpy.mock.calls.find(
+      (c) =>
+        String(c[0]).endsWith("/api/devis") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.lots).toHaveLength(2);
+    expect(body.lots[0].changement_outil_cliche).toBe(false);
+    expect(body.lots[1].changement_outil_cliche).toBe(true);
+  });
+
+  it("un seul lot → pas de section calages (le flag n'a pas de sens)", async () => {
+    // Réutilise le setup mono-lot existant.
+    setupChiffrage({ client: null });
+    await screen.findByRole("button", { name: /Créer le devis/i });
+    expect(
+      screen.queryByTestId("chiffrage-calages-section"),
+    ).not.toBeInTheDocument();
+  });
+});

@@ -930,6 +930,10 @@ export interface LotProductionRead {
   rotation_vue_c_deg: number | null;
   // Brief #33 — snapshot visuel JSON (null pour lots historiques).
   payload_visuel: Json | null;
+  // Lot D1/D2 — calage lié au MONTAGE (outil + clichés), pas à la bobine.
+  // True = ce lot a nécessité un vrai changement d'outil/cliché → un calage
+  // supplémentaire facturé. Toujours renvoyé par le backend (défaut False).
+  changement_outil_cliche: boolean;
 }
 
 export interface DevisListResponse {
@@ -960,6 +964,11 @@ export interface LotProductionCreatePayload {
   cout_lot_ht_eur?: string | null;
   // L1 — bord latéral surchargeable par lot (mm). NULL → défaut entreprise.
   bord_lateral_mm?: string | null;
+  // Lot D1/D2 — calage lié au MONTAGE : cocher = vrai changement d'outil/
+  // cliché sur ce lot → +1 calage facturé (nb_calages = 1 + nb_changements).
+  // Absent/false = même montage que le lot précédent, pas de nouveau calage
+  // (défaut backend False — un front ancien reste 100 % compatible).
+  changement_outil_cliche?: boolean;
   // Brief #33 — snapshot visuel pour rejouer SchemaImplantation (laize
   // papier, liner, chute latérale, diamètre bobine, lacets, rotations).
   payload_visuel?: Json | null;

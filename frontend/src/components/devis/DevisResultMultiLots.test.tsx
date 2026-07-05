@@ -127,6 +127,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
       rotation_vue_a_deg: 0,
       rotation_vue_c_deg: 0,
       payload_visuel: null,
+      changement_outil_cliche: false,
     };
     render(
       <DevisResultMultiLots
@@ -233,6 +234,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
       rotation_vue_a_deg: 0,
       rotation_vue_c_deg: 0,
       payload_visuel: null,
+      changement_outil_cliche: false,
     });
     const makePoste = (n: number, libelle: string, montant: string) => ({
       poste_numero: n,
@@ -330,6 +332,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
       rotation_vue_a_deg: 0,
       rotation_vue_c_deg: 0,
       payload_visuel: null,
+      changement_outil_cliche: false,
     };
     render(
       <DevisResultMultiLots
@@ -406,6 +409,7 @@ describe("DevisResultMultiLots — Ø multilots réel (bug #6 6.2c)", () => {
       rotation_vue_a_deg: 0,
       rotation_vue_c_deg: 0,
       payload_visuel,
+      changement_outil_cliche: false,
     };
   }
 
@@ -464,5 +468,78 @@ describe("DevisResultMultiLots — Ø multilots réel (bug #6 6.2c)", () => {
     expect(
       screen.queryByTestId("lot-diametre-echo-1"),
     ).not.toBeInTheDocument();
+  });
+});
+
+// Lot D2 — badge « nouveau calage » sur les lots avec changement d'outil/
+// cliché (explique le prix : +1 calage facturé sur ce lot).
+describe("DevisResultMultiLots — badge nouveau calage (Lot D2)", () => {
+  function lotCalage(
+    id: number,
+    ordre: number,
+    changement: boolean,
+  ): LotProductionRead {
+    return {
+      id,
+      ordre,
+      cylindre_id: 5,
+      machine_id: 1,
+      nb_poses_dev: 2,
+      nb_poses_laize: 3,
+      sens_enroulement: 1,
+      quantite: 5000,
+      matiere_id: 7,
+      intervalle_dev_reel_mm: null,
+      intervalle_laize_reel_mm: null,
+      largeur_plaque_mm: null,
+      score_optim: null,
+      cout_lot_ht_eur: "200.00",
+      created_at: "2026-07-05T10:00:00Z",
+      updated_at: "2026-07-05T10:00:00Z",
+      machine_nom: "MA-1",
+      cylindre_nb_dents: 80,
+      cylindre_developpe_mm: "254.00",
+      matiere_libelle: "BOPP",
+      sens_enroulement_libelle: "Sens 1",
+      rotation_vue_a_deg: 0,
+      rotation_vue_c_deg: 0,
+      payload_visuel: null,
+      changement_outil_cliche: changement,
+    };
+  }
+
+  it("lot avec changement_outil_cliche=true → badge « nouveau calage » ; lot 1 sans badge", () => {
+    render(
+      <DevisResultMultiLots
+        devis={buildDevis({
+          ht_total_eur: "400.00",
+          lots_production: [lotCalage(10, 1, false), lotCalage(11, 2, true)],
+        })}
+        onImprimer={noop}
+        onDupliquer={noop}
+        onSupprimer={noop}
+      />,
+    );
+
+    expect(screen.queryByTestId("lot-nouveau-calage-1")).not.toBeInTheDocument();
+    const badge = screen.getByTestId("lot-nouveau-calage-2");
+    expect(badge).toHaveTextContent(/nouveau calage/i);
+  });
+
+  it("aucun changement → aucun badge", () => {
+    render(
+      <DevisResultMultiLots
+        devis={buildDevis({
+          ht_total_eur: "400.00",
+          lots_production: [lotCalage(10, 1, false), lotCalage(11, 2, false)],
+        })}
+        onImprimer={noop}
+        onDupliquer={noop}
+        onSupprimer={noop}
+      />,
+    );
+
+    expect(screen.queryByTestId("lot-nouveau-calage-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("lot-nouveau-calage-2")).not.toBeInTheDocument();
   });
 });
