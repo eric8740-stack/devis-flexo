@@ -86,6 +86,9 @@ pytest
 | `DATABASE_URL` | non défini → SQLite local `devis_flexo.db` | `postgresql://...` (auto via add-on Postgres) |
 | `CORS_ORIGINS` | non défini → `http://localhost:3000` | URL Vercel + localhost (séparés par `,`) |
 | `PORT` | non défini → 8000 | injecté par Railway |
+| `JWT_SECRET` | non défini → fallback dev + WARNING | **OBLIGATOIRE** — sans lui l'app **refuse de démarrer** en prod (fail-fast, audit 05/07/2026). Générer : `openssl rand -hex 64` |
+| `ADMIN_INITIAL_PASSWORD` | non défini → `admin` + WARNING | **OBLIGATOIRE pour le seed** — sur Postgres, `scripts/seed.py` s'arrête si absent |
+| `SEED_CONFIRM_PROD` | inutile (SQLite) | `oui` pour autoriser un seed sur Postgres (équivalent CLI : `--force-prod`) |
 
 ### Frontend (`.env.local` ou env Vercel)
 
@@ -102,6 +105,27 @@ données seedées (référentiels, tarifs, complexes, etc.) ne sont jamais
 re-exécutées automatiquement** — il faut lancer `scripts/seed.py`
 manuellement contre la prod après chaque modification d'un CSV ou ajout
 de nouvelles tables seedées.
+
+> **🏢 L'application est MULTI-TENANT (audit 05/07/2026)**
+>
+> Depuis le blindage pilote, le seed est **scopé sur le tenant démo**
+> (`entreprise_id=1`, Paysant & Fils Étiquettes) :
+>
+> - il **réécrit uniquement** les référentiels, tarifs et devis du tenant
+>   démo (DELETE + INSERT scopés) ;
+> - il **ne touche jamais** les entreprises, comptes utilisateurs, devis
+>   et catalogues des **autres tenants** (pilotes, clients) ;
+> - le compte admin démo est mis à jour (UPDATE), pas recréé — les
+>   sessions JWT actives survivent au re-seed ;
+> - seule exception : `correspondance_laize_metrage` (référentiel global
+>   sans `entreprise_id`, non exposé par l'API) est re-seedée entièrement.
+>
+> Deux garde-fous s'appliquent quand la cible est **PostgreSQL** (= prod) :
+>
+> 1. le seed **refuse de tourner** sans `--force-prod` (ou variable
+>    `SEED_CONFIRM_PROD=oui`) ;
+> 2. le seed **exige `ADMIN_INITIAL_PASSWORD`** — pas de compte
+>    `admin`/`admin` silencieux en production.
 
 ### Quand re-seeder ?
 
@@ -136,21 +160,30 @@ cd backend
 #    (guillemets simples obligatoires : le password contient $/%/&)
 $env:DATABASE_URL = 'postgresql://postgres:XXX@crossover.proxy.rlwy.net:PORT/railway?sslmode=require'
 
-# 4. Lancer le seed (DELETE descendant + INSERT ascendant, idempotent)
-python -m scripts.seed
+# 4. Fournir le mot de passe admin (OBLIGATOIRE sur Postgres — le seed
+#    s'arrête sinon). Utiliser la même valeur que la variable Railway.
+$env:ADMIN_INITIAL_PASSWORD = 'le-mot-de-passe-admin-railway'
 
-# 5. ⚠️ ÉTAPE CRITIQUE — nettoyer la variable d'environnement
+# 5. Lancer le seed AVEC le flag de confirmation prod.
+#    Sans --force-prod (ou SEED_CONFIRM_PROD=oui), le seed REFUSE de
+#    toucher une base PostgreSQL. Le re-seed ne réécrit QUE le tenant
+#    démo (entreprise_id=1) — les autres tenants ne sont pas touchés.
+python -m scripts.seed --force-prod
+
+# 6. ⚠️ ÉTAPE CRITIQUE — nettoyer les variables d'environnement
 #    Sans ça, les prochains `python -m scripts.seed` locaux pointeraient
-#    encore sur la prod et écraseraient les données par erreur.
+#    encore sur la prod.
 Remove-Item Env:DATABASE_URL
+Remove-Item Env:ADMIN_INITIAL_PASSWORD
 ```
 
-> **⚠️ Sécurité — étape 5 obligatoire**
+> **⚠️ Sécurité — étape 6 obligatoire**
 >
-> Si vous oubliez `Remove-Item Env:DATABASE_URL` à l'étape 5, **toute
+> Si vous oubliez `Remove-Item Env:DATABASE_URL` à l'étape 6, **toute
 > commande `python` lancée dans ce terminal pointera encore sur la prod**
-> jusqu'à fermeture du terminal. Si vous lancez `pytest` ou `python -m
-> scripts.seed` à nouveau "pour tester en local", vous écraserez la prod.
+> jusqu'à fermeture du terminal. Le garde-fou `--force-prod` bloque
+> désormais un `python -m scripts.seed` accidentel, mais l'app locale
+> (`uvicorn`, scripts ad hoc) écrirait quand même dans la prod.
 >
 > Bonne pratique : ouvrir un nouveau terminal après le re-seed, ou
 > vérifier `echo $env:DATABASE_URL` qui doit être vide.

@@ -1,18 +1,29 @@
 """Peuple la base depuis les CSV de backend/seeds/.
 
-Stratégie : DELETE puis INSERT (idempotent — relançable à l'infini).
-Robuste à l'encodage (UTF-8 ou UTF-8-BOM) et au séparateur (, ou ;).
-Cellules vides → None en base.
+Stratégie : DELETE **scopé tenant démo** puis INSERT (idempotent —
+relançable à l'infini). Robuste à l'encodage (UTF-8 ou UTF-8-BOM) et au
+séparateur (, ou ;). Cellules vides → None en base.
+
+Blindage pilote (audit 05/07/2026, C1) — l'app est MULTI-TENANT :
+- Tous les DELETE sont scopés sur l'entreprise démo (DEMO_ENTREPRISE_ID).
+  Un re-seed ne touche JAMAIS les données des autres tenants.
+- Garde-fou Postgres : si la base cible est PostgreSQL (= prod Railway),
+  le seed REFUSE de tourner sauf flag explicite `--force-prod` ou variable
+  d'environnement `SEED_CONFIRM_PROD=oui`.
+- Sur PostgreSQL, `ADMIN_INITIAL_PASSWORD` est OBLIGATOIRE (pas de compte
+  admin/« admin » silencieux en prod).
 
 Usage (depuis backend/, venv activé) :
 
-    python -m scripts.seed
+    python -m scripts.seed                # dev SQLite
+    python -m scripts.seed --force-prod   # prod Postgres (assumé)
 """
 from __future__ import annotations
 
 import csv
 import logging
 import os
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
@@ -54,6 +65,62 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
 
 SEEDS_DIR = Path(__file__).resolve().parent.parent / "seeds"
+
+
+# ---------------------------------------------------------------------------
+# Garde-fous prod (audit 05/07/2026 — C1 + E3)
+# ---------------------------------------------------------------------------
+
+
+def _verifier_garde_fou_postgres(dialect_name: str, force: bool) -> None:
+    """Refuse de seeder une base PostgreSQL sans confirmation explicite.
+
+    PostgreSQL = prod Railway (le dev local et les tests sont sur SQLite).
+    Le seed reste destructif POUR LE TENANT DÉMO (DELETE scopés) : on exige
+    donc un acte volontaire avant de toucher la prod. Deux déverrouillages
+    possibles : argument CLI `--force-prod` ou env `SEED_CONFIRM_PROD=oui`.
+    """
+    if dialect_name != "postgresql":
+        return
+    if force or os.getenv("SEED_CONFIRM_PROD", "").strip().lower() == "oui":
+        logger.warning(
+            "Seed sur PostgreSQL confirmé (--force-prod / SEED_CONFIRM_PROD). "
+            "Seules les données du tenant démo (entreprise_id=%s) seront "
+            "réécrites.",
+            DEMO_ENTREPRISE_ID,
+        )
+        return
+    raise SystemExit(
+        "REFUS : la base cible est PostgreSQL (prod Railway ?). Le seed "
+        "réécrit les données du tenant démo (DELETE + INSERT scopés "
+        f"entreprise_id={DEMO_ENTREPRISE_ID}). Pour confirmer en toute "
+        "connaissance de cause : relancer avec `--force-prod` ou définir "
+        "SEED_CONFIRM_PROD=oui. Les autres tenants ne sont jamais touchés."
+    )
+
+
+def _resoudre_admin_password(dialect_name: str) -> str:
+    """Password du compte admin démo — fail-fast en prod (audit E3).
+
+    Sur PostgreSQL (prod), `ADMIN_INITIAL_PASSWORD` est obligatoire : on
+    refuse de créer silencieusement un compte admin/« admin » exposé sur
+    Internet. En dev SQLite, fallback "admin" conservé (avec WARNING).
+    """
+    admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
+    if admin_password:
+        return admin_password
+    if dialect_name == "postgresql":
+        raise SystemExit(
+            "REFUS : ADMIN_INITIAL_PASSWORD absent alors que la base cible "
+            "est PostgreSQL (prod). Définir la variable (Railway ou shell) "
+            "avant de relancer le seed — pas de mot de passe admin par "
+            "défaut en production."
+        )
+    logger.warning(
+        "ADMIN_INITIAL_PASSWORD not set — using fallback 'admin'. "
+        "CHANGE IN PRODUCTION via Railway env var."
+    )
+    return "admin"
 
 
 def read_csv_rows(filepath: Path) -> list[dict[str, str | None]]:
@@ -118,28 +185,38 @@ def _to_json_list(value: str | None) -> list[str] | None:
 
 
 def seed_entreprise(session: Session) -> int:
+    """UPSERT de l'entreprise démo (audit C1 — plus de DELETE global).
+
+    Avant : `session.query(Entreprise).delete()` supprimait TOUTES les
+    entreprises (multi-tenant → destruction des autres comptes + cascade
+    users/clients/devis). Désormais : UPDATE si la row du CSV existe déjà
+    (par id), INSERT sinon. Le compte admin démo et ses sessions JWT
+    survivent au re-seed (cf. seed_user_admin, idempotent par UPDATE).
+    """
     rows = read_csv_rows(SEEDS_DIR / "entreprise.csv")
-    session.query(Entreprise).delete()
     for row in rows:
-        session.add(
-            Entreprise(
-                id=_to_int(row["id"]),
-                raison_sociale=row["raison_sociale"],
-                siret=row["siret"],
-                adresse=row.get("adresse"),
-                cp=row.get("cp"),
-                ville=row.get("ville"),
-                tel=row.get("tel"),
-                email=row.get("email"),
-                pct_fg=_to_float(row.get("pct_fg")),
-                pct_marge_defaut=_to_float(row.get("pct_marge_defaut")),
-                heures_prod_presse_mois=_to_int(row.get("heures_prod_presse_mois")),
-                heures_prod_finition_mois=_to_int(row.get("heures_prod_finition_mois")),
-                # Sprint 12 multi-tenant — Paysant & Fils est l'entreprise demo
-                # qui hérite des 148 records seedés (Eric admin)
-                is_demo=True,
-            )
+        valeurs = dict(
+            raison_sociale=row["raison_sociale"],
+            siret=row["siret"],
+            adresse=row.get("adresse"),
+            cp=row.get("cp"),
+            ville=row.get("ville"),
+            tel=row.get("tel"),
+            email=row.get("email"),
+            pct_fg=_to_float(row.get("pct_fg")),
+            pct_marge_defaut=_to_float(row.get("pct_marge_defaut")),
+            heures_prod_presse_mois=_to_int(row.get("heures_prod_presse_mois")),
+            heures_prod_finition_mois=_to_int(row.get("heures_prod_finition_mois")),
+            # Sprint 12 multi-tenant — Paysant & Fils est l'entreprise demo
+            # qui hérite des 148 records seedés (Eric admin)
+            is_demo=True,
         )
+        existing = session.get(Entreprise, _to_int(row["id"]))
+        if existing is not None:
+            for champ, valeur in valeurs.items():
+                setattr(existing, champ, valeur)
+        else:
+            session.add(Entreprise(id=_to_int(row["id"]), **valeurs))
     return len(rows)
 
 
@@ -147,8 +224,9 @@ def seed_user_admin(session: Session) -> int:
     """Sprint 12 multi-tenant — crée/UPDATE le compte admin Eric (demo).
 
     Lié à l'entreprise demo (DEMO_ENTREPRISE_ID, Paysant & Fils).
-    Password lu depuis `ADMIN_INITIAL_PASSWORD` env var (fallback "admin"
-    avec WARNING — A CHANGER EN PRODUCTION).
+    Password lu depuis `ADMIN_INITIAL_PASSWORD` env var. Audit 05/07/2026
+    (E3) : sur PostgreSQL (prod), la variable est OBLIGATOIRE — le seed
+    s'arrête sinon. En dev SQLite : fallback "admin" avec WARNING.
 
     is_active=True (skip confirmation email pour ce compte créé via seed).
     is_admin=True (accès aux endpoints /api/admin).
@@ -158,13 +236,7 @@ def seed_user_admin(session: Session) -> int:
     JWT actives entre re-seeds).
     """
     admin_email = os.getenv("ADMIN_INITIAL_EMAIL", "admin@devis-flexo.fr")
-    admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
-    if admin_password is None:
-        logger.warning(
-            "ADMIN_INITIAL_PASSWORD not set — using fallback 'admin'. "
-            "CHANGE IN PRODUCTION via Railway env var."
-        )
-        admin_password = "admin"
+    admin_password = _resoudre_admin_password(session.bind.dialect.name)
     password_hash = _pwd_context.hash(admin_password)
 
     existing = (
@@ -204,7 +276,10 @@ def seed_user_admin(session: Session) -> int:
 
 def seed_client(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "client.csv")
-    session.query(Client).delete()
+    # Audit C1 — DELETE scopé tenant démo (jamais les clients des autres).
+    session.query(Client).filter(
+        Client.entreprise_id == DEMO_ENTREPRISE_ID
+    ).delete()
     for row in rows:
         session.add(
             Client(
@@ -227,7 +302,10 @@ def seed_client(session: Session) -> int:
 
 def seed_fournisseur(session: Session) -> int:
     rows = read_csv_rows(SEEDS_DIR / "fournisseur.csv")
-    session.query(Fournisseur).delete()
+    # Audit C1 — DELETE scopé tenant démo.
+    session.query(Fournisseur).filter(
+        Fournisseur.entreprise_id == DEMO_ENTREPRISE_ID
+    ).delete()
     for row in rows:
         session.add(
             Fournisseur(
@@ -657,15 +735,73 @@ def _reset_postgres_sequences(session: Session) -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_seed() -> dict[str, int]:
+def modeles_purge_ordonnes() -> tuple:
+    """Tables seedées, dans l'ordre FK-safe de suppression.
+
+    Enfants (lots, devis, catalogue, complexe) AVANT parents (client,
+    fournisseur, machine) pour éviter les violations FK (devis.machine_id
+    NOT NULL FK, devis.client_id SET NULL, catalogue.client_id RESTRICT,
+    complexe.fournisseur_id SET NULL, catalogue.machine_id SET NULL).
+
+    Sprint 4 (devis) en TÊTE car FK NOT NULL vers machine (Note 15).
+    P1+P2 : LotProduction + PorteCliche aussi en TÊTE car post-fusion
+    MI -> Machine, leurs FK machine_id pointent vers machine.id
+    (cf migration b2c3d4e5f6g7). Sans ce DELETE, DELETE FROM machine
+    echoue avec FOREIGN KEY constraint failed des qu'un lot/PC existe.
+
+    Réutilisé par tests/conftest.py (wipe global de la base de test).
+    """
+    from app.models import LotProduction, PorteCliche
+
+    return (
+        LotProduction,
+        PorteCliche,
+        Devis,
+        Catalogue,
+        Complexe,
+        Machine,
+        OperationFinition,
+        PartenaireST,
+        ChargeMensuelle,
+        # Tables S3 Lot 3b — pas de FK entre elles ni vers les autres,
+        # ordre libre. Groupées ici pour visibilité.
+        TarifPoste,
+        TarifEncre,
+        TempsOperationStandard,
+        ChargeMachineMensuelle,
+        # S5
+        OutilDecoupe,
+        # Brief stratégique v2 Phase 1 — config par entreprise (FK entreprise)
+        ConfigRoulage,
+        ConfigChangements,
+        ConfigCouts,
+        # Sprint 0-1 — parents (déplacés ici depuis seed_client /
+        # seed_fournisseur pour centraliser le scope tenant).
+        Client,
+        Fournisseur,
+    )
+
+
+def purge_tenant(session: Session, entreprise_id: int) -> None:
+    """DELETE descendant des données d'UN tenant (audit C1 — scopé).
+
+    Ne touche NI la table `entreprise` NI la table `user` (le compte admin
+    démo survit au re-seed — cf. seed_user_admin, idempotent par UPDATE).
+    `correspondance_laize_metrage` (référentiel GLOBAL sans entreprise_id)
+    est gérée à part dans run_seed.
+    """
+    for modele in modeles_purge_ordonnes():
+        session.query(modele).filter(
+            modele.entreprise_id == entreprise_id
+        ).delete(synchronize_session=False)
+
+
+def run_seed(force_prod: bool = False) -> dict[str, int]:
     """Exécute tous les seeders dans une seule transaction.
 
     Ordre :
-    1. DELETE descendant : enfants (devis, catalogue, complexe) AVANT
-       parents (client, fournisseur, machine) pour éviter les violations FK
-       (devis.machine_id NOT NULL FK, devis.client_id SET NULL,
-       catalogue.client_id RESTRICT, complexe.fournisseur_id SET NULL,
-       catalogue.machine_id SET NULL).
+    1. DELETE descendant SCOPÉ TENANT DÉMO via `purge_tenant` (audit C1 —
+       les autres tenants ne sont jamais touchés).
     2. INSERT ascendant via les fonctions seed_xxx + `session.flush()`
        après chaque table pour rendre les parents visibles aux enfants.
        Sans flush, SQLAlchemy n'ordonne pas correctement les INSERTs
@@ -673,43 +809,24 @@ def run_seed() -> dict[str, int]:
        refuse l'INSERT enfant car le parent n'est pas encore en base
        (ForeignKeyViolation). SQLite est plus laxiste et accepte.
 
-    Mini-sprint Note 15 (04/05/2026) : `Devis.delete()` ajouté en tête
-    de la phase 1. Sans cette ligne, le re-seed en prod échoue depuis
-    Sprint 4 avec ForeignKeyViolation sur `devis_machine_id_fkey` dès
-    qu'au moins un devis a été sauvegardé. Conséquence assumée : tout
-    re-seed wipe les devis sauvegardés (acceptable en mode démo).
+    Garde-fou : si la base cible est PostgreSQL (prod Railway), refus
+    sauf `force_prod=True` (CLI --force-prod) ou SEED_CONFIRM_PROD=oui.
+
+    Mini-sprint Note 15 (04/05/2026) : `Devis` en tête de la purge.
+    Conséquence assumée : tout re-seed wipe les devis DU TENANT DÉMO
+    (acceptable en mode démo — les devis des autres tenants survivent).
     """
     counts: dict[str, int] = {}
     with SessionLocal() as session:
-        # Phase 1 — DELETE descendant des tables enfants
-        # Sprint 4 (devis) en TÊTE car FK NOT NULL vers machine (Note 15)
-        # P1+P2 : LotProduction + PorteCliche aussi en TÊTE car post-fusion
-        # MI -> Machine, leurs FK machine_id pointent vers machine.id
-        # (cf migration b2c3d4e5f6g7). Sans ce DELETE, DELETE FROM machine
-        # echoue avec FOREIGN KEY constraint failed des qu'un lot/PC existe.
-        from app.models import LotProduction, PorteCliche
-        session.query(LotProduction).delete()
-        session.query(PorteCliche).delete()
-        session.query(Devis).delete()
-        session.query(Catalogue).delete()
-        session.query(Complexe).delete()
-        session.query(Machine).delete()
-        session.query(OperationFinition).delete()
-        session.query(PartenaireST).delete()
-        session.query(ChargeMensuelle).delete()
-        # Tables S3 Lot 3b — pas de FK entre elles ni vers les autres,
-        # ordre libre. Groupées ici pour visibilité.
-        session.query(TarifPoste).delete()
-        session.query(TarifEncre).delete()
-        session.query(TempsOperationStandard).delete()
-        session.query(CorrespondanceLaizeMetrage).delete()
-        session.query(ChargeMachineMensuelle).delete()
-        # S5
-        session.query(OutilDecoupe).delete()
-        # Brief stratégique v2 Phase 1 — config par entreprise (FK entreprise)
-        session.query(ConfigRoulage).delete()
-        session.query(ConfigChangements).delete()
-        session.query(ConfigCouts).delete()
+        _verifier_garde_fou_postgres(session.bind.dialect.name, force_prod)
+
+        # Phase 1 — DELETE descendant scopé tenant démo (audit C1).
+        purge_tenant(session, DEMO_ENTREPRISE_ID)
+        # Référentiel GLOBAL sans entreprise_id (non exposé par l'API,
+        # cf. évaluation M3 audit 05/07/2026) : re-seed complet assumé.
+        session.query(CorrespondanceLaizeMetrage).delete(
+            synchronize_session=False
+        )
         session.flush()  # commit logique des DELETE en transaction
 
         # Phase 2 — INSERT ascendant + flush entre chaque pour respecter FK
@@ -748,7 +865,10 @@ def run_seed() -> dict[str, int]:
 
 
 def main() -> None:
-    counts = run_seed()
+    # Audit C1 — `--force-prod` : seul déverrouillage CLI du garde-fou
+    # PostgreSQL (équivalent : SEED_CONFIRM_PROD=oui).
+    force_prod = "--force-prod" in sys.argv[1:]
+    counts = run_seed(force_prod=force_prod)
     print("=== Sprint 0-1 ===")
     print(f"Entreprise          : {counts['entreprise']}")
     print(f"Client              : {counts['client']}")
