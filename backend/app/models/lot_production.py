@@ -116,6 +116,16 @@ class LotProduction(Base):
     # la SOURCE du nb_filles résolu (≠ `nb_poses_laize`, qui est l'axe poses).
     nb_filles_force: Mapped[int | None] = mapped_column(Integer)
 
+    # Lot D1 — calage lié au MONTAGE (outil + clichés), pas à la bobine.
+    # `changement_outil_cliche=True` sur un lot signifie un VRAI changement
+    # d'outil/cliché → un calage supplémentaire est compté. Défaut False : un lot
+    # n'ajoute PAS de calage (changer de bobine mère, matière ou laize, sur le
+    # même montage = 0 calage en plus). Le 1er lot porte le calage du montage.
+    # nb_calages = 1 + nb_lots(changement_outil_cliche=True). Convention flexo.
+    changement_outil_cliche: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
     score_optim: Mapped[float | None] = mapped_column(Float)
     cout_lot_ht_eur: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
