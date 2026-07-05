@@ -1,7 +1,16 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -16,20 +25,25 @@ class TarifEncre(Base):
     """
 
     __tablename__ = "tarif_encre"
+    __table_args__ = (
+        # Blindage pilote (audit 05/07/2026 E2) — dette S12 résorbée :
+        # UNIQUE composite scopé tenant (migration r7t2u9w4x1z6). Chaque
+        # entreprise possède ses propres tarifs pantone/process_cmj/etc.
+        UniqueConstraint(
+            "entreprise_id", "type_encre", name="uq_tarif_encre_entreprise_type"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Sprint 12 multi-tenant — scope par entreprise (cf. client.py).
-    # Note : `type_encre` UNIQUE devient cross-tenant car SQLite/Postgres
-    # ne supportent pas UNIQUE conditionnel facilement — sera relâché en
-    # composite UNIQUE (entreprise_id, type_encre) au S12-C si besoin.
     entreprise_id: Mapped[int] = mapped_column(
         ForeignKey("entreprise.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    type_encre: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    type_encre: Mapped[str] = mapped_column(String(50), nullable=False)
     libelle: Mapped[str] = mapped_column(String(100), nullable=False)
     prix_kg_defaut: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     prix_kg_min: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
