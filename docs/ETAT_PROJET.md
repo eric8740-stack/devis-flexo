@@ -10,10 +10,18 @@
 ## En-tête
 
 - **Date** : 2026-07-05
-- **Branche active** : `main` = **`4590880`** (après #157 blindage · #158 fix optim→devis · **#159 Lot D1 mergé**). **CC2 = Lot D2 front en cours** (branche `feat/D2-front-calage-checkbox`).
+- **Branche active** : `main` = **`47213cb`** (après #157 blindage · #158 fix optim→devis · #159 Lot D1 · **#160 Lot D2 front**). **0 PR ouverte. CC1 / CC2 = libres. LOT D (calage lié au montage) COMPLET EN PROD end-to-end.**
 - **Sprint en cours** : **Audit complet 05/07 (`docs/AUDIT_2026-07-05.md`) + sprint blindage EN PROD (#157)** — C1 seed scopé tenant · E1 nb_couleurs au PUT · E2 UNIQUE composites (8 tables, migration `r7t2u9w4x1z6`) · E3 fail-fast secrets · E4 PDF authentifié · E5 anti-IDOR FK devis · M5 races listes · deps npm 10→2 vulns. **Lot D1 mergé le 05/07 via #159** (rebase de #156, restée ouverte jusque-là) ; Module Stock COMPLET EN PROD.
 - **Baseline** : **1287/0** (CI Postgres #159 — 1280 après #158, +7 tests D1) · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** / **D1 : 1 125,22** (2 lots même montage → 1 calage) et **1 390,72** (`changement_outil_cliche=True` lot 2 → 2 calages, delta 265,50 = 225,00 × 1,18) · `test_cost_router` legacy **1 449,09** (payload sans laize_papier — PÉRIMÉ comme référence courante) — tous verts au 05/07.
-- **Carte qui-fait-quoi** : **CC1 / CC2 = libres.** **Prochain lot : D2 front** (checkbox `changement_outil_cliche` par lot — backend D1 live sur Railway, leçon #137 respectée). Puis : Lot 3 Phase 2 (P7 `cout_operateur_eur_h`, P5 `cout_exploitation_machine_eur_h`) · Lot 4 Phase 2 (7 champs manquants + UI Stratégique) · extension planificateur bobines (imposer nb bobines, surplus `n_laize`) · épaisseur paroi mandrin. **Restes d'audit (non urgents)** : M1 rate limiting auth · M2 rotation refresh + cookie HttpOnly · idempotence création devis (double-clic = 2 devis) · M3 `correspondance_laize_metrage` sans `entreprise_id` · M4 fallback silencieux laize papier · Next 15/16 · client API généré OpenAPI · lock requirements. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Carte qui-fait-quoi** : **CC1 / CC2 = libres.** **Prochain : Lot 3 Phase 2 (P7 `cout_operateur_eur_h`, P5 `cout_exploitation_machine_eur_h`) · Lot 4 Phase 2 (7 champs manquants + UI Stratégique) · extension planificateur bobines (imposer nb bobines, surplus `n_laize`) · épaisseur paroi mandrin. **Restes d'audit (non urgents)** : M1 rate limiting auth · M2 rotation refresh + cookie HttpOnly · idempotence création devis (double-clic = 2 devis) · M3 `correspondance_laize_metrage` sans `entreprise_id` · M4 fallback silencieux laize papier · Next 15/16 · client API généré OpenAPI · lock requirements. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-07-05 · Lot D2 front mergé (#160) — LOT D COMPLET end-to-end
+
+- **Flux optimisation** : checkbox « Changement d'outil / cliché » par lot (étape 3 + card « Calages par lot » à l'étape 4 — nécessaire car le mode édition atterrit directement à l'étape 4), **lot 1 sans checkbox** (« 1er calage inclus », flag forcé `false` à l'envoi), recalcul live via preview-couts, persistance POST/PUT, réhydratation depuis le devis existant, badge « nouveau calage » au récap.
+- Types API front : `changement_outil_cliche` optionnel sur `LotProductionCreatePayload`, requis sur `LotProductionRead`. Pages mono-lot volontairement sans checkbox (1 lot = pas de changement de montage possible, défaut backend False).
+- Validations : tsc 0 · lint 0 · **vitest 256/256** (+9 tests D2) · build OK · CI complète verte avant merge (backend 1287 inchangé).
 
 ---
 
