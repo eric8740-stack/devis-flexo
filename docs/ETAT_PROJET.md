@@ -9,11 +9,20 @@
 
 ## En-tête
 
-- **Date** : 2026-06-11
-- **Branche active** : `main` = **`8c56c95`** (après #153 — S3 front). **0 PR ouverte.** **CC1 / CC2 = libres.**
-- **Sprint en cours** : **Module Stock (option B, granularité A) COMPLET end-to-end EN PROD** — S1 inventaire (#149/#150) · S2 mouvements + audit (#151/#152) · S3 lien devis↔stock + FIFO + persistance gap #4 (#153/#154). Lots F/E COMPLETS EN PROD. Chantiers CLOS antérieurs : « format sans outil », L1, L2, Souveraineté. Bugs #5/#6 **CLOS**.
-- **Baseline** : **1244/0** · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36**.
-- **Carte qui-fait-quoi** : **CC1 / CC2 = libres** (Module Stock livré). **Prochain lot : D (calage)** — **sensible** : sur-facturation par lot vs par montage, proche du chiffrage/sacrés → **à cadrer à frais** (lot dédié, re-baseline contrôlée probable). Lot « facturation temps d'arrêt » = autre lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Date** : 2026-07-05
+- **Branche active** : `main` = **`121eb15`** (après #157 — sprint blindage pilote). **0 PR ouverte.** **CC1 / CC2 = libres.**
+- **Sprint en cours** : **Audit complet 05/07 (`docs/AUDIT_2026-07-05.md`) + sprint blindage EN PROD (#157)** — C1 seed scopé tenant · E1 nb_couleurs au PUT · E2 UNIQUE composites (8 tables, migration `r7t2u9w4x1z6`) · E3 fail-fast secrets · E4 PDF authentifié · E5 anti-IDOR FK devis · M5 races listes · deps npm 10→2 vulns. Antérieur : Lot D1 (calage lié au montage) mergé début 07/2026 ; Module Stock COMPLET EN PROD.
+- **Baseline** : **1277/0** (CI Postgres run 28739734659 — 1251 avant sprint, +26 tests audit C1/E1/E2/E3/E5) · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** (et `test_cost_router` legacy **1 449,09**) — tous verts au 05/07.
+- **Carte qui-fait-quoi** : **CC1 / CC2 = libres.** **Restes d'audit (non urgents)** : M1 rate limiting auth · M2 rotation refresh + cookie HttpOnly · M3 `correspondance_laize_metrage` sans `entreprise_id` · M4 fallback silencieux laize papier · migration Next 15/16 · client API généré OpenAPI · lock requirements. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+
+---
+
+## 2026-07-05 · Audit complet + sprint blindage pilote (#157)
+
+- **Audit 5 axes** (sécurité multi-tenant, correctness back, front, hygiène repo, cartographie) → `docs/AUDIT_2026-07-05.md` (findings avec fichier:ligne + plan). Verdict archi : **pas de refonte** — fondations saines (Decimal partout, scoping tenant discipliné, CI sérieuse).
+- **Corrigé en prod (#157, 8 commits)** : **C1** seed = DELETE scopés `DEMO_ENTREPRISE_ID` + refus Postgres sans confirmation (l'ancienne procédure README détruisait TOUS les tenants) · **E1** PUT devis repassait Encres/Clichés à 0 € (`nb_couleurs` non propagé) · **E2** UNIQUE composites `(entreprise_id, clé)` sur 8 tables (migration `r7t2u9w4x1z6` — débloquant 2ᵉ tenant) · **E3** fail-fast `JWT_SECRET`/`ADMIN_INITIAL_PASSWORD` en prod (vars vérifiées présentes sur Railway) · **E4** PDF via `downloadAuthenticated` (les `<a href>` prenaient 401) · **E5** validation FK tenant sur create/update devis + lookups scopés (anti-IDOR) · **M5** flag `cancelled` sur 11 pages de listes · `shadcn` retiré des deps prod (npm audit 10→2, résiduel = next@14) · `.gitignore *.db` · `lib/auth-tokens.ts` (API_URL unique + refresh dédupliqué).
+- **Validation** : suite backend complète verte + tests ciblés 37/37 (dont sacrés) ; front tsc 0 / lint 0 / vitest 247 / build OK ; alembic 1 head.
+- **Restes d'audit** (voir en-tête) : M1/M2/M3/M4, Next 15/16, client OpenAPI, lock requirements. Bug historique `audit_liaison_optimisation_devis.md` (devis optim à 0 €) : la cause « nb_couleurs » est traitée par E1 côté PUT — **vérifier le flux optim→devis** à l'occasion.
 
 ---
 
