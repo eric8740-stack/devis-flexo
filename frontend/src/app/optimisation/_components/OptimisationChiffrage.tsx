@@ -77,6 +77,7 @@ export function OptimisationChiffrage() {
     setReductionPct,
     devisExistantId,
     devisExistantNumero,
+    setChangementOutilLot,
     briefClient,
     clientSelectionne,
     setClientSelectionne,
@@ -174,7 +175,7 @@ export function OptimisationChiffrage() {
 
   const lotsPayload = useMemo<LotProductionCreatePayload[]>(
     () =>
-      selection.map((s) => {
+      selection.map((s, idx) => {
         // Bug #6 (6.2c) — si l'étape Rebobinage a produit un écho multi-lots
         // pour ce lot, on enrichit le snapshot candidat avec le Ø RÉEL
         // (épaisseur matière du lot + paroi). `diametre_bobine_mm` est écrasé
@@ -200,6 +201,12 @@ export function OptimisationChiffrage() {
           sens_enroulement: sensEnroulementToInt(s.candidat.sens_enroulement),
           quantite: s.quantite,
           matiere_id: s.matiere_id as number,
+          // Lot D2 — flag calage/montage (backend D1). Le lot 1 part
+          // toujours à false : son calage est celui du montage, la notion
+          // de « changement » n'y a pas de sens. Le flag part dans les
+          // lots du preview-couts ET du POST/PUT → prix live + persistance.
+          changement_outil_cliche:
+            idx === 0 ? false : s.changement_outil_cliche,
           intervalle_dev_reel_mm: String(s.candidat.intervalle_dev_reel_mm),
           intervalle_laize_reel_mm: String(s.candidat.intervalle_laize_reel_mm),
           largeur_plaque_mm: String(s.candidat.largeur_plaque_mm),
@@ -506,6 +513,70 @@ export function OptimisationChiffrage() {
               ))}
           </CardContent>
         </Card>
+
+        {/* --- Lot D2 : calages par lot (montage outil + clichés) ---
+            Affiché dès 2 lots : le lot 1 porte toujours le calage du
+            montage ; un lot suivant n'ajoute un calage QUE s'il change
+            vraiment d'outil/cliché. Le toggle repart dans les lots du
+            preview-couts → le prix bouge immédiatement. */}
+        {selection.length >= 2 && (
+          <Card
+            data-testid="chiffrage-calages-section"
+            className="border-l-4 border-l-rose-500 lg:col-span-2"
+          >
+            <CardHeader>
+              <CardTitle>🔧 Calages par lot</CardTitle>
+              <CardDescription>
+                Le calage suit le montage (outil + clichés), pas la bobine.
+                Coche un lot seulement s&apos;il change vraiment
+                d&apos;outil ou de cliché — changer de matière ou de laize
+                sur le même montage ne recale pas la presse.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {selection.map((s, idx) =>
+                idx === 0 ? (
+                  <p
+                    key={s.id_candidat}
+                    data-testid="chiffrage-calage-lot-1"
+                    className="rounded-md border border-border bg-muted/30 p-2 text-sm text-muted-foreground"
+                  >
+                    Lot 1 — 1er calage inclus (calage du montage).
+                  </p>
+                ) : (
+                  <div
+                    key={s.id_candidat}
+                    className="rounded-md border border-border p-2"
+                  >
+                    <label
+                      htmlFor={`chiffrage-changement-outil-${idx}`}
+                      className="flex cursor-pointer items-center gap-2 text-sm font-medium"
+                    >
+                      <input
+                        id={`chiffrage-changement-outil-${idx}`}
+                        data-testid={`chiffrage-changement-outil-${idx}`}
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-foreground"
+                        checked={s.changement_outil_cliche}
+                        onChange={(e) =>
+                          setChangementOutilLot(
+                            s.id_candidat,
+                            e.target.checked,
+                          )
+                        }
+                      />
+                      Lot {idx + 1} — Changement d&apos;outil / cliché
+                    </label>
+                    <p className="ml-6 text-xs text-muted-foreground">
+                      Coché = nouveau calage facturé · décoché = même
+                      montage que le lot précédent.
+                    </p>
+                  </div>
+                ),
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* --- Marge override --- */}
         <Card className="border-l-4 border-l-amber-500">

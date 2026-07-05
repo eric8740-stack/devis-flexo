@@ -493,6 +493,17 @@ function LotCard({
           <span className="text-sm text-muted-foreground">
             (Z = {lot.cylindre_developpe_mm ?? "—"} mm)
           </span>
+          {/* Lot D2 — signale les lots avec changement d'outil/cliché :
+              un calage supplémentaire est facturé sur ce lot (explique
+              le prix vs un lot « même montage »). */}
+          {lot.changement_outil_cliche && (
+            <span
+              data-testid={`lot-nouveau-calage-${lot.ordre}`}
+              className="ml-2 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 align-middle text-[10px] font-medium text-amber-900"
+            >
+              🔧 nouveau calage — outil/cliché changé
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">

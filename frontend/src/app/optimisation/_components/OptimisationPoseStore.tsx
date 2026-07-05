@@ -100,6 +100,11 @@ export interface SelectionLot {
   // n'a pas d'`epaisseur_microns` au catalogue. null = pas de saisie (le
   // backend retombe sur la matière, puis 150 µm en ultime fallback).
   epaisseur_saisie_um: number | null;
+  // Lot D2 — calage lié au MONTAGE (backend D1) : true = vrai changement
+  // d'outil/cliché sur ce lot → un calage supplémentaire facturé. Sans
+  // signification pour le 1er lot (son calage = celui du montage, inclus) ;
+  // l'UI n'y affiche pas de checkbox et le payload force false à l'envoi.
+  changement_outil_cliche: boolean;
 }
 
 // Bug #6 (6.2c) — écho du calcul rebobinage multi-lots pour UN lot, capturé
@@ -158,6 +163,8 @@ interface OptimisationPoseContextValue {
   setMatiereLot: (id_candidat: string, matiere_id: number) => void;
   // Bug #6 (6.2) — saisie opérateur d'épaisseur (µm) pour un lot ; null efface.
   setEpaisseurSaisieLot: (id_candidat: string, epaisseur_um: number | null) => void;
+  // Lot D2 — coche/décoche « changement d'outil / cliché » pour un lot.
+  setChangementOutilLot: (id_candidat: string, changement: boolean) => void;
 
   // Bug #6 (6.2c) — échos du dernier calcul rebobinage multi-lots, indexés
   // par `id_candidat`. Alimentés à l'étape Rebobinage, consommés à l'étape
@@ -480,6 +487,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
         // Hydratation devis existant : pas de saisie opérateur reconstruite
         // (l'épaisseur du lot vient de sa matière persistée).
         epaisseur_saisie_um: null,
+        // Lot D2 — la checkbox reflète la valeur persistée au reload.
+        changement_outil_cliche: lot.changement_outil_cliche ?? false,
       };
     });
     setCandidats(candidatsReconstruits);
@@ -583,6 +592,8 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
             quantite: quantiteAuto,
             matiere_id: null,
             epaisseur_saisie_um: null,
+            // Lot D2 — défaut métier : même montage, pas de nouveau calage.
+            changement_outil_cliche: false,
           },
         ];
       });
@@ -618,6 +629,20 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
         prev.map((s) =>
           s.id_candidat === id_candidat
             ? { ...s, epaisseur_saisie_um: epaisseur_um }
+            : s
+        )
+      );
+    },
+    []
+  );
+
+  // Lot D2 — flag « changement d'outil / cliché » par lot.
+  const setChangementOutilLot = useCallback(
+    (id_candidat: string, changement: boolean) => {
+      setSelection((prev) =>
+        prev.map((s) =>
+          s.id_candidat === id_candidat
+            ? { ...s, changement_outil_cliche: changement }
             : s
         )
       );
@@ -663,6 +688,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setQuantiteLot,
       setMatiereLot,
       setEpaisseurSaisieLot,
+      setChangementOutilLot,
       diametreEchoesParLot,
       setDiametreEchoesParLot,
       sommeQuantitesLots,
@@ -712,6 +738,7 @@ export function OptimisationPoseProvider({ children }: { children: ReactNode }) 
       setQuantiteLot,
       setMatiereLot,
       setEpaisseurSaisieLot,
+      setChangementOutilLot,
       diametreEchoesParLot,
       setDiametreEchoesParLot,
       sommeQuantitesLots,

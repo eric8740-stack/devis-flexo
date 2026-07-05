@@ -260,3 +260,185 @@ describe("OptimisationPoseDetailLots — décompo laize (L1)", () => {
     expect(screen.queryByTestId("dechet-lateral-0")).toBeNull();
   });
 });
+
+// Lot D2 — checkbox « Changement d'outil / cliché » par lot : jamais sur le
+// lot 1 (calage du montage inclus), décochée par défaut sur les suivants,
+// round-trip vers le store (selection[i].changement_outil_cliche).
+describe("OptimisationPoseDetailLots — changement d'outil / cliché (Lot D2)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    installFetchMock();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function setupDeuxLots() {
+    const candidatA = fakeCandidat(); // cylindre_id=1
+    const candidatB = fakeCandidat({ cylindre_id: 2, nb_dents_cylindre: 80 });
+    function CalageSpy() {
+      const { selection } = useOptimisationPose();
+      return (
+        <div data-testid="store-calage">
+          {selection
+            .map((s) => String(s.changement_outil_cliche))
+            .join(",")}
+        </div>
+      );
+    }
+    function Inner() {
+      const { goCandidats, toggleSelection, setQuantiteLot } =
+        useOptimisationPose();
+      useEffect(() => {
+        goCandidats([candidatA, candidatB], 12000, 100, 80, 76);
+        toggleSelection(candidatA);
+        toggleSelection(candidatB);
+        setQuantiteLot(
+          `${candidatA.cylindre_id}-${candidatA.machine_id}-${candidatA.nb_poses_dev}x${candidatA.nb_poses_laize}-${candidatA.sens_enroulement}`,
+          6000,
+        );
+        setQuantiteLot(
+          `${candidatB.cylindre_id}-${candidatB.machine_id}-${candidatB.nb_poses_dev}x${candidatB.nb_poses_laize}-${candidatB.sens_enroulement}`,
+          6000,
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return (
+        <>
+          <CalageSpy />
+          <OptimisationPoseDetailLots />
+        </>
+      );
+    }
+    return render(
+      <OptimisationPoseProvider>
+        <Inner />
+      </OptimisationPoseProvider>,
+    );
+  }
+
+  it("lot 1 : pas de checkbox, mention « 1er calage inclus » ; lot 2 : checkbox décochée par défaut", async () => {
+    setupDeuxLots();
+    // Attendre le montage (fetch matières résolu → selects présents).
+    await screen.findAllByRole("combobox");
+
+    // Lot 1 : affichage neutre, pas de checkbox.
+    expect(screen.getByTestId("calage-inclus-0")).toHaveTextContent(
+      /1er calage inclus/i,
+    );
+    expect(screen.queryByTestId("changement-outil-0")).toBeNull();
+
+    // Lot 2 : checkbox présente, décochée par défaut (même montage).
+    const checkbox = screen.getByTestId(
+      "changement-outil-1",
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    expect(screen.queryByTestId("calage-inclus-1")).toBeNull();
+    // Ligne d'aide visible (pas de tooltip au survol).
+    expect(
+      screen.getByText(/nouveau calage facturé/i),
+    ).toBeInTheDocument();
+  });
+
+  it("cocher la checkbox du lot 2 → selection[1].changement_outil_cliche=true au store (et retour)", async () => {
+    setupDeuxLots();
+    const checkbox = (await screen.findByTestId(
+      "changement-outil-1",
+    )) as HTMLInputElement;
+    expect(screen.getByTestId("store-calage")).toHaveTextContent(
+      "false,false",
+    );
+
+    await userEvent.click(checkbox);
+    await waitFor(() => expect(checkbox.checked).toBe(true));
+    expect(screen.getByTestId("store-calage")).toHaveTextContent(
+      "false,true",
+    );
+
+    await userEvent.click(checkbox);
+    await waitFor(() => expect(checkbox.checked).toBe(false));
+    expect(screen.getByTestId("store-calage")).toHaveTextContent(
+      "false,false",
+    );
+  });
+
+  it("hydratation d'un devis existant : la checkbox reflète le flag persisté (GET)", async () => {
+    function lotRead(
+      id: number,
+      ordre: number,
+      cylindreId: number,
+      changement: boolean,
+    ) {
+      return {
+        id,
+        ordre,
+        cylindre_id: cylindreId,
+        machine_id: 1,
+        nb_poses_dev: 2,
+        nb_poses_laize: 5,
+        sens_enroulement: 1,
+        quantite: 6000,
+        matiere_id: 1,
+        intervalle_dev_reel_mm: "2",
+        intervalle_laize_reel_mm: "2",
+        largeur_plaque_mm: "200",
+        score_optim: 100,
+        cout_lot_ht_eur: "100.00",
+        created_at: "2026-07-05T10:00:00Z",
+        updated_at: "2026-07-05T10:00:00Z",
+        machine_nom: "MA-1",
+        cylindre_nb_dents: 104,
+        cylindre_developpe_mm: "330.20",
+        matiere_libelle: "BOPP",
+        sens_enroulement_libelle: "Sens 1",
+        rotation_vue_a_deg: 0,
+        rotation_vue_c_deg: 0,
+        payload_visuel: null,
+        changement_outil_cliche: changement,
+      };
+    }
+    const devis = {
+      id: 42,
+      numero: "DEV-2026-0042",
+      date_creation: "2026-07-05T10:00:00Z",
+      date_modification: "2026-07-05T10:00:00Z",
+      statut: "brouillon",
+      client_id: null,
+      client_nom: null,
+      machine_id: 1,
+      machine_nom: "MA-1",
+      payload_input: {},
+      payload_output: { mode: "multi-lots" },
+      mode_calcul: "manuel",
+      cylindre_choisi_z: null,
+      cylindre_choisi_nb_etiq: null,
+      format_h_mm: "80",
+      format_l_mm: "100",
+      ht_total_eur: "1000.00",
+      reduction_pct: "0",
+      // Lot 2 persisté AVEC changement d'outil/cliché.
+      lots_production: [lotRead(1, 1, 1, false), lotRead(2, 2, 2, true)],
+    } as unknown as import("@/lib/api").DevisDetail;
+
+    function Inner() {
+      const { hydrateFromDevisExistant } = useOptimisationPose();
+      useEffect(() => {
+        hydrateFromDevisExistant(devis);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return <OptimisationPoseDetailLots />;
+    }
+    render(
+      <OptimisationPoseProvider>
+        <Inner />
+      </OptimisationPoseProvider>,
+    );
+
+    // Lot 1 : affichage neutre. Lot 2 : checkbox COCHÉE (flag persisté).
+    await screen.findByTestId("calage-inclus-0");
+    const checkbox = screen.getByTestId(
+      "changement-outil-1",
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+  });
+});
