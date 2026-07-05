@@ -10,10 +10,10 @@
 ## En-tête
 
 - **Date** : 2026-07-05
-- **Branche active** : `main` = **`121eb15`** (après #157 — sprint blindage pilote). **0 PR ouverte.** **CC1 / CC2 = libres.**
+- **Branche active** : `main` = **`b286c8e`** (après #157 blindage + #158 fix optim→devis). **0 PR ouverte.** **CC1 / CC2 = libres.**
 - **Sprint en cours** : **Audit complet 05/07 (`docs/AUDIT_2026-07-05.md`) + sprint blindage EN PROD (#157)** — C1 seed scopé tenant · E1 nb_couleurs au PUT · E2 UNIQUE composites (8 tables, migration `r7t2u9w4x1z6`) · E3 fail-fast secrets · E4 PDF authentifié · E5 anti-IDOR FK devis · M5 races listes · deps npm 10→2 vulns. Antérieur : Lot D1 (calage lié au montage) mergé début 07/2026 ; Module Stock COMPLET EN PROD.
-- **Baseline** : **1277/0** (CI Postgres run 28739734659 — 1251 avant sprint, +26 tests audit C1/E1/E2/E3/E5) · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** (et `test_cost_router` legacy **1 449,09**) — tous verts au 05/07.
-- **Carte qui-fait-quoi** : **CC1 / CC2 = libres.** **Restes d'audit (non urgents)** : M1 rate limiting auth · M2 rotation refresh + cookie HttpOnly · M3 `correspondance_laize_metrage` sans `entreprise_id` · M4 fallback silencieux laize papier · migration Next 15/16 · client API généré OpenAPI · lock requirements. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
+- **Baseline** : **1280/0** (après #158 ; 1277 au run CI 28739634659 de #157) · **sacrés EXACTS** V1a **1 424,31** / P0b **695,36** / **D1 : 1 125,22** (2 lots même montage → 1 calage) et **1 390,72** (`changement_outil_cliche=True` lot 2 → 2 calages, delta 265,50 = 225,00 × 1,18) · `test_cost_router` legacy **1 449,09** (payload sans laize_papier — PÉRIMÉ comme référence courante) — tous verts au 05/07.
+- **Carte qui-fait-quoi** : **CC1 / CC2 = libres.** **Prochain lot : D2 front** (checkbox `changement_outil_cliche` par lot — backend D1 live sur Railway, leçon #137 respectée). Puis : Lot 3 Phase 2 (P7 `cout_operateur_eur_h`, P5 `cout_exploitation_machine_eur_h`) · Lot 4 Phase 2 (7 champs manquants + UI Stratégique) · extension planificateur bobines (imposer nb bobines, surplus `n_laize`) · épaisseur paroi mandrin. **Restes d'audit (non urgents)** : M1 rate limiting auth · M2 rotation refresh + cookie HttpOnly · idempotence création devis (double-clic = 2 devis) · M3 `correspondance_laize_metrage` sans `entreprise_id` · M4 fallback silencieux laize papier · Next 15/16 · client API généré OpenAPI · lock requirements. Lot « facturation temps d'arrêt » = lot DÉDIÉ ultérieur (touche cost_engine → re-baseline).
 
 ---
 
