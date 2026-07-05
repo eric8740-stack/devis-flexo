@@ -15,15 +15,17 @@ import {
   type Complexe,
   type Machine,
   type TarifEncre,
-  getTarifsGrouped,
   listComplexes,
   listMachines,
   listTarifEncre,
 } from "@/lib/api";
 
-// Sections 1/2/3/4 — tables EXISTANTES. Affichage lecture seule + lien vers
-// la page de gestion dédiée (anti-doublon : on ne ré-implémente pas le CRUD
-// déjà présent ailleurs, cf. audit). L'édition se fait sur ces pages.
+// Sections Machines/Complexes/Encre — tables EXISTANTES. Affichage lecture
+// seule + lien vers la page de gestion dédiée (anti-doublon : on ne
+// ré-implémente pas le CRUD déjà présent ailleurs, cf. audit).
+// NB Lot 4b : l'ancienne OutilsSection readonly (TarifPoste via
+// getTarifsGrouped) a été supprimée — le moteur lit désormais ConfigCouts
+// (Lot 4a), l'édition se fait dans ConfigCoutsChamps.tsx.
 
 function GererLink({ href, children }: { href: string; children: string }) {
   return (
@@ -140,51 +142,6 @@ export function EncreSection() {
               <TableCell>{fmt(t.ratio_g_m2_couleur)}</TableCell>
               <TableCell>{fmt(t.prix_kg_min)}</TableCell>
               <TableCell>{fmt(t.prix_kg_max)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-// --- Section 4 : Outils (clichés & plaques, depuis TarifPoste) --------------
-const CLES_OUTILS = [
-  "cliche_prix_couleur",
-  "outil_base_eur",
-  "outil_par_trace_eur",
-  "surcout_forme_speciale_pct",
-];
-
-export function OutilsSection() {
-  const [params, setParams] = useState<
-    { cle: string; libelle: string; valeur_defaut: string; unite: string }[]
-  >([]);
-  useEffect(() => {
-    getTarifsGrouped()
-      .then((g) => {
-        const flat = g.postes.flatMap((p) => p.parametres);
-        setParams(flat.filter((p) => CLES_OUTILS.includes(p.cle)));
-      })
-      .catch(() => setParams([]));
-  }, []);
-  return (
-    <div className="space-y-3">
-      <GererLink href="/parametres/tarifs">Gérer les tarifs</GererLink>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Élément</TableHead>
-            <TableHead>Valeur</TableHead>
-            <TableHead>Unité</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {params.map((p) => (
-            <TableRow key={p.cle}>
-              <TableCell>{p.libelle}</TableCell>
-              <TableCell>{p.valeur_defaut}</TableCell>
-              <TableCell>{p.unite}</TableCell>
             </TableRow>
           ))}
         </TableBody>

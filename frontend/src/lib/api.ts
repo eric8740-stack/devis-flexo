@@ -2491,6 +2491,16 @@ export interface ConfigCouts {
   marge_standard_pct: number;
   buffer_rebut_pct: number;
   buffer_setup_pct: number;
+  // Phase 2 Lot 4a — tarifs P1/P3/P4/P6 migrés depuis TarifPoste.
+  // `surcout_forme_speciale_facteur` est un multiplicateur direct
+  // (1.30 = +30 %), borné [1.0 ; 10.0] côté backend.
+  marge_confort_roulage_mm: number;
+  cliche_prix_couleur_eur: number;
+  outil_base_eur: number;
+  outil_par_trace_eur: number;
+  surcout_forme_speciale_facteur: number;
+  calage_forfait_eur: number;
+  finitions_prix_m2_eur: number;
   date_creation: string;
   date_maj: string;
 }

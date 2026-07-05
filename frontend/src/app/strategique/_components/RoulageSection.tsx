@@ -25,7 +25,9 @@ import {
 
 // Section 5 — Roulage & Production (par format). Source : ConfigRoulage
 // (Phase 1). CRUD complet /api/strategique/roulage. Le temps de setup/calage
-// n'est PAS ici (Machine.duree_calage_h + TarifPoste.calage_forfait).
+// n'est PAS ici (Machine.duree_calage_h + ConfigCouts.calage_forfait_eur,
+// section Calage). La marge de confort (mm) est éditée juste en dessous
+// (MargeRoulageSection, ConfigCouts.marge_confort_roulage_mm).
 const VIDE = {
   format_libelle: "",
   mode_roulage: "helicoidal" as ModeRoulage,
