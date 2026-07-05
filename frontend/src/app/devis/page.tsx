@@ -65,7 +65,10 @@ export default function DevisListPage() {
     setPage(1);
   }, [debouncedSearch, statut, sort]);
 
+  // Flag `cancelled` (audit 05/07/2026 M5) : sans annulation, une réponse
+  // périmée (ancienne page/recherche plus lente) pouvait écraser la récente.
   useEffect(() => {
+    let cancelled = false;
     setError(null);
     listDevis({
       page,
@@ -74,10 +77,17 @@ export default function DevisListPage() {
       statut: statut || undefined,
       sort,
     })
-      .then(setData)
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : String(err))
-      );
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [page, debouncedSearch, statut, sort]);
 
   return (

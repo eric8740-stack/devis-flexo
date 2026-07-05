@@ -1,15 +1,14 @@
 import type { AdminUser, AdminUserCreate } from "@/types/admin";
 
-// URL du backend FastAPI.
-// - En dev local : http://localhost:8000 (défaut)
-// - En prod (Vercel) : NEXT_PUBLIC_API_URL définie dans les env vars Vercel,
-//   pointant sur l'URL Railway du backend (ex: https://devis-flexo.up.railway.app)
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 // Sprint 12 Lot S12-E : intercepteur Bearer JWT + refresh auto sur 401.
-const ACCESS_TOKEN_KEY = "devis_flexo_access_token";
-const REFRESH_TOKEN_KEY = "devis_flexo_refresh_token";
+// Consolidation audit 05/07/2026 : API_URL, tokens et refresh (dédupliqué)
+// vivent dans le module unique `auth-tokens.ts`.
+import {
+  API_URL,
+  clearTokens,
+  getAccessToken,
+  refreshAccessToken,
+} from "@/lib/auth-tokens";
 
 export class ApiError extends Error {
   // `detail` = champ `detail` brut de la réponse (sans le préfixe statut),
@@ -23,39 +22,12 @@ export class ApiError extends Error {
   }
 }
 
-function readToken(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(key);
-}
-
 function clearTokensAndRedirect() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  clearTokens();
   // Hard redirect plutôt que router.push : on est hors d'un composant React
   // ici, et on veut couper tout state en cours (cache RSC, fetch en vol).
   window.location.href = "/login";
-}
-
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = readToken(REFRESH_TOKEN_KEY);
-  if (!refreshToken) return null;
-  try {
-    const r = await fetch(`${API_URL}/api/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (!r.ok) return null;
-    const tokens = await r.json();
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-      window.localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
-    }
-    return tokens.access_token as string;
-  } catch {
-    return null;
-  }
 }
 
 function buildHeaders(
@@ -71,7 +43,7 @@ function buildHeaders(
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_URL}${path}`;
-  const initialToken = readToken(ACCESS_TOKEN_KEY);
+  const initialToken = getAccessToken();
 
   let response = await fetch(url, {
     ...init,
@@ -112,6 +84,103 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T;
   return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Téléchargement authentifié (fix E4 audit 05/07/2026)
+// ---------------------------------------------------------------------------
+// Un lien `<a href>` vers un endpoint protégé ne peut pas envoyer le header
+// Authorization Bearer → 401 systématique. On fetch donc en blob (avec le
+// même intercepteur refresh-sur-401 qu'apiFetch), puis on déclenche le
+// téléchargement ou l'ouverture via un object URL local, révoqué ensuite.
+// Même pattern que BatBlobAuthenticated (Sprint 15) / fetchIAPhotoBlob.
+
+async function fetchAuthenticatedBlob(path: string): Promise<Blob> {
+  const url = `${API_URL}${path}`;
+  const initialToken = getAccessToken();
+
+  let response = await fetch(url, {
+    headers: initialToken ? { Authorization: `Bearer ${initialToken}` } : {},
+  });
+
+  // 401 + token présent → tente UN refresh (dédupliqué), puis retry.
+  if (response.status === 401 && initialToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      response = await fetch(url, {
+        headers: { Authorization: `Bearer ${newToken}` },
+      });
+    } else {
+      clearTokensAndRedirect();
+    }
+  }
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    let rawDetail: string | undefined;
+    try {
+      const body = await response.json();
+      if (body?.detail) {
+        rawDetail = String(body.detail);
+        detail = `${response.status} ${body.detail}`;
+      }
+    } catch {
+      /* body non JSON */
+    }
+    throw new ApiError(response.status, `GET ${path} → ${detail}`, rawDetail);
+  }
+  return response.blob();
+}
+
+/**
+ * Télécharge un fichier servi par un endpoint AUTHENTIFIÉ (ex. le PDF d'un
+ * devis) en déclenchant le "Enregistrer sous" du navigateur.
+ * Lève une ApiError en cas d'échec — à l'appelant d'afficher l'erreur.
+ */
+export async function downloadAuthenticated(
+  path: string,
+  filename: string,
+): Promise<void> {
+  const blob = await fetchAuthenticatedBlob(path);
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
+ * Ouvre un fichier authentifié dans un nouvel onglet (cas « Imprime » :
+ * le PDF s'affiche dans le viewer natif, l'utilisateur imprime depuis là).
+ * Si le popup est bloqué par le navigateur, repli sur un téléchargement
+ * classique avec `fallbackFilename`.
+ */
+export async function openAuthenticatedInNewTab(
+  path: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const blob = await fetchAuthenticatedBlob(path);
+  const objectUrl = URL.createObjectURL(blob);
+  const win = window.open(objectUrl, "_blank");
+  if (!win) {
+    // Popup bloquée → téléchargement direct.
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = fallbackFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  // Revoke DIFFÉRÉ : révoquer tout de suite empêcherait le nouvel onglet
+  // de charger le blob. Une fois le PDF chargé dans l'onglet, l'URL peut
+  // être révoquée sans casser l'affichage.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 // ---------------------------------------------------------------------------
@@ -2049,10 +2118,7 @@ export const deleteIAAnalyse = (id: number) =>
  * géré par le composant appelant via URL.revokeObjectURL.
  */
 export async function fetchIAPhotoBlob(image_key: string): Promise<string> {
-  const token =
-    typeof window !== "undefined"
-      ? window.localStorage.getItem("devis_flexo_access_token")
-      : null;
+  const token = getAccessToken();
   const r = await fetch(
     `${API_URL}/api/ia/photos/${encodeURIComponent(image_key)}`,
     {

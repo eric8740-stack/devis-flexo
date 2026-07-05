@@ -29,8 +29,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   deleteDevis,
+  downloadAuthenticated,
   duplicateDevis,
   getDevisDetail,
+  openAuthenticatedInNewTab,
   type DevisCalculResult,
   type DevisDetail,
 } from "@/lib/api";
@@ -58,6 +60,7 @@ export default function DevisDetailPage() {
   const [devis, setDevis] = useState<DevisDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pdfEnCours, setPdfEnCours] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -70,6 +73,47 @@ export default function DevisDetailPage() {
         setError(err instanceof Error ? err.message : String(err))
       );
   }, [id]);
+
+  // Fix E4 (audit 05/07/2026) — l'endpoint PDF est authentifié : un lien
+  // <a href> ne peut pas envoyer le Bearer → 401 systématique. On passe par
+  // les helpers fetch-blob authentifiés de lib/api.ts.
+  const handleTelechargerPdf = async () => {
+    if (!devis) return;
+    setPdfEnCours(true);
+    try {
+      await downloadAuthenticated(
+        `/api/devis/${devis.id}/pdf`,
+        `${devis.numero}.pdf`
+      );
+    } catch (err) {
+      toast({
+        title: "Erreur téléchargement PDF",
+        description: err instanceof Error ? err.message : "Erreur inconnue",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfEnCours(false);
+    }
+  };
+
+  const handleImprimerPdf = async () => {
+    if (!devis) return;
+    setPdfEnCours(true);
+    try {
+      await openAuthenticatedInNewTab(
+        `/api/devis/${devis.id}/pdf`,
+        `${devis.numero}.pdf`
+      );
+    } catch (err) {
+      toast({
+        title: "Erreur ouverture PDF",
+        description: err instanceof Error ? err.message : "Erreur inconnue",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfEnCours(false);
+    }
+  };
 
   const handleDuplicate = async () => {
     setActionLoading(true);
@@ -145,14 +189,13 @@ export default function DevisDetailPage() {
     (devis.lots_production?.length ?? 0) > 0 ||
     payloadOutput?.mode === "multi-lots";
 
-  const pdfUrl = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/devis/${devis.id}/pdf`;
-
   if (isMultiLots) {
     return (
       <main className="container mx-auto max-w-5xl p-4 sm:p-8">
         <DevisResultMultiLots
           devis={devis}
-          pdfUrl={pdfUrl}
+          onImprimer={handleImprimerPdf}
+          impressionEnCours={pdfEnCours}
           onDupliquer={handleDuplicate}
           onSupprimer={handleDelete}
         />
@@ -196,13 +239,13 @@ export default function DevisDetailPage() {
           <Button asChild variant="outline" size="sm">
             <Link href="/devis">↩ Liste</Link>
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/devis/${devis.id}/pdf`}
-              download={`${devis.numero}.pdf`}
-            >
-              📄 Télécharger PDF
-            </a>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTelechargerPdf}
+            disabled={pdfEnCours}
+          >
+            {pdfEnCours ? "📄 Téléchargement…" : "📄 Télécharger PDF"}
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/devis/${devis.id}/edit`}>✏️ Modifier</Link>

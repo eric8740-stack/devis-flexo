@@ -5,10 +5,15 @@ import { useRouter } from "next/navigation";
 
 import type { LoginRequest, RegisterRequest, User } from "@/types/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-const ACCESS_TOKEN_KEY = "devis_flexo_access_token";
-const REFRESH_TOKEN_KEY = "devis_flexo_refresh_token";
+// Consolidation audit 05/07/2026 : API_URL, tokens et refresh (dédupliqué)
+// viennent du module unique auth-tokens.ts — plus de logique dupliquée ici.
+import {
+  API_URL,
+  clearTokens,
+  getAccessToken,
+  refreshAccessToken,
+  setTokens,
+} from "@/lib/auth-tokens";
 
 interface AuthContextValue {
   user: User | null;
@@ -30,21 +35,6 @@ async function fetchMe(token: string): Promise<User | null> {
   return (await r.json()) as User;
 }
 
-async function tryRefreshTokens(): Promise<string | null> {
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-  if (!refreshToken) return null;
-  const r = await fetch(`${API_URL}/api/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-  if (!r.ok) return null;
-  const tokens = await r.json();
-  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
-  return tokens.access_token as string;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+      const token = getAccessToken();
       if (!token) {
         setIsLoading(false);
         return;
@@ -63,15 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(me);
         } else {
           // 401 ou autre : tenter le refresh
-          const newToken = await tryRefreshTokens();
+          const newToken = await refreshAccessToken();
           if (newToken) {
             const refreshed = await fetchMe(newToken);
             if (refreshed) setUser(refreshed);
           } else {
             // Refresh KO → clear tokens (mais on ne redirige pas ici,
             // ProtectedRoute s'en charge si la route le demande)
-            localStorage.removeItem(ACCESS_TOKEN_KEY);
-            localStorage.removeItem(REFRESH_TOKEN_KEY);
+            clearTokens();
           }
         }
       } catch (e) {
@@ -95,8 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || "Login failed");
     }
     const tokens = await r.json();
-    localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-    localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+    setTokens(tokens.access_token, tokens.refresh_token);
 
     const me = await fetchMe(tokens.access_token);
     if (!me) throw new Error("Impossible de récupérer le profil après login");
@@ -119,14 +107,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    clearTokens();
     setUser(null);
     router.push("/login");
   };
 
   const refreshUser = async () => {
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = getAccessToken();
     if (!token) return;
     const me = await fetchMe(token);
     if (me) setUser(me);

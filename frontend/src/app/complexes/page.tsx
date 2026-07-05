@@ -23,18 +23,29 @@ export default function ComplexesPage() {
   const [error, setError] = useState<string | null>(null);
   const [includeInactives, setIncludeInactives] = useState(false);
 
+  // `isCancelled` (audit 05/07/2026 M5) : au toggle actifs/inactifs, une
+  // réponse périmée pouvait écraser la plus récente. Le useEffect passe un
+  // flag lu avant chaque setState.
   const load = useCallback(
-    () =>
+    (isCancelled: () => boolean = () => false) =>
       listComplexes(includeInactives)
-        .then(setItems)
-        .catch((err: unknown) =>
-          setError(err instanceof Error ? err.message : String(err))
-        ),
+        .then((res) => {
+          if (!isCancelled()) setItems(res);
+        })
+        .catch((err: unknown) => {
+          if (!isCancelled()) {
+            setError(err instanceof Error ? err.message : String(err));
+          }
+        }),
     [includeInactives]
   );
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void load(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const handleDelete = async (c: Complexe) => {

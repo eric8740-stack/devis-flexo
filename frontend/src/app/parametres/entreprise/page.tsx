@@ -9,12 +9,22 @@ export default function ParametresEntreprisePage() {
   const [entreprise, setEntreprise] = useState<Entreprise | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Flag `cancelled` (audit 05/07/2026 M5) : ignore une réponse arrivée
+  // après le démontage du composant.
   useEffect(() => {
+    let cancelled = false;
     getEntreprise()
-      .then(setEntreprise)
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : String(err))
-      );
+      .then((res) => {
+        if (!cancelled) setEntreprise(res);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (error) {

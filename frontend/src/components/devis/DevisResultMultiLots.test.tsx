@@ -59,7 +59,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
     render(
       <DevisResultMultiLots
         devis={buildDevis({ ht_total_eur: "1234.56" })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -82,7 +82,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
           chiffrage_auto_erreur:
             "Complexe id=1 (BOPP_BLANC_50) n'a pas de grammage_g_m2 défini, requis pour P1",
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -174,7 +174,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
             ],
           },
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -291,7 +291,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
             ],
           },
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -338,7 +338,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
           lots_production: [lot],
           payload_output: { mode: "multi-lots" },
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -363,7 +363,7 @@ describe("DevisResultMultiLots — bandeau erreur chiffrage", () => {
             chiffrage_auto_erreur: "Erreur stockée dans payload_output",
           },
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -425,7 +425,7 @@ describe("DevisResultMultiLots — Ø multilots réel (bug #6 6.2c)", () => {
             }),
           ],
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
@@ -452,7 +452,7 @@ describe("DevisResultMultiLots — Ø multilots réel (bug #6 6.2c)", () => {
             }),
           ],
         })}
-        pdfUrl="http://x/pdf"
+        onImprimer={noop}
         onDupliquer={noop}
         onSupprimer={noop}
       />,
