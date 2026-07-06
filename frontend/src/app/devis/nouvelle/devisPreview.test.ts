@@ -35,6 +35,7 @@ function baseInput(over: Partial<DevisPreviewInput> = {}): DevisPreviewInput {
     remise_pct: 0,
     ml_par_bobine: null,
     diametre_mandrin_mm: null,
+    nb_bobines_impose: null,
     ...over,
   };
 }
@@ -137,6 +138,34 @@ describe("buildPreviewRequest — état page → body wire", () => {
     );
     expect(r1.ml_par_bobine).toBe(2500);
     expect(r1.diametre_mandrin_mm).toBe(40);
+  });
+
+  it("Lot F2 : imposé actif → nb_bobines_impose seul, ml_par_bobine OMIS du payload", () => {
+    // Même si un ml/bobine traîne dans l'état, l'imposé prime côté FRONT :
+    // la clé ml_par_bobine est ABSENTE (pas envoyée à null).
+    const r = buildPreviewRequest(
+      baseInput({ nb_bobines_impose: 7, ml_par_bobine: 2500 }),
+    );
+    expect(r.nb_bobines_impose).toBe(7);
+    expect("ml_par_bobine" in r).toBe(false);
+  });
+
+  it("Lot F2 : mode classique inchangé → ml_par_bobine seul, nb_bobines_impose OMIS", () => {
+    const r = buildPreviewRequest(baseInput({ ml_par_bobine: 2500 }));
+    expect(r.ml_par_bobine).toBe(2500);
+    expect("nb_bobines_impose" in r).toBe(false);
+    // Vide → null (défaut entreprise), imposé toujours absent.
+    const r0 = buildPreviewRequest(baseInput());
+    expect(r0.ml_par_bobine).toBeNull();
+    expect("nb_bobines_impose" in r0).toBe(false);
+  });
+
+  it("Lot F2 : imposé invalide (< 1) → NON envoyé, retour au mode classique", () => {
+    const r = buildPreviewRequest(
+      baseInput({ nb_bobines_impose: 0, ml_par_bobine: 2500 }),
+    );
+    expect("nb_bobines_impose" in r).toBe(false);
+    expect(r.ml_par_bobine).toBe(2500);
   });
 });
 
@@ -273,6 +302,60 @@ describe("parsePreview — wire (Decimal en chaînes, nullable) → nombres", ()
       diametre_max_presse_mm: 1100,
       depasse_max: false,
     });
+    // Lot F2 : clés ABSENTES sans imposé (contrat back) → null (dégradation).
+    expect(r.bobinage?.nb_bobines_production).toBeNull();
+    expect(r.bobinage?.surplus_bobines).toBeNull();
+  });
+
+  it("Lot F2 : parse nb_bobines_production + surplus_bobines quand présents (imposé)", () => {
+    const base: DevisPreviewOut = {
+      prix_ht: "100.00",
+      cout_revient: "70.00",
+      marge_pct: "30.00",
+      prix_1000: "10.00",
+      geometrie: {
+        diametre_mm: 250,
+        nb_poses: 8,
+        nb_filles: null,
+        dechet_lateral_mm: null,
+      },
+      decompo: [],
+      options: [],
+      alertes: [
+        {
+          niveau: "info",
+          message:
+            "Production par paquets de 3 bobines (coupe synchronisée) : " +
+            "9 produites pour 7 demandées (surplus 2).",
+        },
+      ],
+      bobinage: {
+        ml_total: 412.5,
+        m2_total: 94.9,
+        ml_par_bobine: 59,
+        nb_bobines: 7,
+        diametre_bobine_mm: 120,
+        diametre_mandrin_mm: 76,
+        diametre_max_presse_mm: 1100,
+        depasse_max: false,
+        nb_changements: 6,
+        temps_arret_min: 90,
+        nb_bobines_production: 9,
+        surplus_bobines: 2,
+      },
+    };
+    const r = parsePreview(base);
+    expect(r.bobinage?.nb_bobines).toBe(7);
+    expect(r.bobinage?.nb_bobines_production).toBe(9);
+    expect(r.bobinage?.surplus_bobines).toBe(2);
+    // Surplus 0 (multiple exact) : préservé en nombre, pas confondu avec null.
+    const r0 = parsePreview({
+      ...base,
+      alertes: [],
+      bobinage: { ...base.bobinage!, nb_bobines_production: 7, surplus_bobines: 0 },
+    });
+    expect(r0.bobinage?.nb_bobines_production).toBe(7);
+    expect(r0.bobinage?.surplus_bobines).toBe(0);
   });
 
   it("Lot C : parse configs (numériques défensifs) + ecarts", () => {

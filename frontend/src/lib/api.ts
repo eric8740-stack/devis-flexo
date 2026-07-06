@@ -1110,6 +1110,10 @@ export interface DevisPreviewRequest {
   // Entreprise.ml_par_bobine_defaut. Tous deux `int gt 0`.
   ml_par_bobine?: number | null;
   diametre_mandrin_mm?: number | null;
+  // Lot F2 — nb de bobines IMPOSÉ (client), `int ge 1`. EXCLUSIF côté front
+  // avec `ml_par_bobine` : quand l'imposé est actif, `ml_par_bobine` est OMIS
+  // du payload (le back dérive ml/bobine = ml_total / imposé).
+  nb_bobines_impose?: number | null;
 }
 
 export interface GeometriePreviewOut {
@@ -1193,6 +1197,12 @@ export interface BobinagePreviewOut {
   depasse_max: boolean;
   nb_changements: number;
   temps_arret_min: number;
+  // Lot F2 (contrat figé) — UNIQUEMENT en mode `nb_bobines_impose` : bobines
+  // produites (multiple supérieur de n_laize, coupe synchronisée) + surplus.
+  // Sans imposé (ou back plus ancien), les clés sont ABSENTES (pas nulles)
+  // → dégradation propre côté front (pas de bandeau).
+  nb_bobines_production?: number;
+  surplus_bobines?: number;
 }
 
 export interface DevisPreviewOut {

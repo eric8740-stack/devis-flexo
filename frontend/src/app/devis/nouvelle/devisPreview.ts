@@ -54,6 +54,10 @@ export interface DevisPreviewInput {
   // Lot F (#147) — ml par bobine (livraison) + Ø mandrin bobinage.
   ml_par_bobine: number | null;
   diametre_mandrin_mm: number | null;
+  // Lot F2 — nb de bobines imposé (mode de livraison). EXCLUSIF avec
+  // `ml_par_bobine` : si imposé (≥ 1), `ml_par_bobine` est OMIS du payload
+  // (jamais les deux — le back dérive le ml/bobine).
+  nb_bobines_impose: number | null;
 }
 
 // ── Résultat parsé (consommé par l'UI) ───────────────────────────────
@@ -130,20 +134,10 @@ export interface DevisPreviewBobinage {
   depasse_max: boolean;
   nb_changements: number;
   temps_arret_min: number;
-}
-
-// Lot F — bobinage/appro parsé (tout en nombres).
-export interface DevisPreviewBobinage {
-  ml_total: number;
-  m2_total: number;
-  ml_par_bobine: number;
-  nb_bobines: number;
-  diametre_bobine_mm: number;
-  diametre_mandrin_mm: number;
-  diametre_max_presse_mm: number;
-  depasse_max: boolean;
-  nb_changements: number;
-  temps_arret_min: number;
+  // Lot F2 — présents UNIQUEMENT en mode imposé (clés absentes de la réponse
+  // sinon, y compris back plus ancien) → null = pas de bandeau surplus.
+  nb_bobines_production: number | null;
+  surplus_bobines: number | null;
 }
 
 export interface DevisPreviewResult {
@@ -196,6 +190,11 @@ function nbCouleursObj(n: number): NbCouleursIn {
  * `options_codes` (le serveur price) ; `finitions` reste vide (réservé aux
  * forfaits ST ad-hoc). */
 export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
+  // Lot F2 — imposé valide (entier ≥ 1) ou null.
+  const nbBobinesImpose =
+    i.nb_bobines_impose !== null && i.nb_bobines_impose >= 1
+      ? Math.round(i.nb_bobines_impose)
+      : null;
   return {
     laize: i.laize_mm > 0 ? i.laize_mm : null,
     dev: i.dev_mm > 0 ? i.dev_mm : null,
@@ -241,11 +240,17 @@ export function buildPreviewRequest(i: DevisPreviewInput): DevisPreviewRequest {
         ? i.marge_pct_override
         : null,
     remise_pct: i.remise_pct > 0 ? i.remise_pct : 0,
-    // Lot F (#147) — int gt 0 ; sinon null (défauts back : entreprise / 76).
-    ml_par_bobine:
-      i.ml_par_bobine !== null && i.ml_par_bobine > 0
-        ? Math.round(i.ml_par_bobine)
-        : null,
+    // Lot F (#147) / F2 — EXCLUSIFS : jamais les deux dans le payload. Imposé
+    // actif → `nb_bobines_impose` seul (`ml_par_bobine` OMIS, pas null) ;
+    // sinon `ml_par_bobine` (int gt 0, sinon null → défaut entreprise).
+    ...(nbBobinesImpose !== null
+      ? { nb_bobines_impose: nbBobinesImpose }
+      : {
+          ml_par_bobine:
+            i.ml_par_bobine !== null && i.ml_par_bobine > 0
+              ? Math.round(i.ml_par_bobine)
+              : null,
+        }),
     diametre_mandrin_mm:
       i.diametre_mandrin_mm !== null && i.diametre_mandrin_mm > 0
         ? Math.round(i.diametre_mandrin_mm)
@@ -334,6 +339,15 @@ export function parsePreview(out: DevisPreviewOut): DevisPreviewResult {
           depasse_max: Boolean(out.bobinage.depasse_max),
           nb_changements: Number(out.bobinage.nb_changements),
           temps_arret_min: Number(out.bobinage.temps_arret_min),
+          // Lot F2 — clés ABSENTES sans imposé (dont back plus ancien) → null.
+          nb_bobines_production:
+            out.bobinage.nb_bobines_production != null
+              ? Number(out.bobinage.nb_bobines_production)
+              : null,
+          surplus_bobines:
+            out.bobinage.surplus_bobines != null
+              ? Number(out.bobinage.surplus_bobines)
+              : null,
         }
       : null,
   };
