@@ -114,6 +114,12 @@ function installFetchMock() {
     if (url.endsWith("/api/devis/preview") && method === "POST") {
       const body = JSON.parse((init?.body as string) ?? "{}");
       const sansOutil = body.mode_sans_outil === true;
+      // Lot F2 — imposé : production par paquets de 3 (multiple supérieur),
+      // clés ADDITIVES + alerte info si surplus > 0. Sans imposé : clés
+      // ABSENTES du bloc bobinage (contrat back, rétro-compat).
+      const impose = Number(body.nb_bobines_impose) || 0;
+      const production = impose > 0 ? Math.ceil(impose / 3) * 3 : 0;
+      const surplus = production - impose;
       // V0 — remise calculée depuis la requête (mock).
       const prixHt = 123.45;
       const remisePct = Number(body.remise_pct) || 0;
@@ -131,8 +137,12 @@ function installFetchMock() {
         bobinage: {
           ml_total: 412.5,
           m2_total: 94.9,
-          ml_par_bobine: Number(body.ml_par_bobine) || 2000,
-          nb_bobines: 2,
+          // Imposé → ml/bobine DÉRIVÉ du métrage ; sinon saisi/défaut.
+          ml_par_bobine:
+            impose > 0
+              ? Math.ceil(412.5 / impose)
+              : Number(body.ml_par_bobine) || 2000,
+          nb_bobines: impose > 0 ? impose : 2,
           // Ø dépasse la presse au-delà d'une grosse quantité (pour le bandeau).
           diametre_bobine_mm: Number(body.quantite) > 50000 ? 1200 : 291,
           diametre_mandrin_mm: Number(body.mandrin_mm) || 76,
@@ -140,6 +150,9 @@ function installFetchMock() {
           depasse_max: Number(body.quantite) > 50000,
           nb_changements: 1,
           temps_arret_min: 15,
+          ...(impose > 0
+            ? { nb_bobines_production: production, surplus_bobines: surplus }
+            : {}),
         },
         decompo_groupee: {
           matiere_p1: "40.00",
@@ -180,7 +193,18 @@ function installFetchMock() {
           { code: "DORURE", delta_eur: null, impact_production: true },
           { code: "couleur_plus", delta_eur: "5.50", impact_production: false },
         ],
-        alertes: sansOutil ? [] : [],
+        alertes:
+          impose > 0 && surplus > 0
+            ? [
+                {
+                  niveau: "info",
+                  message:
+                    `Production par paquets de 3 bobines (coupe ` +
+                    `synchronisée) : ${production} produites pour ` +
+                    `${impose} demandées (surplus ${surplus}).`,
+                },
+              ]
+            : [],
         // Lot C — configs outil×machine + écarts (vides en sans outil).
         configs: sansOutil
           ? []
@@ -419,6 +443,82 @@ describe("DevisPageUnique — page devis réactive", () => {
     await waitFor(() =>
       expect(screen.getByTestId("b-depasse-max")).toBeInTheDocument(),
     );
+  });
+
+  it("Lot F2 : toggle imposé → payload exclusif + bandeau surplus (formulation back)", async () => {
+    render(<DevisPageUnique />);
+    await screen.findByTestId("b-ml-par-bobine");
+    // Bascule → le champ ml/bobine laisse place au champ « nb imposé ».
+    await userEvent.click(screen.getByTestId("toggle-nb-bobines-impose"));
+    expect(screen.queryByTestId("b-ml-par-bobine")).toBeNull();
+    await userEvent.type(screen.getByTestId("b-nb-bobines-impose"), "7");
+    // 7 imposées → paquets de 3 → 9 produites, +2 de surplus (bandeau info).
+    await waitFor(() =>
+      expect(screen.getByTestId("b-surplus")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("b-surplus")).toHaveTextContent(
+      /7.*demandées.*9.*produites.*\+2 de surplus/,
+    );
+    // Formulation de l'alerte backend reprise telle quelle.
+    expect(screen.getByTestId("b-surplus")).toHaveTextContent(/paquets de 3/);
+    // Plan bobines : production affichée + ml/bobine dérivé (ceil(412.5/7)=59).
+    expect(screen.getByTestId("b-plan")).toHaveTextContent(/9.*produites/);
+    expect(screen.getByTestId("b-plan")).toHaveTextContent(/59 ml\/bobine/);
+    // Payload EXCLUSIF : nb_bobines_impose présent, ml_par_bobine ABSENT.
+    const previewCalls = fetchSpy.mock.calls.filter(
+      (c) =>
+        String(c[0]).endsWith("/api/devis/preview") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    const lastBody = JSON.parse(
+      (previewCalls.at(-1)?.[1] as RequestInit).body as string,
+    );
+    expect(lastBody.nb_bobines_impose).toBe(7);
+    expect("ml_par_bobine" in lastBody).toBe(false);
+  });
+
+  it("Lot F2 : imposé multiple exact (surplus 0) → production affichée, pas de bandeau", async () => {
+    render(<DevisPageUnique />);
+    await screen.findByTestId("b-ml-par-bobine");
+    await userEvent.click(screen.getByTestId("toggle-nb-bobines-impose"));
+    await userEvent.type(screen.getByTestId("b-nb-bobines-impose"), "6");
+    // 6 = multiple de 3 → 6 produites, surplus 0 → PAS de bandeau.
+    await waitFor(() =>
+      expect(screen.getByTestId("b-plan")).toHaveTextContent(/6.*produites/),
+    );
+    expect(screen.queryByTestId("b-surplus")).toBeNull();
+  });
+
+  it("Lot F2 : mode classique inchangé → ml_par_bobine envoyé, jamais nb_bobines_impose, pas de bandeau (dégradation)", async () => {
+    render(<DevisPageUnique />);
+    // Plan bobines classique rendu (mock SANS clés F2 → dégradation propre).
+    await waitFor(() =>
+      expect(screen.getByTestId("b-plan")).toHaveTextContent(/bobine/),
+    );
+    expect(screen.queryByTestId("b-surplus")).toBeNull();
+    expect(screen.getByTestId("b-plan")).not.toHaveTextContent(/produites/);
+    // Saisir un ml/bobine → transmis ; l'imposé n'apparaît JAMAIS au payload.
+    await userEvent.type(screen.getByTestId("b-ml-par-bobine"), "2500");
+    await waitFor(() => {
+      const previewCalls = fetchSpy.mock.calls.filter(
+        (c) =>
+          String(c[0]).endsWith("/api/devis/preview") &&
+          (c[1] as RequestInit)?.method === "POST",
+      );
+      const lastBody = JSON.parse(
+        (previewCalls.at(-1)?.[1] as RequestInit).body as string,
+      );
+      expect(lastBody.ml_par_bobine).toBe(2500);
+    });
+    const previewCalls = fetchSpy.mock.calls.filter(
+      (c) =>
+        String(c[0]).endsWith("/api/devis/preview") &&
+        (c[1] as RequestInit)?.method === "POST",
+    );
+    for (const c of previewCalls) {
+      const b = JSON.parse((c[1] as RequestInit).body as string);
+      expect("nb_bobines_impose" in b).toBe(false);
+    }
   });
 
   it("décompo refente affichée en sans outil (déchet latéral)", async () => {

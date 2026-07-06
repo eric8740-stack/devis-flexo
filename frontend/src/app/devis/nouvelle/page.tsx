@@ -131,6 +131,10 @@ export default function DevisPageUnique() {
   // Lot F — mode de livraison : ml par bobine ("" = défaut entreprise).
   // Envoyé à /preview (#147) → pilote nb_bobines / Ø en direct.
   const [mlParBobine, setMlParBobine] = useState("");
+  // Lot F2 — mode de livraison : imposer le NB de bobines (exclusif avec le
+  // ml/bobine ; le champ non actif est OMIS du payload preview).
+  const [imposerNbBobines, setImposerNbBobines] = useState(false);
+  const [nbBobinesImpose, setNbBobinesImpose] = useState("");
   // Finitions.
   const [optionsCodes, setOptionsCodes] = useState<Set<string>>(new Set());
   // Bord latéral (défaut entreprise, rempli au mount).
@@ -271,8 +275,16 @@ export default function DevisPageUnique() {
       marge_pct_override: margePct.trim() !== "" ? parseFloat(margePct) : null,
       remise_pct: remisePct.trim() !== "" ? parseFloat(remisePct) : 0,
       // Lot F (#147) — ml/bobine override + Ø mandrin (même valeur que mandrin).
+      // Lot F2 — exclusif : selon le toggle, SEUL le champ actif est transmis
+      // (l'adaptateur omet l'autre du payload ; jamais les deux).
       ml_par_bobine:
-        mlParBobine.trim() !== "" ? parseInt(mlParBobine, 10) : null,
+        !imposerNbBobines && mlParBobine.trim() !== ""
+          ? parseInt(mlParBobine, 10)
+          : null,
+      nb_bobines_impose:
+        imposerNbBobines && nbBobinesImpose.trim() !== ""
+          ? parseInt(nbBobinesImpose, 10)
+          : null,
       diametre_mandrin_mm: parseInt(mandrin, 10) || null,
     }),
     [
@@ -297,6 +309,8 @@ export default function DevisPageUnique() {
       margePct,
       remisePct,
       mlParBobine,
+      imposerNbBobines,
+      nbBobinesImpose,
     ],
   );
 
@@ -507,6 +521,24 @@ export default function DevisPageUnique() {
 
   const geo = preview?.geometrie;
   const bob = preview?.bobinage; // Lot F — null tant que back F absent.
+  // Lot F2 — surplus de production (imposé) : clés absentes de la réponse
+  // sans imposé (ou back plus ancien) → null → pas de bandeau (dégradation).
+  const surplusBobines =
+    bob != null &&
+    bob.nb_bobines_production != null &&
+    bob.surplus_bobines != null &&
+    bob.surplus_bobines > 0
+      ? {
+          demande: bob.nb_bobines,
+          production: bob.nb_bobines_production,
+          surplus: bob.surplus_bobines,
+          // Formulation backend « Production par paquets de N… » reprise
+          // telle quelle quand elle est renvoyée dans les alertes.
+          message:
+            preview?.alertes.find((a) => a.message.includes("paquets de"))
+              ?.message ?? null,
+        }
+      : null;
 
   // Delta marginal par code (depuis preview.options) pour les chips finitions
   // + couleur_plus. Le serveur price ; le front ne fait qu'afficher.
@@ -1156,23 +1188,76 @@ export default function DevisPageUnique() {
               />
             </Field>
           </div>
-          {/* Mode de livraison — ml par bobine (#147) → nb_bobines / Ø live. */}
-          <Field label="ml par bobine (mode de livraison)">
-            <Input
-              type="number"
-              min={1}
-              value={mlParBobine}
-              onChange={(e) => setMlParBobine(e.target.value)}
-              placeholder={
-                bob ? `défaut ${bob.ml_par_bobine}` : "défaut entreprise"
-              }
-              data-testid="b-ml-par-bobine"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Longueur par bobine (vide = défaut entreprise) — bouge le nombre
-              de bobines et le Ø en direct.
-            </p>
-          </Field>
+          {/* Mode de livraison — ml par bobine (#147) OU nb de bobines imposé
+              (Lot F2). Exclusif : le champ non actif est omis du payload. */}
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[#E85D2F]"
+                checked={imposerNbBobines}
+                onChange={(e) => setImposerNbBobines(e.target.checked)}
+                data-testid="toggle-nb-bobines-impose"
+              />
+              Imposer le nombre de bobines
+            </label>
+            {imposerNbBobines ? (
+              <div className="mt-3">
+                <Field label="Nombre de bobines imposé (client)">
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={nbBobinesImpose}
+                    onChange={(e) => setNbBobinesImpose(e.target.value)}
+                    placeholder="ex. 7"
+                    data-testid="b-nb-bobines-impose"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Le ml/bobine est dérivé du métrage total — le Ø et le plan
+                    bobines suivent en direct.
+                  </p>
+                </Field>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <Field label="ml par bobine (mode de livraison)">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={mlParBobine}
+                    onChange={(e) => setMlParBobine(e.target.value)}
+                    placeholder={
+                      bob ? `défaut ${bob.ml_par_bobine}` : "défaut entreprise"
+                    }
+                    data-testid="b-ml-par-bobine"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Longueur par bobine (vide = défaut entreprise) — bouge le
+                    nombre de bobines et le Ø en direct.
+                  </p>
+                </Field>
+              </div>
+            )}
+          </div>
+
+          {/* Lot F2 — bandeau surplus VISIBLE (info, pas de tooltip) quand la
+              production par paquets dépasse la demande. */}
+          {surplusBobines && (
+            <div
+              data-testid="b-surplus"
+              className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800"
+            >
+              <p>
+                <strong>{surplusBobines.demande}</strong> demandées →{" "}
+                <strong>{surplusBobines.production}</strong> produites, +
+                {surplusBobines.surplus} de surplus.
+              </p>
+              {surplusBobines.message && (
+                <p className="mt-1 text-xs">{surplusBobines.message}</p>
+              )}
+            </div>
+          )}
 
           {/* Bandeau dépassement Ø max presse — VISIBLE (pas de tooltip). */}
           {bob?.depasse_max && (
@@ -1189,8 +1274,15 @@ export default function DevisPageUnique() {
           {bob && (
             <div data-testid="b-plan" className="space-y-1 text-sm">
               <p>
-                <strong>{bob.nb_bobines}</strong> bobine(s) · Ø{" "}
-                <strong>{bob.diametre_bobine_mm} mm</strong> ·{" "}
+                <strong>{bob.nb_bobines}</strong> bobine(s)
+                {/* Lot F2 — production par paquets (mode imposé uniquement). */}
+                {bob.nb_bobines_production != null && (
+                  <>
+                    {" "}
+                    (<strong>{bob.nb_bobines_production}</strong> produites)
+                  </>
+                )}{" "}
+                · Ø <strong>{bob.diametre_bobine_mm} mm</strong> ·{" "}
                 {bob.ml_par_bobine} ml/bobine
               </p>
               <p className="text-xs text-muted-foreground">
