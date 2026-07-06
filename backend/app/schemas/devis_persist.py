@@ -15,7 +15,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 
 class LotProductionCreate(BaseModel):
@@ -406,6 +406,12 @@ class DevisPreviewIn(BaseModel):
     # → sinon Entreprise.ml_par_bobine_defaut ; `diametre_mandrin_mm` → défaut 76.
     ml_par_bobine: int | None = Field(None, gt=0)
     diametre_mandrin_mm: int | None = Field(None, gt=0)
+    # Lot F2 — nb bobines IMPOSÉ (client) : `ml_par_bobine` devient DÉRIVÉ
+    # (ml_total / nb_bobines_impose). Fourni avec `ml_par_bobine` → l'imposé
+    # PRIME + alerte info (souveraineté non bloquante, esprit Règle 7 — jamais
+    # de 422). Absent → comportement Lot F strictement inchangé. Champ de
+    # requête uniquement (rien en base, AUCUN chiffrage).
+    nb_bobines_impose: int | None = Field(None, ge=1)
     nb_filles_force: int | None = Field(None, ge=1)
     mode_sans_outil: bool = False
     laize_stock_mm: float | None = Field(None, gt=0)
@@ -472,6 +478,25 @@ class BobinagePreview(BaseModel):
     depasse_max: bool
     nb_changements: int
     temps_arret_min: int
+    # Lot F2 — granularité production (uniquement si `nb_bobines_impose`) :
+    # les bobines sortent par paquets de n_laize (coupe synchronisée, MÊME
+    # source que le planificateur #73 : poses en laize post-optim, nb_filles
+    # en mode sans outil). `nb_bobines_production` = multiple supérieur de
+    # n_laize ; `surplus_bobines` = production − demandé. ADDITIFS : None
+    # (rétro-compat totale) quand pas d'imposé.
+    nb_bobines_production: int | None = None
+    surplus_bobines: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _exclure_champs_f2_sans_impose(self, handler):
+        """Value-neutral STRICT : sans `nb_bobines_impose`, le bloc bobinage
+        sérialisé est octet pour octet identique au Lot F (les clés F2 sont
+        ABSENTES, pas nulles). Avec imposé, elles sont toujours présentes."""
+        data = handler(self)
+        if isinstance(data, dict) and data.get("nb_bobines_production") is None:
+            data.pop("nb_bobines_production", None)
+            data.pop("surplus_bobines", None)
+        return data
 
 
 class DecompoLignePreview(BaseModel):
