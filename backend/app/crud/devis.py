@@ -1203,10 +1203,32 @@ def preview_devis(
                 from app.models import Entreprise
 
                 entreprise = db.get(Entreprise, entreprise_id)
-                ml_par_bobine = int(
-                    p.get("ml_par_bobine")
-                    or (entreprise.ml_par_bobine_defaut if entreprise else 2000)
-                )
+                nb_bobines_impose = p.get("nb_bobines_impose")
+                if nb_bobines_impose:
+                    # Lot F2 — nb bobines IMPOSÉ : ml/bobine DÉRIVÉ du métrage
+                    # (arrondi SUP → nb_bobines × ml/bobine couvre ml_total).
+                    # Souveraineté non bloquante (esprit Règle 7) : si
+                    # `ml_par_bobine` est aussi fourni, l'imposé PRIME + alerte
+                    # info tracée — jamais de 422. Le Ø et `depasse_max` sont
+                    # recalculés sur ce ml dérivé (bat_calculs, lecture pure).
+                    nb_bobines = int(nb_bobines_impose)
+                    ml_par_bobine = max(1, math.ceil(ml_total / nb_bobines))
+                    if p.get("ml_par_bobine"):
+                        alertes.append(
+                            {
+                                "niveau": "info",
+                                "message": (
+                                    "Nb bobines imposé : prime sur le ml/bobine "
+                                    f"saisi — ml/bobine dérivé ({ml_par_bobine} ml)."
+                                ),
+                            }
+                        )
+                else:
+                    ml_par_bobine = int(
+                        p.get("ml_par_bobine")
+                        or (entreprise.ml_par_bobine_defaut if entreprise else 2000)
+                    )
+                    nb_bobines = max(1, math.ceil(ml_total / ml_par_bobine))
                 diametre_mandrin_mm = int(p.get("diametre_mandrin_mm") or 76)
                 diametre_max_presse_mm = int(
                     machine.diametre_max_bobine_mm if machine is not None else 1100
@@ -1214,8 +1236,6 @@ def preview_devis(
                 temps_changement_bobine_min = int(
                     machine.temps_changement_bobine_min if machine is not None else 15
                 )
-
-                nb_bobines = max(1, math.ceil(ml_total / ml_par_bobine))
                 diametre_bobine_mm = calcul_diametre_bobine(
                     min(ml_total, ml_par_bobine),
                     epaisseur_utilisee_microns,
@@ -1305,6 +1325,35 @@ def preview_devis(
         elif not p.get("cylindre_id"):
             alertes.append(
                 {"niveau": "info", "message": "Cylindre non sélectionné — nb poses non calculé."}
+            )
+
+    # === Lot F2 — imposé : granularité production (paquets de n_laize) ===
+    # Les bobines sortent par paquets de n_laize (coupe synchronisée) — MÊME
+    # source que le planificateur (#73, front `nLaize={lot.nb_poses_laize}`) :
+    # poses en laize post-optim ; en mode sans outil, les filles (nb_filles).
+    # Placé APRÈS la géométrie pour disposer de `nb_filles`. Champs ADDITIFS
+    # du bloc bobinage — absents sans `nb_bobines_impose` (rétro-compat).
+    if p.get("nb_bobines_impose") and out.get("bobinage"):
+        n_laize = (
+            int(geometrie["nb_filles"] or 1)
+            if mode_sans_outil
+            else max(1, int(nb_poses_laize))
+        )
+        nb_demande = int(p["nb_bobines_impose"])
+        nb_production = math.ceil(nb_demande / n_laize) * n_laize
+        surplus = nb_production - nb_demande
+        out["bobinage"]["nb_bobines_production"] = nb_production
+        out["bobinage"]["surplus_bobines"] = surplus
+        if surplus > 0:
+            alertes.append(
+                {
+                    "niveau": "info",
+                    "message": (
+                        f"Production par paquets de {n_laize} bobines (coupe "
+                        f"synchronisée) : {nb_production} produites pour "
+                        f"{nb_demande} demandées (surplus {surplus})."
+                    ),
+                }
             )
 
     if not p.get("matiere_id"):
